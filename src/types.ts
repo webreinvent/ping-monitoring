@@ -145,8 +145,35 @@ export interface AppSettings {
   retentionDays: number | null;
   notificationsEnabled: boolean;
   startAtLogin: boolean;
-  language: "auto" | "ko" | "en";
+  language: "auto" | "en" | "ko" | "ja" | "zh-CN" | "zh-TW";
   firstRun: boolean;
+  updateDeferredVersion: string | null;
+  updateDeferredUntilMs: number | null;
+  skippedUpdateVersion: string | null;
+}
+
+export interface UpdateInfo {
+  version: string;
+  notes?: string | null;
+}
+
+export type UpdatePhase = "downloading" | "verifying" | "installing" | "restarting";
+
+export interface UpdateProgressEvent {
+  version: string;
+  status: UpdatePhase;
+  downloadedBytes?: number | null;
+  totalBytes?: number | null;
+  percent?: number | null;
+}
+
+export interface UpdateErrorEvent extends UserErrorPayload {
+  version: string;
+}
+
+export interface UserErrorPayload {
+  code: string;
+  detail?: string | null;
 }
 
 export interface StorageInfo {

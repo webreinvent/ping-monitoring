@@ -1,10 +1,12 @@
 pub mod commands;
 pub mod domain;
+pub mod i18n;
 pub mod monitor;
 pub mod probe;
 pub mod quality;
 pub mod storage;
 pub mod tray;
+pub mod updater;
 
 use std::{io, sync::Arc, time::Duration};
 
@@ -16,6 +18,7 @@ use storage::Database;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tray::{TauriEventSink, build_tray, handle_menu_event, handle_tray_event, handle_window_event};
+use updater::UpdateManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -29,6 +32,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_directory = ProjectDirs::from("io.github.xxsluna", "xxsLuna", "LNPM")
                 .map(|directories| directories.data_local_dir().to_path_buf())
@@ -46,7 +50,10 @@ pub fn run() {
                 monitor: Arc::clone(&monitor),
                 database: database.clone(),
             });
-            build_tray(app)?;
+            let update_manager = UpdateManager::new(app.handle().clone(), database.clone());
+            app.manage(update_manager.clone());
+            update_manager.start();
+            build_tray(app, &settings)?;
 
             if settings.first_run || monitor.snapshot().targets.is_empty() {
                 tray::show_main_window(app.handle());
@@ -86,6 +93,10 @@ pub fn run() {
             commands::show_main,
             commands::hide_popup,
             commands::quit_app,
+            updater::get_pending_update,
+            updater::defer_update,
+            updater::skip_update,
+            updater::install_update,
         ]);
 
     let app = builder

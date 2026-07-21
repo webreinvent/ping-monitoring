@@ -1,12 +1,23 @@
-# Live Network Ping Monitor
+<div align="center">
+  <img src="docs/assets/lnpm-logo.png" alt="LNPM logo" width="112" />
+  <h1>Live Network Ping Monitor</h1>
+  <p>A native tray app for understanding latency, packet loss, and network stability in real time.</p>
+  <p>
+    <a href="https://github.com/xxsLuna/LNPM/actions/workflows/ci.yml"><img src="https://github.com/xxsLuna/LNPM/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/xxsLuna/LNPM/releases/latest"><img src="https://img.shields.io/github/v/release/xxsLuna/LNPM" alt="Release" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/xxsLuna/LNPM" alt="License" /></a>
+  </p>
+  <p>
+    <strong>English</strong> ·
+    <a href="docs/readme/README.ko.md">한국어</a> ·
+    <a href="docs/readme/README.ja.md">日本語</a> ·
+    <a href="docs/readme/README.zh-CN.md">简体中文</a> ·
+    <a href="docs/readme/README.zh-TW.md">繁體中文</a>
+  </p>
+  <img src="docs/assets/lnpm-dashboard.png" alt="LNPM live network monitoring dashboard" width="1100" />
+</div>
 
-[![CI](https://github.com/xxsLuna/LNPM/actions/workflows/ci.yml/badge.svg)](https://github.com/xxsLuna/LNPM/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/xxsLuna/LNPM)](https://github.com/xxsLuna/LNPM/releases/latest)
-[![License](https://img.shields.io/github/license/xxsLuna/LNPM)](LICENSE)
-
-Live Network Ping Monitor (LNPM) is a native tray application for continuously measuring ICMP latency and network quality on Windows, macOS, and Linux.
-
-LNPM stores measurements locally, draws real-time and historical latency charts, and highlights unstable or disconnected periods so intermittent network problems are easier to identify.
+LNPM continuously measures ICMP latency and network quality on Windows, macOS, and Linux. Measurements stay on your device, while real-time and historical charts make intermittent instability and disconnections easy to identify.
 
 ## Features
 
@@ -19,7 +30,8 @@ LNPM stores measurements locally, draws real-time and historical latency charts,
 - Persist raw samples, minute rollups, and quality intervals in a local SQLite database.
 - Configure retention, create database backups, and start LNPM at login.
 - Receive native notifications for unstable, disconnected, and recovered states.
-- Use the interface in Korean or English.
+- Install signed updates from inside LNPM with download progress, deferral, and version skipping.
+- Use the complete interface, tray, and notifications in English, Korean, Japanese, Simplified Chinese, or Traditional Chinese.
 
 ## Network quality rules
 
@@ -44,9 +56,11 @@ Download the appropriate package from [GitHub Releases](https://github.com/xxsLu
 
 The initial community builds are not code-signed. Windows SmartScreen or macOS Gatekeeper may therefore show an unknown-publisher warning even when the file was downloaded from this repository.
 
+Updater packages are separately signed with Tauri's updater key and are verified before installation. LNPM v0.1.0 does not contain the updater, so it cannot update itself to v0.2.0. Install v0.2.0 manually once; in-app updates work for releases after v0.2.0.
+
 ## Local data
 
-All targets, samples, settings, and rollups are stored in a local SQLite database. LNPM does not upload monitoring data. It only contacts configured probe targets and checks the public GitHub Releases API once per day for updates.
+All targets, samples, settings, and rollups are stored in a local SQLite database. LNPM does not upload monitoring data. It only contacts configured probe targets and asks the official Tauri Updater to read the signed `latest.json` from GitHub Releases at startup and every 30 minutes while running.
 
 The exact data directory is available under **Settings -> Data -> Open folder**.
 
@@ -67,6 +81,7 @@ pnpm tauri dev
 Run all local checks:
 
 ```powershell
+pnpm test
 pnpm build
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --manifest-path src-tauri/Cargo.toml --locked
@@ -77,7 +92,7 @@ Docker can run some frontend and Rust checks, but it cannot reliably test the na
 
 ## Release process
 
-Every push and pull request is verified by the cross-platform CI workflow. A version tag such as `v0.1.0` starts the release workflow and publishes the native packages after every platform build succeeds.
+Every push and pull request is verified by the cross-platform CI workflow. A version tag such as `v0.2.0` starts the release workflow. The release becomes public only after every platform build succeeds and the workflow verifies the installers, updater signatures, and consolidated `latest.json`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
