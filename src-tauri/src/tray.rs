@@ -79,7 +79,7 @@ impl TauriEventSink {
         };
         let should_notify = matches!(
             event.transition.to,
-            QualityState::Unstable | QualityState::Disconnected | QualityState::Stable
+            QualityState::Unstable | QualityState::Disconnected | QualityState::Low
         ) && settings.notifications_enabled;
         if !should_notify {
             return;
@@ -152,7 +152,7 @@ fn notification_body(language: Language, transitions: &[PendingNotification]) ->
         let key = match transition.state {
             QualityState::Unstable => "notification.unstable",
             QualityState::Disconnected => "notification.disconnected",
-            QualityState::Stable => "notification.recovered",
+            QualityState::Low => "notification.recovered",
             _ => return String::new(),
         };
         return message(language, key, &[("name", &transition.target_name)]);
@@ -162,7 +162,7 @@ fn notification_body(language: Language, transitions: &[PendingNotification]) ->
     for state in [
         QualityState::Disconnected,
         QualityState::Unstable,
-        QualityState::Stable,
+        QualityState::Low,
     ] {
         let mut names = transitions
             .iter()
@@ -362,7 +362,10 @@ fn severity(state: QualityState) -> u8 {
         QualityState::Unstable => 3,
         QualityState::WarmingUp | QualityState::Unobserved => 2,
         QualityState::Paused => 1,
-        QualityState::Stable => 0,
+        QualityState::VeryHigh => 1,
+        QualityState::High => 0,
+        QualityState::Medium => 0,
+        QualityState::Low => 0,
     }
 }
 
@@ -384,8 +387,11 @@ fn status_icon(state: QualityState) -> Image<'static> {
 
 fn tray_icon_color(state: QualityState) -> [u8; 3] {
     match state {
-        QualityState::Stable => [23, 212, 196],
-        QualityState::Unstable => [245, 158, 11],
+        QualityState::Low => [34, 197, 94],
+        QualityState::Medium => [234, 179, 8],
+        QualityState::High => [249, 115, 22],
+        QualityState::VeryHigh => [239, 68, 68],
+        QualityState::Unstable => [168, 85, 247],
         QualityState::Disconnected | QualityState::Error => [148, 163, 184],
         QualityState::Paused | QualityState::WarmingUp | QualityState::Unobserved => {
             [100, 116, 139]
@@ -395,7 +401,7 @@ fn tray_icon_color(state: QualityState) -> [u8; 3] {
 
 #[allow(dead_code)]
 fn _transition_is_recovery(transition: &StateTransition) -> bool {
-    transition.to == QualityState::Stable
+    transition.to == QualityState::Low
         && matches!(
             transition.from,
             QualityState::Unstable | QualityState::Disconnected
@@ -444,7 +450,7 @@ mod tests {
 
     #[test]
     fn keeps_the_brand_silhouette_and_tints_it_for_each_tray_state() {
-        let stable = status_icon(QualityState::Stable);
+        let stable = status_icon(QualityState::Low);
         let unstable = status_icon(QualityState::Unstable);
         let disconnected = status_icon(QualityState::Disconnected);
 
@@ -463,7 +469,7 @@ mod tests {
         );
         assert!(
             stable.rgba().chunks_exact(4).any(|pixel| {
-                pixel[3] > 0 && pixel[..3] == tray_icon_color(QualityState::Stable)
+                pixel[3] > 0 && pixel[..3] == tray_icon_color(QualityState::Low)
             })
         );
         assert!(unstable.rgba().chunks_exact(4).any(|pixel| {

@@ -3,7 +3,7 @@ import "uplot/dist/uPlot.min.css";
 
 import { calculateTooltipPosition } from "./chart-tooltip";
 import { formatDateTime, formatLatency, stateLabel } from "./i18n";
-import type { HistoryPoint, HistoryResponse, QualityIntervalRecord } from "./types";
+import type { HistoryPoint, HistoryResponse, QualityIntervalRecord, QualityState } from "./types";
 
 const palette = ["#5eead4", "#60a5fa", "#c084fc", "#f472b6", "#facc15"];
 
@@ -11,10 +11,10 @@ const palette = ["#5eead4", "#60a5fa", "#c084fc", "#f472b6", "#facc15"];
  * Threshold-based bar colors for latency values (ms).
  */
 const barColorThresholds: [number, string][] = [
-  [50, "#5eead4"],
-  [100, "#facc15"],
-  [200, "#f97316"],
-  [Infinity, "#ef4444"],
+  [50, "#4ade80"],      // green — Low
+  [100, "#facc15"],      // yellow — Medium
+  [200, "#fb923c"],      // orange — High
+  [Infinity, "#f87171"],  // red — Very High
 ];
 
 interface ChartOptions {
@@ -29,6 +29,9 @@ export class LatencyChart {
   private tooltip: HTMLDivElement;
   private history: HistoryResponse | null = null;
   private selectedTargetId: string | null;
+  private isLineMode = false;
+  private aggregatedSeries: HistoryResponse | null = null;
+  private gaps: boolean[][] = [];
 
   constructor(
     private readonly container: HTMLElement,
@@ -50,26 +53,41 @@ export class LatencyChart {
     const rangeMs = history.toMs - history.fromMs;
     const allPoints = history.series.flatMap((s) => s.points);
     const totalPointCount = allPoints.length;
-    // Target ~60-200 bars for readability (more for short ranges, fewer for long ranges)
-    const targetBarCount = Math.max(60, Math.min(200, Math.round(rangeMs / 1_000)));
+    // Target ~100-2000 bars for readability
+    const targetBarCount = Math.max(100, Math.min(2000, Math.round(rangeMs / 500)));
     const bucketMs = getBucketSize(rangeMs, totalPointCount, targetBarCount);
     const aggregated = aggregateData(history, bucketMs);
-    const { data, labels } = alignSeries(aggregated);
+    const { data, labels, gaps: gapsArr } = alignSeries(aggregated);
+    this.aggregatedSeries = aggregated;
+    this.gaps = gapsArr;
+
+    // In bar mode with a selected monitor, null out hidden series so they don't render
+    if (!this.options.compact && this.selectedTargetId) {
+      const dataArr = data as number[][];
+      for (let si = 0; si < aggregated.series.length; si++) {
+        if (aggregated.series[si].target.id !== this.selectedTargetId) {
+          dataArr[si + 1] = new Array(dataArr[si + 1].length).fill(null) as number[];
+        }
+      }
+    }
+    const actualBarCount = data[0].length;
     const width = Math.max(280, this.container.clientWidth);
     const height = Math.max(this.options.compact ? 80 : 260, this.container.clientHeight);
     const intervals = this.intervalsForDisplay(history);
 
     // Line mode: used when all monitors are visible (no single target selected) and not compact.
     // Bar mode: used when a single monitor is selected or in compact view.
-    const isLineMode = !this.options.compact && !this.selectedTargetId;
+    this.isLineMode = !this.options.compact && !this.selectedTargetId;
+    const isLineMode = this.isLineMode;
+
 
     // Build bar path builder only in bar mode
     const barsPath = isLineMode
       ? undefined
       : ((uPlot.paths as any)?.bars ?? (() => () => ({ stroke: null, fill: null, clip: null }))())({
-          size: [0.8, Math.max(3, Math.min(12, width / Math.max(1, data[0].length))), 1],
-          gap: 1,
-          radius: [0.5, 0.5],
+          size: [0.8, Math.max(1, Math.min(12, Math.round((width - 40) / Math.max(1, actualBarCount) * 0.8))), 1],
+          gap: 0,
+          radius: 0,
           disp: {
             fill: {
               unit: 3 as uPlot.Series.BarsPathBuilderFacetUnit,
@@ -77,7 +95,13 @@ export class LatencyChart {
                 const result: (string | null)[] = [];
                 for (let i = 0; i < data[seriesIdx].length; i++) {
                   const value = data[seriesIdx][i];
-                  result.push(value == null ? null : barColor(value as number));
+                  if (value == null) {
+                    result.push(null);
+                  } else if (this.gaps[seriesIdx]?.[i]) {
+                    result.push("rgba(148, 163, 184, 0.25)");
+                  } else {
+                    result.push(barColor(value as number));
+                  }
                 }
                 return result;
               },
@@ -112,6 +136,7 @@ export class LatencyChart {
           points: { show: false },
           value: (_self: uPlot, rawValue: number | null) => formatLatency(rawValue),
           paths: isHidden ? undefined : barsPath,
+          ...(isHidden ? { min: 0, max: 0, scale: "y2" } : {}),
         };
       }),
     ];
@@ -125,9 +150,13 @@ export class LatencyChart {
         y: {
           auto: true,
           range: (_u, _min, max) => {
-            const ceiling = niceCeiling(Math.max(50, (max || 50) * 1.15));
-            return [0, ceiling];
+            const hi = Math.max(50, (max || 50) * 2);
+            return [0, Math.ceil(hi / 10) * 10];
           },
+        },
+        y2: {
+          auto: false,
+          range: () => [0, 1],
         },
       },
       series,
@@ -135,7 +164,9 @@ export class LatencyChart {
         ? [{ show: false }, { show: false }]
         : [
             {
-              space: 40,
+              // Dynamic space: only show as many labels as can actually fit
+              space: (_self: uPlot, _axisIdx: number, _min: number, _max: number, dim: number) =>
+                Math.max(60, dim / 20),
               size: 32,
               stroke: "rgba(148, 163, 184, 0.36)",
               font: "11px inherit",
@@ -162,7 +193,7 @@ export class LatencyChart {
             },
             {
               space: 48,
-              size: 40,
+              size: 48,
               stroke: "rgba(148, 163, 184, 0.36)",
               font: "11px inherit",
               label: "ms",
@@ -176,6 +207,10 @@ export class LatencyChart {
                 stroke: "rgba(148, 163, 184, 0.07)",
                 width: 1,
               },
+              // Limit Y-axis labels so they don't overlap on narrow charts
+              incrs: [
+                5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 250, 500, 750, 1000, 2000, 5000, 10000,
+              ],
               values: (
                 self: uPlot,
                 splits: number[],
@@ -204,7 +239,7 @@ export class LatencyChart {
             drawIntervals(u, intervals, history.toMs);
           },
         ],
-        setCursor: [(u) => this.updateTooltip(u, labels, intervals)],
+        setCursor: [(u) => this.updateTooltip(u, labels)],
         ready: [(u) => this.attachInteractions(u)],
       },
     };
@@ -244,11 +279,7 @@ export class LatencyChart {
     return selected?.intervals ?? [];
   }
 
-  private updateTooltip(
-    plot: uPlot,
-    labels: string[],
-    intervals: QualityIntervalRecord[],
-  ): void {
+  private updateTooltip(plot: uPlot, labels: string[]): void {
     const index = plot.cursor.idx;
     if (index == null || plot.cursor.left == null || !this.history) {
       this.tooltip.classList.remove("visible");
@@ -269,12 +300,53 @@ export class LatencyChart {
       })
       .filter(Boolean)
       .join("");
-    const interval = intervals.find(
-      (item) => timestampMs >= item.startMs && timestampMs <= (item.endMs ?? this.history!.toMs),
-    );
-    const intervalText = interval
-      ? `<div class="tooltip-state state-${interval.state}">${stateLabel(interval.state)}</div>`
-      : "";
+    // Determine quality state label shown in tooltip
+    let intervalText = "";
+    if (this.isLineMode) {
+      // Line mode: show state of the series closest to the cursor
+      let closestDist = Infinity;
+      let closestInterval: QualityIntervalRecord | null = null;
+      for (let si = 0; si < this.history.series.length; si++) {
+        const series = this.history.series[si];
+        for (const item of series.intervals) {
+          const end = item.endMs ?? this.history.toMs;
+          if (timestampMs < item.startMs || timestampMs > end) continue;
+          const val = plot.data[si + 1]?.[index];
+          if (val == null) continue;
+          const y = plot.valToPos(val, "y", true);
+          const dist = Math.abs(y - (plot.cursor.top ?? plot.bbox.top + plot.bbox.height / 2));
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestInterval = item;
+          }
+        }
+      }
+      if (closestInterval) {
+        intervalText = `<div class="tooltip-state state-${closestInterval.state}">${stateLabel(closestInterval.state)}</div>`;
+      }
+    } else {
+      // Bar mode: derive state from the hovered bar's actual latency value,
+      // not from historical intervals (which may not match the bar's data)
+      const seriesIdx = this.selectedTargetId
+        ? this.aggregatedSeries!.series.findIndex((s) => s.target.id === this.selectedTargetId) + 1
+        : 1;
+      const hoveredVal = plot.data[seriesIdx]?.[index];
+      const isGap = this.gaps[seriesIdx - 1]?.[index] ?? false;
+      if (isGap) {
+        intervalText = `<div class="tooltip-state state-disconnected">${stateLabel("disconnected" as QualityState)}</div>`;
+      } else if (hoveredVal != null && hoveredVal > 0) {
+        const val = hoveredVal as number;
+        const stateFromLatency: QualityState =
+          val < 50
+            ? "low"
+            : val < 100
+            ? "medium"
+            : val < 200
+            ? "high"
+            : "veryHigh";
+        intervalText = `<div class="tooltip-state state-${stateFromLatency}">${stateLabel(stateFromLatency)}</div>`;
+      }
+    }
     this.tooltip.innerHTML = `<time>${formatDateTime(timestampMs)}</time>${values}${intervalText}`;
     const containerRect = this.container.getBoundingClientRect();
     const overlayRect = plot.over.getBoundingClientRect();
@@ -360,19 +432,48 @@ export class LatencyChart {
 function alignSeries(history: HistoryResponse): {
   data: uPlot.AlignedData;
   labels: string[];
+  /** Per-series boolean arrays: true = gap (no data), false = real data */
+  gaps: boolean[][];
 } {
   const timestamps = Array.from(
     new Set(history.series.flatMap((series) => series.points.map((point) => point.timestampMs))),
   ).sort((a, b) => a - b);
   if (timestamps.length === 0) timestamps.push(history.fromMs, history.toMs);
   const data: uPlot.AlignedData = [timestamps.map((timestamp) => timestamp / 1_000)];
+  const gaps: boolean[][] = [];
+
   for (const series of history.series) {
-    const values = new Map(
-      series.points.map((point) => [point.timestampMs, point.averageLatencyMs] as const),
+    const values = new Map<number, number>(
+      series.points.map((point) => [point.timestampMs, point.averageLatencyMs!]),
     );
-    data.push(timestamps.map((timestamp) => values.get(timestamp) ?? null));
+
+    // Compute the series' median latency to use as the height of gap bars
+    const latencies: number[] = [];
+    for (const v of values.values()) {
+      if (v > 0) latencies.push(v);
+    }
+    latencies.sort((a, b) => a - b);
+    const medianLatency =
+      latencies.length > 0
+        ? latencies[Math.floor(latencies.length / 2)]
+        : 10;
+
+    const gapArray: boolean[] = [];
+    data.push(
+      timestamps.map((timestamp) => {
+        const val = values.get(timestamp);
+        if (val != null) {
+          gapArray.push(false);
+          return val;
+        }
+        gapArray.push(true);
+        return medianLatency;
+      }),
+    );
+    gaps.push(gapArray);
   }
-  return { data, labels: history.series.map((series) => series.target.name) };
+
+  return { data, gaps, labels: history.series.map((series) => series.target.name) };
 }
 
 /**
@@ -479,6 +580,7 @@ function drawIntervals(
  * Return the bar color based on latency threshold.
  */
 function barColor(latencyMs: number): string {
+  if (latencyMs === 0) return "rgba(148, 163, 184, 0.25)";
   for (const [threshold, color] of barColorThresholds) {
     if (latencyMs < threshold) return color;
   }
@@ -496,20 +598,6 @@ function escapeHtml(value: string): string {
     };
     return entities[character];
   });
-}
-
-/**
- * Returns a clean ceiling value for the Y axis (e.g. 10, 20, 25, 50, 100, 200, 250, 500, 1000).
- */
-function niceCeiling(value: number): number {
-  if (value <= 0) return 10;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
-  const normalized = value / magnitude;
-  const steps = [1, 2, 2.5, 5, 10, 20, 25, 50, 100];
-  for (const step of steps) {
-    if (step >= normalized) return step * magnitude;
-  }
-  return steps[steps.length - 1] * magnitude;
 }
 
 /**

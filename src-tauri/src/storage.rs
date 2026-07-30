@@ -295,7 +295,11 @@ impl Database {
         let success = sample.status.is_success() as i64;
         let failure = (!sample.status.is_success()) as i64;
         let (stable_ms, unstable_ms, disconnected_ms) = match update.state {
-            QualityState::Stable | QualityState::WarmingUp => (interval_ms as i64, 0, 0),
+            QualityState::Low
+            | QualityState::Medium
+            | QualityState::High
+            | QualityState::VeryHigh
+            | QualityState::WarmingUp => (interval_ms as i64, 0, 0),
             QualityState::Unstable => (0, interval_ms as i64, 0),
             QualityState::Disconnected => (0, 0, interval_ms as i64),
             _ => (0, 0, 0),
@@ -555,7 +559,11 @@ impl Database {
             let end = interval.end_ms.unwrap_or(to_ms).min(to_ms);
             let duration = end.saturating_sub(start);
             match interval.state {
-                QualityState::Stable | QualityState::WarmingUp => summary.stable_ms += duration,
+                QualityState::Low
+                | QualityState::Medium
+                | QualityState::High
+                | QualityState::VeryHigh
+                | QualityState::WarmingUp => summary.stable_ms += duration,
                 QualityState::Unstable => summary.unstable_ms += duration,
                 QualityState::Disconnected => summary.disconnected_ms += duration,
                 _ => {}
@@ -661,24 +669,30 @@ fn probe_status_to_i64(value: ProbeStatus) -> i64 {
 fn quality_state_to_i64(value: QualityState) -> i64 {
     match value {
         QualityState::WarmingUp => 0,
-        QualityState::Stable => 1,
-        QualityState::Unstable => 2,
-        QualityState::Disconnected => 3,
-        QualityState::Paused => 4,
-        QualityState::Unobserved => 5,
-        QualityState::Error => 6,
+        QualityState::Low => 1,
+        QualityState::Medium => 2,
+        QualityState::High => 3,
+        QualityState::VeryHigh => 4,
+        QualityState::Unstable => 5,
+        QualityState::Disconnected => 6,
+        QualityState::Paused => 7,
+        QualityState::Unobserved => 8,
+        QualityState::Error => 9,
     }
 }
 
 fn quality_state_from_i64(value: i64) -> Result<QualityState, StorageError> {
     match value {
         0 => Ok(QualityState::WarmingUp),
-        1 => Ok(QualityState::Stable),
-        2 => Ok(QualityState::Unstable),
-        3 => Ok(QualityState::Disconnected),
-        4 => Ok(QualityState::Paused),
-        5 => Ok(QualityState::Unobserved),
-        6 => Ok(QualityState::Error),
+        1 => Ok(QualityState::Low),
+        2 => Ok(QualityState::Medium),
+        3 => Ok(QualityState::High),
+        4 => Ok(QualityState::VeryHigh),
+        5 => Ok(QualityState::Unstable),
+        6 => Ok(QualityState::Disconnected),
+        7 => Ok(QualityState::Paused),
+        8 => Ok(QualityState::Unobserved),
+        9 => Ok(QualityState::Error),
         _ => Err(StorageError::InvalidData(format!(
             "unknown quality state {value}"
         ))),
@@ -765,7 +779,7 @@ mod tests {
             metrics: QualityMetrics::default(),
             reasons: vec![QualityReason::ConsecutiveFailures],
             transition: Some(StateTransition {
-                from: QualityState::Stable,
+                from: QualityState::Low,
                 to: QualityState::Disconnected,
                 effective_at_ms: 1_000,
                 reasons: vec![QualityReason::ConsecutiveFailures],

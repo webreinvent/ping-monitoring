@@ -61,39 +61,18 @@ impl QualityClassifier {
                 && self.success_streak >= self.thresholds.recovery_successes
             {
                 let effective_at_ms = self.success_streak_since_ms.unwrap_or(now_ms);
-                transition = self.transition_to(QualityState::Stable, effective_at_ms, vec![]);
+                transition = self.transition_to(
+                    next_latency_state(&metrics),
+                    effective_at_ms,
+                    vec![],
+                );
                 self.unstable_candidate_since_ms = None;
                 self.stable_candidate_since_ms = None;
             }
         } else if self.window.len() >= self.thresholds.minimum_samples {
-            if self.state == QualityState::WarmingUp {
-                transition = self.transition_to(QualityState::Stable, now_ms, vec![]);
-            }
-
-            if reasons.is_empty() {
-                self.unstable_candidate_since_ms = None;
-                if self.state == QualityState::Unstable {
-                    let stable_since = *self.stable_candidate_since_ms.get_or_insert(now_ms);
-                    if elapsed_seconds(stable_since, now_ms) >= self.thresholds.stable_for_seconds {
-                        transition = self.transition_to(QualityState::Stable, stable_since, vec![]);
-                        self.stable_candidate_since_ms = None;
-                    }
-                }
-            } else {
-                self.stable_candidate_since_ms = None;
-                if self.state != QualityState::Unstable {
-                    let unstable_since = *self.unstable_candidate_since_ms.get_or_insert(now_ms);
-                    if elapsed_seconds(unstable_since, now_ms)
-                        >= self.thresholds.unstable_for_seconds
-                    {
-                        transition = self.transition_to(
-                            QualityState::Unstable,
-                            unstable_since,
-                            reasons.clone(),
-                        );
-                        self.unstable_candidate_since_ms = None;
-                    }
-                }
+            let next = next_latency_state(&metrics);
+            if self.state != next {
+                transition = self.transition_to(next, now_ms, vec![]);
             }
         }
 
@@ -253,8 +232,20 @@ pub fn calculate_metrics(samples: &VecDeque<PingSample>) -> QualityMetrics {
     }
 }
 
-fn elapsed_seconds(from_ms: i64, to_ms: i64) -> u64 {
-    to_ms.saturating_sub(from_ms) as u64 / 1_000
+
+fn next_latency_state(metrics: &QualityMetrics) -> QualityState {
+    // Only mark unstable when packet loss is significant (>5%) or no data.
+    // A single timeout in a 300s window is ~0.3% — don't treat that as unstable.
+    if metrics.packet_loss_percent > 5.0 {
+        return QualityState::Unstable;
+    }
+    match metrics.average_latency_ms {
+        Some(latency) if latency < 50.0 => QualityState::Low,
+        Some(latency) if latency < 100.0 => QualityState::Medium,
+        Some(latency) if latency < 200.0 => QualityState::High,
+        Some(_) => QualityState::VeryHigh,
+        None => QualityState::Unstable,
+    }
 }
 
 #[cfg(test)]
@@ -301,24 +292,19 @@ mod tests {
             last = Some(classifier.observe(PingSample::success("target", second * 1_000, 20.0)));
         }
         let update = last.unwrap();
-        assert_eq!(update.state, QualityState::Stable);
+        assert_eq!(update.state, QualityState::Low);
         assert_eq!(update.transition.unwrap().effective_at_ms, 6_000);
     }
 
     #[test]
-    fn requires_persistent_high_latency_before_marking_unstable() {
+    fn high_latency_moves_to_very_high_state() {
         let mut classifier = classifier();
-        let mut unstable = None;
+        let mut update = None;
         for second in 0..25 {
-            let update = classifier.observe(PingSample::success("target", second * 1_000, 200.0));
-            if update.state == QualityState::Unstable {
-                unstable = Some(update);
-                break;
-            }
+            update = Some(classifier.observe(PingSample::success("target", second * 1_000, 200.0)));
         }
-        let update = unstable.expect("quality should become unstable");
-        assert!(update.reasons.contains(&QualityReason::HighLatency));
-        assert_eq!(update.transition.unwrap().effective_at_ms, 9_000);
+        let update = update.unwrap();
+        assert_eq!(update.state, QualityState::VeryHigh);
     }
 
     #[test]

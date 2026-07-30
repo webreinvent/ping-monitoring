@@ -179,7 +179,10 @@ impl PingSample {
 #[serde(rename_all = "camelCase")]
 pub enum QualityState {
     WarmingUp,
-    Stable,
+    Low,
+    Medium,
+    High,
+    VeryHigh,
     Unstable,
     Disconnected,
     Paused,

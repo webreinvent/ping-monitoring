@@ -459,18 +459,14 @@ async function toggleTargetMonitoring(targetId: string | null): Promise<void> {
   if (!item) return;
   const nextEnabled = !item.target.enabled;
   item.target.enabled = nextEnabled;
+  renderDashboard(); // Update UI immediately
   try {
     await api.saveTarget(item.target);
-    showToast(
-      `${item.target.name}: ${nextEnabled ? t("target.monitoringEnabled") : t("target.monitoringDisabled")}`,
-      nextEnabled ? "success" : "warning",
-    );
   } catch (err) {
     item.target.enabled = !nextEnabled; // revert on error
     showToast(String(err), "error");
-    return;
+    renderDashboard(); // Re-render with reverted state
   }
-  renderDashboard();
 }
 
 /** Toggle all monitors on or off. */
@@ -821,7 +817,7 @@ async function loadPopupHistory(): Promise<void> {
 
 function showTransitionToast(event: QualityTransitionEvent): void {
   const message = `${event.target.name} · ${stateLabel(event.transition.to, language)}`;
-  showToast(message, event.transition.to === "stable" ? "success" : event.transition.to);
+  showToast(message, event.transition.to === "low" ? "success" : event.transition.to);
   if (isPopup) {
     const alert = byId("popup-alert");
     alert.className = `popup-alert state-${event.transition.to}`;
@@ -993,19 +989,47 @@ function selectedStatus(): LiveTargetStatus | undefined {
 
 function aggregateState(): QualityState {
   if (dashboard.paused || dashboard.targets.length === 0) return "paused";
+
+  const counts: Record<QualityState, number> = {} as Record<QualityState, number>;
+  for (const item of dashboard.targets) {
+    counts[item.state] = (counts[item.state] ?? 0) + 1;
+  }
+
+  // If a majority of monitors share the same state, use it
+  const majorityThreshold = Math.ceil(dashboard.targets.length / 2);
+  for (const state of dashboard.targets.map((t) => t.state)) {
+    if ((counts[state] ?? 0) >= majorityThreshold) return state;
+  }
+
+  // No majority — find the worst state among monitors that aren't outliers.
+  // Exclude disconnected/error unless more than one-third are in that state,
+  // so a single down monitor doesn't dominate the aggregate.
+  const outlierThreshold = Math.max(1, Math.ceil(dashboard.targets.length / 3));
+  const considered = dashboard.targets.filter((t) => {
+    if (["disconnected", "error", "unstable"].includes(t.state)) {
+      return (counts[t.state] ?? 0) >= outlierThreshold;
+    }
+    return true;
+  });
+
   const priority: Record<QualityState, number> = {
-    stable: 0,
+    low: 0,
+    medium: 1,
+    high: 2,
+    veryHigh: 3,
     paused: 1,
-    warmingUp: 2,
-    unobserved: 2,
-    unstable: 3,
-    disconnected: 4,
-    error: 4,
+    warmingUp: 1,
+    unobserved: 1,
+    unstable: 4,
+    disconnected: 5,
+    error: 5,
   };
-  return dashboard.targets.reduce(
-    (worst, target) => (priority[target.state] > priority[worst] ? target.state : worst),
-    "stable" as QualityState,
-  );
+  return considered.length
+    ? considered.reduce(
+        (worst, target) => (priority[target.state] > priority[worst] ? target.state : worst),
+        "low" as QualityState,
+      )
+    : ("high" as QualityState);
 }
 
 function showToast(message: string, kind: string): void {

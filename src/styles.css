@@ -594,15 +594,35 @@ select:focus-visible {
 }
 
 .status-dot.state-stable,
-.state-pill.state-stable::before {
+.status-dot.state-low,
+.state-pill.state-stable::before,
+.state-pill.state-low::before {
   background: var(--accent);
   box-shadow: 0 0 0 3px rgba(69, 223, 194, 0.1), 0 0 8px rgba(69, 223, 194, 0.38);
 }
 
+.status-dot.state-medium,
+.state-pill.state-medium::before {
+  background: #eab308;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1), 0 0 8px rgba(234, 179, 8, 0.38);
+}
+
+.status-dot.state-high,
+.state-pill.state-high::before {
+  background: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1), 0 0 8px rgba(249, 115, 22, 0.38);
+}
+
+.status-dot.state-veryHigh,
+.state-pill.state-veryHigh::before {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1), 0 0 8px rgba(239, 68, 68, 0.38);
+}
+
 .status-dot.state-unstable,
 .state-pill.state-unstable::before {
-  background: var(--warning);
-  box-shadow: 0 0 0 3px rgba(246, 169, 74, 0.1), 0 0 8px rgba(246, 169, 74, 0.38);
+  background: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1), 0 0 8px rgba(168, 85, 247, 0.38);
 }
 
 .status-dot.state-disconnected,
@@ -743,16 +763,34 @@ select:focus-visible {
   content: "";
 }
 
-.state-pill.state-stable {
-  border-color: rgba(69, 223, 194, 0.22);
-  color: var(--accent-bright);
-  background: var(--accent-soft);
+.state-pill.state-low {
+  border-color: rgba(34, 197, 94, 0.22);
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.state-pill.state-medium {
+  border-color: rgba(234, 179, 8, 0.22);
+  color: #facc15;
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.state-pill.state-high {
+  border-color: rgba(249, 115, 22, 0.22);
+  color: #fb923c;
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.state-pill.state-veryHigh {
+  border-color: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .state-pill.state-unstable {
-  border-color: rgba(246, 169, 74, 0.24);
-  color: #ffc376;
-  background: var(--warning-soft);
+  border-color: rgba(168, 85, 247, 0.22);
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.08);
 }
 
 .state-pill.state-disconnected {
@@ -1657,8 +1695,8 @@ select:focus-visible {
   color: var(--muted-strong);
   background: rgba(6, 15, 21, 0.96);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  font-size: 9px;
-  line-height: 1.65;
+  font-size: 12px;
+  line-height: 1.5;
   opacity: 0;
   transform: translateY(3px);
   transition: opacity 90ms ease, transform 90ms ease;
@@ -1674,7 +1712,7 @@ select:focus-visible {
   display: block;
   margin-bottom: 3px;
   color: var(--text);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .chart-tooltip > div {
@@ -1699,9 +1737,29 @@ select:focus-visible {
   text-transform: capitalize;
 }
 
+.chart-tooltip .state-low {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.chart-tooltip .state-medium {
+  color: #facc15;
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.chart-tooltip .state-high {
+  color: #fb923c;
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.chart-tooltip .state-veryHigh {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .chart-tooltip .state-unstable {
-  color: #ffc376;
-  background: var(--warning-soft);
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.08);
 }
 
 .chart-tooltip .state-disconnected {

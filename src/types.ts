@@ -8,7 +8,10 @@ export type ProbeStatus =
   | "error";
 export type QualityState =
   | "warmingUp"
-  | "stable"
+  | "low"
+  | "medium"
+  | "high"
+  | "veryHigh"
   | "unstable"
   | "disconnected"
   | "paused"

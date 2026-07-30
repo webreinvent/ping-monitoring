@@ -75,7 +75,10 @@ pub fn message(language: Language, key: &str, values: &[(&str, &str)]) -> String
 
 pub fn state_label(language: Language, state: QualityState) -> String {
     let key = match state {
-        QualityState::Stable => "state.stable",
+        QualityState::Low => "state.low",
+        QualityState::Medium => "state.medium",
+        QualityState::High => "state.high",
+        QualityState::VeryHigh => "state.veryHigh",
         QualityState::Unstable => "state.unstable",
         QualityState::Disconnected => "state.disconnected",
         QualityState::Paused => "state.paused",

@@ -30,7 +30,7 @@ describe("all-monitor selection", () => {
   it("averages current latency across targets with replies", () => {
     const status = (id: string, latencyMs: number | null): LiveTargetStatus => ({
       target: { ...target, id },
-      state: "stable",
+      state: "low",
       stateSinceMs: 0,
       latestSample: {
         targetId: id,
