@@ -397,33 +397,33 @@ function renderDashboard(): void {
     });
 
   targetList.querySelectorAll<HTMLElement>(".target-row").forEach((row) => {
-    // Prevent toggle/edit buttons from bubbling to the row
-    row.querySelectorAll(".target-toggle, .target-menu").forEach((btn) => {
+    // Handle toggle buttons directly
+    row.querySelectorAll("[data-toggle-target]").forEach((btn) => {
       (btn as HTMLElement).addEventListener("click", (event) => {
         event.stopPropagation();
+        const targetId = row.dataset.targetId ?? null;
+        void toggleTargetMonitoring(targetId);
       });
     });
 
-    row.addEventListener("click", (event) => {
-      const targetId = row.dataset.targetId ?? null;
-      if ((event.target as HTMLElement).closest("[data-toggle-target]")) {
-        toggleTargetMonitoring(targetId);
-        return;
-      }
-      if ((event.target as HTMLElement).closest("[data-edit-target]")) {
-        const status = dashboard.targets.find((item) => item.target.id === targetId);
+    // Handle edit buttons directly
+    row.querySelectorAll("[data-edit-target]").forEach((btn) => {
+      (btn as HTMLElement).addEventListener("click", (event) => {
+        event.stopPropagation();
+        const targetId = row.dataset.targetId ?? null;
+        const status = targetId ? dashboard.targets.find((item) => item.target.id === targetId) : null;
         if (status) openTargetDialog(status.target);
-        return;
-      }
+      });
+    });
+
+    row.addEventListener("click", () => {
+      const targetId = row.dataset.targetId ?? null;
       if (!targetId) {
         // All monitors row — select it
         selectedTargetId = null;
-        renderDashboard();
-        if (history) chart?.render(history, selectedTargetId);
-        renderSummary();
-        return;
+      } else {
+        selectedTargetId = targetId;
       }
-      selectedTargetId = targetId;
       renderDashboard();
       if (history) chart?.render(history, selectedTargetId);
       renderSummary();
