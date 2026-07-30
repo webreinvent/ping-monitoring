@@ -88,11 +88,6 @@ check_prerequisites() {
   info "pnpm    $(pnpm --version)"
 }
 
-check_cross_prerequisites() {
-  # No special prerequisites — rustup target add is enough
-  :
-}
-
 # ── Resolve targets ────────────────────────────────────────────────
 resolve_targets() {
   local os
@@ -136,30 +131,32 @@ resolve_targets() {
   info "Build targets: ${TARGETS[*]}"
 }
 
-# ── Is cross-compilation needed? ───────────────────────────────────
-needs_cross() {
+# ── Can this target be built on the current host? ─────────────────
+can_build() {
   local target="$1"
   local os
   os="$(uname -s)"
-  local arch
-  arch="$(uname -m)"
 
-  # Running natively — no cross needed
-  if [ "$os" = "Darwin" ] && [ "$target" = "macos-arm" ] && [ "$arch" = "arm64" ]; then
-    return 1
-  fi
-  if [ "$os" = "Darwin" ] && [ "$target" = "macos-intel" ] && [ "$arch" = "x86_64" ]; then
-    return 1
-  fi
-  if [ "$os" = "Linux" ] && [ "$target" = "linux" ]; then
-    return 1
-  fi
-  if [[ "$os" == MINGW* || "$os" == MSYS* || "$os" == CYGWIN* ]] && [ "$target" = "windows" ]; then
-    return 1
-  fi
-
-  # Cross-compilation needed
-  return 0
+  case "$os" in
+    Darwin)
+      # macOS can only build macOS bundles natively
+      case "$target" in
+        macos-arm|macos-intel) return 0 ;;
+      esac
+      return 1
+      ;;
+    Linux)
+      # Linux can only build Linux bundles natively
+      if [ "$target" = "linux" ]; then return 0; fi
+      return 1
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      # Windows can only build Windows bundles natively
+      if [ "$target" = "windows" ]; then return 0; fi
+      return 1
+      ;;
+  esac
+  return 1
 }
 
 # ── Build frontend (once, shared across all targets) ───────────────
@@ -206,33 +203,7 @@ build_target() {
 
   mkdir -p "$artifact_dir"
 
-  if needs_cross "$platform"; then
-    info "Cross-compiling for $platform …"
-
-    # Ensure the Rust target is installed
-    rustup target add "$rust_target" 2>/dev/null || true
-
-    case "$platform" in
-      windows)
-        # Windows bundlers (nsis, msi) can only run on a Windows host.
-        # Tauri's macOS CLI doesn't recognize nsis/msi bundle types.
-        warn "Windows bundles (.exe, .msi) require a Windows host or CI."
-        warn "Skipping Windows bundle creation (build on Windows or use CI)."
-        echo ""
-        return
-        ;;
-      linux)
-        # Linux bundlers (AppImage, deb) need a Linux environment.
-        warn "Linux bundles (.AppImage, .deb) require a Linux host or CI."
-        warn "Skipping Linux bundle creation (build on Linux or use CI)."
-        echo ""
-        return
-        ;;
-    esac
-  else
-    # Native build — straightforward
-    run_tauri_build "$rust_target" "$bundles"
-  fi
+  run_tauri_build "$rust_target" "$bundles"
 
   # ── Collect artifacts into ./builds/<platform>/ ──────────────────
   local bundle_base
@@ -338,7 +309,8 @@ main() {
         echo ""
         echo "Usage: bash release.sh [--all|--target <name>|--target=<name> [--no-clean]]"
         echo ""
-        echo "  (default)            clean + build macOS + Windows"
+        echo "  (default)            clean + build all buildable targets"
+        echo "                       (macOS: arm + intel, Linux: deb, Windows: exe)"
         echo "  --all                clean + build all 4 platforms"
         echo "  --target <name>      clean + build one target:"
         echo "                       macos-arm, macos-intel, windows, linux"
@@ -357,25 +329,37 @@ main() {
   check_prerequisites
   resolve_targets
 
+  # Filter to only buildable targets
+  BUILDABLE=()
+  for target in "${TARGETS[@]}"; do
+    if can_build "$target"; then
+      BUILDABLE+=("$target")
+    else
+      warn "Skipping ${PLATFORM_LABEL[$target]} — requires a native host"
+    fi
+  done
+
+  if [ "${#BUILDABLE[@]}" -eq 0 ]; then
+    err "No buildable targets for this host."
+    echo ""
+    echo "Build installers on the target OS, or use the CI pipeline."
+    echo "For Windows/Linux bundles from macOS, tag a release to trigger CI."
+    exit 0
+  fi
+
+  info "Buildable targets: ${BUILDABLE[*]}"
+
   if [ "$DO_CLEAN" = "1" ]; then
     info "Removing previous ./builds/ …"
     rm -rf "$BUILD_DIR"
     ok "Cleaned"
   fi
 
-  # Check cross prerequisites if needed
-  for target in "${TARGETS[@]}"; do
-    if needs_cross "$target"; then
-      check_cross_prerequisites
-      break
-    fi
-  done
-
   # Build frontend once
   build_frontend
 
   # Build each target
-  for target in "${TARGETS[@]}"; do
+  for target in "${BUILDABLE[@]}"; do
     build_target "$target"
   done
 
