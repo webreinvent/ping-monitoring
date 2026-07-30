@@ -78,6 +78,21 @@ pnpm install --frozen-lockfile
 pnpm tauri dev
 ```
 
+### Building installers
+
+Use `release.sh` to build platform installers locally:
+
+```bash
+bash release.sh                    # clean + build macOS arm + Intel
+bash release.sh --all              # all 4 platforms (Linux/Windows skip on non-native hosts)
+bash release.sh --target=macos-arm # single target only
+bash release.sh --no-clean         # skip cleaning ./builds/ first
+```
+
+Installers are placed in `./builds/<platform>/` (e.g., `./builds/macos-arm/LNPM.dmg`).
+
+Windows and Linux bundles require their respective host OS — use the CI pipeline or a native machine for those.
+
 Run all local checks:
 
 ```powershell
