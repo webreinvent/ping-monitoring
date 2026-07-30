@@ -388,6 +388,14 @@ function renderDashboard(): void {
         </div>`;
       })
       .join("");
+  // Handle toggle-all button
+  targetList
+    .querySelector<HTMLElement>("[data-toggle-all]")
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void toggleAllMonitoring();
+    });
+
   targetList.querySelectorAll<HTMLElement>(".target-row").forEach((row) => {
     // Prevent toggle/edit buttons from bubbling to the row
     row.querySelectorAll(".target-toggle, .target-menu").forEach((btn) => {
@@ -398,10 +406,6 @@ function renderDashboard(): void {
 
     row.addEventListener("click", (event) => {
       const targetId = row.dataset.targetId ?? null;
-      if ((event.target as HTMLElement).closest("[data-toggle-all]")) {
-        toggleAllMonitoring();
-        return;
-      }
       if ((event.target as HTMLElement).closest("[data-toggle-target]")) {
         toggleTargetMonitoring(targetId);
         return;
@@ -409,6 +413,14 @@ function renderDashboard(): void {
       if ((event.target as HTMLElement).closest("[data-edit-target]")) {
         const status = dashboard.targets.find((item) => item.target.id === targetId);
         if (status) openTargetDialog(status.target);
+        return;
+      }
+      if (!targetId) {
+        // All monitors row — select it
+        selectedTargetId = null;
+        renderDashboard();
+        if (history) chart?.render(history, selectedTargetId);
+        renderSummary();
         return;
       }
       selectedTargetId = targetId;
