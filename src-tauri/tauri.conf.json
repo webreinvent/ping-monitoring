@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsP/6N1H+7+kSVWnVrr2y\nTiYF+ogg5bUKYqhpOODVFY+JJqD345LGq73Cscs/3xmgwmuZtkAonSihfw3yTxW2\nMmY3FZlhmQObBdC8QljpjOO7t83wWMDh2WhADpeNOXPKWajuQHQBPWwL0MgUKcvR\nfMSJcMHZ4VHC8ZHdVNPS5ivSXYy3uGZwVZYlQRAfDZZqTrDk3LZRUA1KHVP8C9s6\nnSCk2fFDw7MAPYzNe7TR8GiQMRQ7jeLpIu00YyWxMI/XtegTQhyw9OwW8jkcl/5S\nlyfdZx/ONaPXjfI5KSSHO8+gxs8jXlKWxgrX7PZqVvCHAapmdgM+v6pGzVh/hIbL\nvQIDAQAB\n-----END PUBLIC KEY-----",
+      "pubkey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsP/6N1H+7+kSVWnVrr2yTiYF+ogg5bUKYqhpOODVFY+JJqD345LGq73Cscs/3xmgwmuZtkAonSihfw3yTxW2MmY3FZlhmQObBdC8QljpjOO7t83wWMDh2WhADpeNOXPKWajuQHQBPWwL0MgUKcvRfMSJcMHZ4VHC8ZHdVNPS5ivSXYy3uGZwVZYlQRAfDZZqTrDk3LZRUA1KHVP8C9s6nSCk2fFDw7MAPYzNe7TR8GiQMRQ7jeLpIu00YyWxMI/XtegTQhyw9OwW8jkcl/5SlyfdZx/ONaPXjfI5KSSHO8+gxs8jXlKWxgrX7PZqVvCHAapmdgM+v6pGzVh/hIbLvQIDAQAB"
       "endpoints": [
         "https://github.com/xxsLuna/LNPM/releases/latest/download/latest.json"
       ],
