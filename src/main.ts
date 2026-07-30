@@ -378,8 +378,8 @@ function renderDashboard(): void {
         return `<div class="target-row ${item.target.id === selectedTargetId ? "selected" : ""}" data-target-id="${item.target.id}" role="button" tabindex="0">
           <span class="status-dot state-${item.state}"></span>
           <span class="target-copy"><strong>${escapeHtml(item.target.name)}</strong><small>${escapeHtml(item.target.host)}</small></span>
-          <span class="target-latency">${formatLatency(latency)}</span>
           <span class="target-row-actions">
+            <span class="target-latency">${formatLatency(latency)}</span>
             <button type="button" class="target-toggle" data-toggle-target="${item.target.id}" title="${escapeHtml(enabled ? t("action.disableMonitoring") : t("action.enableMonitoring"))}" aria-label="${escapeHtml(enabled ? t("action.disableMonitoring") : t("action.enableMonitoring"))}">
               <span class="toggle-track ${enabled ? "on" : "off"}"><span class="toggle-thumb"></span></span>
             </button>

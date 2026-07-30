@@ -277,7 +277,7 @@ select:focus-visible {
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: var(--sidebar-width, 280px) 1px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 320px) 1px minmax(0, 1fr);
 }
 
 .target-sidebar {
@@ -384,7 +384,7 @@ select:focus-visible {
   border: 1px solid transparent;
   border-radius: 10px;
   padding: 8px 10px;
-  grid-template-columns: 12px minmax(0, auto) auto auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   gap: 8px;
   color: var(--text);
   background: transparent;
@@ -473,7 +473,7 @@ select:focus-visible {
 
 .target-latency {
   flex-shrink: 0;
-  min-width: 50px;
+  justify-self: end;
   color: var(--muted-strong);
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 11px;
@@ -486,6 +486,7 @@ select:focus-visible {
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
+  justify-self: end;
 }
 
 .target-menu {

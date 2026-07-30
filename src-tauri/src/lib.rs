@@ -55,9 +55,7 @@ pub fn run() {
             update_manager.start();
             build_tray(app, &settings)?;
 
-            if settings.first_run || monitor.snapshot().targets.is_empty() {
-                tray::show_main_window(app.handle());
-            }
+            tray::show_main_window(app.handle());
 
             let maintenance_database = database;
             tauri::async_runtime::spawn(async move {
