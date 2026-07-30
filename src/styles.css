@@ -277,7 +277,7 @@ select:focus-visible {
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: 238px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 280px) 1px minmax(0, 1fr);
 }
 
 .target-sidebar {
@@ -287,6 +287,37 @@ select:focus-visible {
   padding: 20px 13px;
   border-right: 1px solid var(--line);
   background: rgba(8, 18, 24, 0.72);
+  overflow: visible;
+}
+
+.sidebar-resizer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 1px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 150ms ease;
+  flex-shrink: 0;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.active {
+  background: rgba(69, 223, 194, 0.35);
+}
+
+.sidebar-resizer-handle {
+  width: 3px;
+  height: 40px;
+  border-radius: 3px;
+  background: rgba(148, 176, 194, 0.2);
+  transition: background 150ms ease;
+}
+
+.sidebar-resizer:hover .sidebar-resizer-handle,
+.sidebar-resizer.active .sidebar-resizer-handle {
+  background: rgba(69, 223, 194, 0.5);
 }
 
 .sidebar-heading {
@@ -347,14 +378,14 @@ select:focus-visible {
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 62px;
+  min-height: 54px;
   align-items: center;
   margin: 2px 0;
   border: 1px solid transparent;
   border-radius: 10px;
-  padding: 8px;
-  grid-template-columns: 8px minmax(0, 1fr) 54px 28px;
-  gap: 7px;
+  padding: 8px 10px;
+  grid-template-columns: 12px minmax(0, auto) auto auto;
+  gap: 8px;
   color: var(--text);
   background: transparent;
   text-align: left;
@@ -381,10 +412,12 @@ select:focus-visible {
   min-height: 38px;
   margin: 0 0 8px;
   border-color: rgba(148, 176, 194, 0.09);
-  padding: 6px 9px;
-  grid-template-columns: 18px minmax(0, 1fr);
+  padding: 6px 10px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 8px;
   background: rgba(255, 255, 255, 0.016);
+  cursor: pointer;
+  user-select: none;
 }
 
 .all-target-icon {
@@ -418,6 +451,7 @@ select:focus-visible {
   min-width: 0;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
 }
 
 .target-copy strong,
@@ -434,16 +468,24 @@ select:focus-visible {
 
 .target-copy small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .target-latency {
-  min-width: 0;
+  flex-shrink: 0;
+  min-width: 50px;
   color: var(--muted-strong);
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   font-size: 11px;
   text-align: right;
   white-space: nowrap;
+}
+
+.target-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
 .target-menu {
@@ -463,6 +505,69 @@ select:focus-visible {
 .target-menu:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
+}
+
+.target-toggle {
+  display: grid;
+  width: 36px;
+  min-width: 0;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.target-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.target-toggle .toggle-track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 176, 194, 0.2);
+  background: rgba(100, 116, 139, 0.2);
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.target-toggle .toggle-track.on {
+  background: rgba(69, 223, 194, 0.25);
+  border-color: rgba(69, 223, 194, 0.5);
+}
+
+.target-toggle .toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: left 150ms ease, background 150ms ease;
+}
+
+.target-toggle .toggle-track.on .toggle-thumb {
+  left: 17px;
+  background: var(--accent);
+}
+
+.target-toggle .toggle-track.partial {
+  background: rgba(100, 116, 139, 0.2);
+  border-color: rgba(148, 176, 194, 0.3);
+}
+
+.target-toggle .toggle-track.partial .toggle-thumb {
+  left: 2px;
+  background: var(--muted);
+}
+
+.target-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .target-menu .ui-icon,
@@ -656,7 +761,10 @@ select:focus-visible {
 }
 
 .range-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
   padding: 3px;
+  gap: 2px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: rgba(4, 11, 15, 0.46);
@@ -1508,6 +1616,8 @@ select:focus-visible {
 /* uPlot chart integration */
 .uplot {
   font-family: inherit;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.6);
 }
 
 .uplot .u-title,
@@ -1523,9 +1633,16 @@ select:focus-visible {
   cursor: grabbing;
 }
 
-.uplot .u-cursor-x,
+.uplot .u-cursor-x {
+  border-color: rgba(167, 183, 194, 0.25) !important;
+}
+
 .uplot .u-cursor-y {
-  border-color: rgba(167, 183, 194, 0.34) !important;
+  display: none;
+}
+
+.uplot .u-select {
+  display: none;
 }
 
 .chart-tooltip {
@@ -1592,7 +1709,7 @@ select:focus-visible {
 }
 
 @media (max-width: 980px) {
-  .workspace { grid-template-columns: 210px minmax(0, 1fr); }
+  .workspace { grid-template-columns: 210px 1px minmax(0, 1fr); }
   .dashboard-panel { padding: 18px; }
   .summary-grid { grid-template-columns: repeat(3, 1fr); }
 }

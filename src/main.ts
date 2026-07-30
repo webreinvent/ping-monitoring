@@ -63,7 +63,7 @@ let history: HistoryResponse | null = null;
 let selectedTargetId: string | null = null;
 let chart: LatencyChart | null = null;
 let loadGeneration = 0;
-let currentRange = { fromMs: Date.now() - 3_600_000, toMs: Date.now() };
+let currentRange = { fromMs: Date.now() - 60_000, toMs: Date.now() };
 let followLive = true;
 let updateUiState: UpdateUiState = initialUpdateUiState;
 let currentAppVersion: string | null = null;
@@ -154,6 +154,9 @@ async function initMain(): Promise<void> {
           <button class="button primary" data-action="add-target">${t("action.addTarget")}</button>
         </div>
       </aside>
+      <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar">
+        <span class="sidebar-resizer-handle"></span>
+      </div>
       <section class="dashboard-panel">
         <div class="dashboard-heading">
           <div>
@@ -162,7 +165,13 @@ async function initMain(): Promise<void> {
             <p id="selected-host">—</p>
           </div>
           <div class="range-controls" role="group" aria-label="${t("dashboard.chartRange")}">
-            <button data-range="3600000" class="range-button active">1H</button>
+            <button data-range="live" class="range-button active">${t("action.live")}</button>
+            <button data-range="300000" class="range-button">5M</button>
+            <button data-range="600000" class="range-button">10M</button>
+            <button data-range="1800000" class="range-button">30M</button>
+            <button data-range="3600000" class="range-button">1H</button>
+            <button data-range="21600000" class="range-button">6H</button>
+            <button data-range="43200000" class="range-button">12H</button>
             <button data-range="86400000" class="range-button">24H</button>
             <button data-range="604800000" class="range-button">7D</button>
             <button data-range="2592000000" class="range-button">30D</button>
@@ -215,13 +224,60 @@ async function initMain(): Promise<void> {
   window.setInterval(() => {
     if (followLive && dashboard.targets.length > 0) {
       const toMs = Date.now();
-      const duration = currentRange.toMs - currentRange.fromMs;
-      void loadHistory(toMs - duration, toMs, false);
+      const activeButton = root.querySelector<HTMLButtonElement>(".range-button.active");
+      if (activeButton?.dataset.range === "live") {
+        void loadHistory(toMs - 60_000, toMs, false);
+      } else {
+        const duration = currentRange.toMs - currentRange.fromMs;
+        void loadHistory(toMs - duration, toMs, false);
+      }
     }
   }, 5_000);
 }
 
+/** Draggable sidebar width resizer. */
+function initSidebarResizer(): void {
+  const resizer = byId("sidebar-resizer");
+  if (!resizer) return;
+  let startX = 0;
+  let startWidth = 0;
+  let isDragging = false;
+
+  const getSidebarWidth = (): number => {
+    const sidebar = document.querySelector(".target-sidebar");
+    return sidebar ? sidebar.getBoundingClientRect().width : 280;
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    e.preventDefault();
+    isDragging = true;
+    startX = e.clientX;
+    startWidth = getSidebarWidth();
+    resizer.classList.add("active");
+    document.body.style.userSelect = "none";
+    resizer.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!isDragging) return;
+    const delta = e.clientX - startX;
+    const newWidth = Math.max(200, Math.min(600, startWidth + delta));
+    document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
+  };
+
+  const onPointerUp = () => {
+    isDragging = false;
+    resizer.classList.remove("active");
+    document.body.style.userSelect = "";
+  };
+
+  resizer.addEventListener("pointerdown", onPointerDown);
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUp);
+}
+
 function bindMainEvents(): void {
+  initSidebarResizer();
   byId("add-target").addEventListener("click", () => openTargetDialog());
   root.querySelector('[data-action="add-target"]')?.addEventListener("click", () => openTargetDialog());
   byId("open-settings").addEventListener("click", () => {
@@ -231,19 +287,29 @@ function bindMainEvents(): void {
   byId("follow-live").addEventListener("click", () => {
     followLive = true;
     byId("follow-live").classList.add("active");
-    const duration = currentRange.toMs - currentRange.fromMs;
+    const activeButton = root.querySelector<HTMLButtonElement>(".range-button.active");
     const toMs = Date.now();
-    void loadHistory(toMs - duration, toMs);
+    if (activeButton?.dataset.range === "live") {
+      void loadHistory(toMs - 60_000, toMs);
+    } else {
+      const duration = currentRange.toMs - currentRange.fromMs;
+      void loadHistory(toMs - duration, toMs);
+    }
   });
   root.querySelectorAll<HTMLButtonElement>("[data-range]").forEach((button) => {
     button.addEventListener("click", () => {
-      const duration = Number(button.dataset.range);
       const toMs = Date.now();
       followLive = true;
       root.querySelectorAll(".range-button").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       byId("follow-live").classList.add("active");
-      void loadHistory(toMs - duration, toMs);
+      if (button.dataset.range === "live") {
+        const duration = 60_000;
+        void loadHistory(toMs - duration, toMs);
+      } else {
+        const duration = Number(button.dataset.range);
+        void loadHistory(toMs - duration, toMs);
+      }
     });
   });
   byId("custom-range").addEventListener("click", () => {
@@ -293,26 +359,53 @@ function renderDashboard(): void {
     selectedTargetId = null;
   }
   const targetList = byId("target-list");
-  const allRow = `<button class="target-row all-target-row ${selectedTargetId === null ? "selected" : ""}" data-select-all="true">
+  const enabledCount = dashboard.targets.filter((t) => t.target.enabled).length;
+  const allEnabled = enabledCount === dashboard.targets.length;
+  const noneEnabled = enabledCount === 0;
+  const allRow = `<div class="target-row all-target-row ${selectedTargetId === null ? "selected" : ""}" data-select-all="true">
     <span class="all-target-icon" aria-hidden="true">${iconSvg("layers")}</span>
     <strong>${t("dashboard.allMonitors")}</strong>
-  </button>`;
+    <button type="button" class="target-toggle toggle-all" data-toggle-all="true" title="${escapeHtml(t("action.toggleAllMonitors"))}" aria-label="${escapeHtml(t("action.toggleAllMonitors"))}">
+      <span class="toggle-track ${allEnabled ? "on" : noneEnabled ? "off" : "partial"}"><span class="toggle-thumb"></span></span>
+    </button>
+  </div>`;
   targetList.innerHTML =
     allRow +
     dashboard.targets
       .map((item) => {
         const latency = item.latestSample?.latencyMs;
+        const enabled = item.target.enabled;
         return `<div class="target-row ${item.target.id === selectedTargetId ? "selected" : ""}" data-target-id="${item.target.id}" role="button" tabindex="0">
           <span class="status-dot state-${item.state}"></span>
           <span class="target-copy"><strong>${escapeHtml(item.target.name)}</strong><small>${escapeHtml(item.target.host)}</small></span>
           <span class="target-latency">${formatLatency(latency)}</span>
-          <button type="button" class="target-menu" data-edit-target="${item.target.id}" title="${escapeHtml(t("action.manageTarget"))}" aria-label="${escapeHtml(t("action.manageTarget"))}">${iconSvg("edit")}</button>
+          <span class="target-row-actions">
+            <button type="button" class="target-toggle" data-toggle-target="${item.target.id}" title="${escapeHtml(enabled ? t("action.disableMonitoring") : t("action.enableMonitoring"))}" aria-label="${escapeHtml(enabled ? t("action.disableMonitoring") : t("action.enableMonitoring"))}">
+              <span class="toggle-track ${enabled ? "on" : "off"}"><span class="toggle-thumb"></span></span>
+            </button>
+            <button type="button" class="target-menu" data-edit-target="${item.target.id}" title="${escapeHtml(t("action.manageTarget"))}" aria-label="${escapeHtml(t("action.manageTarget"))}">${iconSvg("edit")}</button>
+          </span>
         </div>`;
       })
       .join("");
   targetList.querySelectorAll<HTMLElement>(".target-row").forEach((row) => {
+    // Prevent toggle/edit buttons from bubbling to the row
+    row.querySelectorAll(".target-toggle, .target-menu").forEach((btn) => {
+      (btn as HTMLElement).addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+    });
+
     row.addEventListener("click", (event) => {
       const targetId = row.dataset.targetId ?? null;
+      if ((event.target as HTMLElement).closest("[data-toggle-all]")) {
+        toggleAllMonitoring();
+        return;
+      }
+      if ((event.target as HTMLElement).closest("[data-toggle-target]")) {
+        toggleTargetMonitoring(targetId);
+        return;
+      }
       if ((event.target as HTMLElement).closest("[data-edit-target]")) {
         const status = dashboard.targets.find((item) => item.target.id === targetId);
         if (status) openTargetDialog(status.target);
@@ -325,7 +418,7 @@ function renderDashboard(): void {
     });
     row.addEventListener("keydown", (event) => {
       if (row instanceof HTMLButtonElement) return;
-      if ((event.target as HTMLElement).closest("[data-edit-target]")) return;
+      if ((event.target as HTMLElement).closest("[data-edit-target]") || (event.target as HTMLElement).closest("[data-toggle-target]") || (event.target as HTMLElement).closest("[data-toggle-all]")) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       row.click();
@@ -345,6 +438,50 @@ function renderDashboard(): void {
   statePill.className = `state-pill state-${state}`;
   statePill.textContent = stateLabel(state, language);
   renderSummary();
+}
+
+/** Toggle monitoring enabled/disabled for a single target. */
+async function toggleTargetMonitoring(targetId: string | null): Promise<void> {
+  if (!targetId) return;
+  const item = dashboard.targets.find((t) => t.target.id === targetId);
+  if (!item) return;
+  const nextEnabled = !item.target.enabled;
+  item.target.enabled = nextEnabled;
+  try {
+    await api.saveTarget(item.target);
+    showToast(
+      `${item.target.name}: ${nextEnabled ? t("target.monitoringEnabled") : t("target.monitoringDisabled")}`,
+      nextEnabled ? "success" : "warning",
+    );
+  } catch (err) {
+    item.target.enabled = !nextEnabled; // revert on error
+    showToast(String(err), "error");
+    return;
+  }
+  renderDashboard();
+}
+
+/** Toggle all monitors on or off. */
+async function toggleAllMonitoring(): Promise<void> {
+  const enabledCount = dashboard.targets.filter((t) => t.target.enabled).length;
+  const nextEnabled = enabledCount !== dashboard.targets.length;
+  // Batch save all targets
+  for (const item of dashboard.targets) {
+    if (item.target.enabled !== nextEnabled) {
+      item.target.enabled = nextEnabled;
+      try {
+        await api.saveTarget(item.target);
+      } catch (err) {
+        item.target.enabled = !nextEnabled; // revert on error
+        showToast(String(err), "error");
+      }
+    }
+  }
+  showToast(
+    `${nextEnabled ? "All" : "All"} ${dashboard.targets.length} monitors: ${nextEnabled ? t("target.monitoringEnabled") : t("target.monitoringDisabled")}`,
+    nextEnabled ? "success" : "warning",
+  );
+  renderDashboard();
 }
 
 async function loadHistory(fromMs: number, toMs: number, showLoading = true): Promise<void> {
@@ -958,7 +1095,7 @@ function restoreViewState(): void {
     if (typeof parsed.followLive === "boolean") followLive = parsed.followLive;
     byId("follow-live").classList.toggle("active", followLive);
     if (!followLive) {
-      root.querySelectorAll("[data-range]").forEach((button) => button.classList.remove("active"));
+      root.querySelectorAll(".range-button[data-range]").forEach((button) => button.classList.remove("active"));
     }
   } catch (error) {
     console.debug("Unable to restore view state", error);
