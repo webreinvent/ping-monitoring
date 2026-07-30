@@ -61,11 +61,8 @@ impl QualityClassifier {
                 && self.success_streak >= self.thresholds.recovery_successes
             {
                 let effective_at_ms = self.success_streak_since_ms.unwrap_or(now_ms);
-                transition = self.transition_to(
-                    next_latency_state(&metrics),
-                    effective_at_ms,
-                    vec![],
-                );
+                transition =
+                    self.transition_to(next_latency_state(&metrics), effective_at_ms, vec![]);
                 self.unstable_candidate_since_ms = None;
                 self.stable_candidate_since_ms = None;
             }
@@ -231,7 +228,6 @@ pub fn calculate_metrics(samples: &VecDeque<PingSample>) -> QualityMetrics {
         jitter_ms,
     }
 }
-
 
 fn next_latency_state(metrics: &QualityMetrics) -> QualityState {
     // Only mark unstable when packet loss is significant (>5%) or no data.

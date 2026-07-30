@@ -468,9 +468,10 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert!(
-            stable.rgba().chunks_exact(4).any(|pixel| {
-                pixel[3] > 0 && pixel[..3] == tray_icon_color(QualityState::Low)
-            })
+            stable
+                .rgba()
+                .chunks_exact(4)
+                .any(|pixel| { pixel[3] > 0 && pixel[..3] == tray_icon_color(QualityState::Low) })
         );
         assert!(unstable.rgba().chunks_exact(4).any(|pixel| {
             pixel[3] > 0 && pixel[..3] == tray_icon_color(QualityState::Unstable)
