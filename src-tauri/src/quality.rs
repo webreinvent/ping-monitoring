@@ -60,9 +60,14 @@ impl QualityClassifier {
             if sample.status.is_success()
                 && self.success_streak >= self.thresholds.recovery_successes
             {
+                // Clear old failure samples so recovery starts fresh
+                // and isn't immediately marked unstable by the old window.
                 let effective_at_ms = self.success_streak_since_ms.unwrap_or(now_ms);
+                self.window.clear();
+                self.window.push_back(sample.clone());
+                let fresh_metrics = calculate_metrics(&self.window);
                 transition =
-                    self.transition_to(next_latency_state(&metrics), effective_at_ms, vec![]);
+                    self.transition_to(next_latency_state(&fresh_metrics), effective_at_ms, vec![]);
                 self.unstable_candidate_since_ms = None;
                 self.stable_candidate_since_ms = None;
             }
