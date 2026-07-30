@@ -97,7 +97,7 @@ export class LatencyChart {
                   const value = data[seriesIdx][i];
                   if (value == null) {
                     result.push(null);
-                  } else if (this.gaps[seriesIdx]?.[i]) {
+                  } else if (this.gaps[seriesIdx - 1]?.[i]) {
                     result.push("rgba(148, 163, 184, 0.25)");
                   } else {
                     result.push(barColor(value as number));
