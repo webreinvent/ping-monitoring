@@ -218,14 +218,13 @@ build_target() {
              "$bundle_base"/**/*.exe "$bundle_base"/**/*.msi \
              "$bundle_base"/**/*.AppImage "$bundle_base"/**/*.deb; do
     if [ -f "$src" ]; then
+      # Skip temporary files left by dmg/AppImage creation (e.g. rw.*.dmg)
+      case "$(basename "$src")" in
+        rw.*|tmp.*|.*.tmp) continue ;;
+      esac
       cp -v "$src" "$artifact_dir/"
       copied=$((copied + 1))
     fi
-  done
-  # Copy .app bundles (directories) separately — macOS only
-  for app_dir in $(find "$bundle_base" -maxdepth 3 -name "*.app" -type d 2>/dev/null); do
-    cp -vr "$app_dir" "$artifact_dir/" 2>&1
-    copied=$((copied + 1))
   done
 
   if [ "$copied" -eq 0 ]; then
