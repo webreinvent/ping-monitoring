@@ -64,7 +64,7 @@ This feature allows the dashboard user to view, edit, and control the sync behav
 
 ## Implementation Notes
 
-### Frontend components (this repo — Nuxt + Vue)
+### Frontend components (this repo — Nuxt 4 + Vue 3)
 
 - **`pages/clients/[slug]/settings.vue`** — Settings page routed under the client detail section. Displays identity info, connection settings, sync controls, and status indicator.
 - **`components/settings/ClientIdentity.vue`** — Read-only display of username, hostname, MAC address, and slug.
@@ -72,7 +72,7 @@ This feature allows the dashboard user to view, edit, and control the sync behav
 - **`components/settings/SyncStatusIndicator.vue`** — Status badge with color-coded states: connected (green), syncing (yellow), disconnected (red), disabled/not configured (gray).
 - **`composables/useClientSettings.ts`** — Composable for fetching and updating client settings via the API. Handles form validation, optimistic updates, and rollback on error.
 
-### Backend endpoints (this repo — Nuxt + Nitro)
+### Backend endpoints (this repo — Nuxt 4 + Nitro)
 
 - **`GET /api/clients/:slug/settings`** — Returns the full client settings object including sync configuration.
 - **`PUT /api/clients/:slug/settings`** — Updates sync-related settings (`sync_enabled`, `sync_interval_min`, `backend_url`). Validates inputs and broadcasts changes via WebSocket.

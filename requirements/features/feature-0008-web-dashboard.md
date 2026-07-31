@@ -11,7 +11,7 @@ dependencies: [F1, F5, F6, F7]
 
 ## Description
 
-A full-featured web dashboard UI built with Nuxt + Vue that mirrors the LNPM desktop application design. The dashboard provides a sidebar with client-grouped monitors, an all-monitors combined line chart, a per-monitor detail view with rich metrics, and live WebSocket updates via uPlot charts. This is the primary interface for users to monitor ping health across all registered clients and targets.
+A full-featured web dashboard UI built with Nuxt 4 + Vue 3 that mirrors the LNPM desktop application design. The dashboard provides a sidebar with client-grouped monitors, an all-monitors combined line chart, a per-monitor detail view with rich metrics, and live WebSocket updates via uPlot charts. This is the primary interface for users to monitor ping health across all registered clients and targets.
 
 ## Acceptance Criteria
 
@@ -90,9 +90,9 @@ A full-featured web dashboard UI built with Nuxt + Vue that mirrors the LNPM des
 
 ## Implementation Notes
 
-### Frontend architecture (Nuxt + Vue)
+### Frontend architecture (Nuxt 4 + Vue 3)
 
-The dashboard is a client-side SPA rendered by Nuxt (SSR for initial load, then client-side navigation). All chart rendering uses uPlot, and all real-time updates arrive via WebSocket.
+The dashboard is a client-side SPA rendered by Nuxt 4 (SSR for initial load, then client-side navigation). All chart rendering uses uPlot, and all real-time updates arrive via WebSocket.
 
 #### Pages
 

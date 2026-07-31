@@ -4,11 +4,11 @@
   "generated_at": "2026-07-31",
   "methodology": "User Story Mapping + Specification by Example",
   "tech_stack": {
-    "backend": "Nuxt + Nitro (persistent runtime)",
+    "backend": "Nuxt 4 + Nitro v2 (persistent runtime)",
     "storage": "SQLite (WAL mode) + in-memory LRU cache",
     "realtime": "WebSocket (Nitro native)",
     "charts": "uPlot",
-    "frontend": "Nuxt + Vue 3",
+    "frontend": "Nuxt 4 + Vue 3",
     "client_sync": "Batched HTTP POST (10 samples or 5s)"
   },
   "features": [

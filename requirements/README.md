@@ -2,7 +2,7 @@
 
 ## Overview
 
-Extend the LNPM desktop ping monitoring app with a centralized cloud dashboard. LNPM clients optionally send collected ping data to a Nuxt + Nitro backend server. The server stores data in SQLite and broadcasts it live via WebSocket to a public web dashboard that mirrors the LNPM desktop UI.
+Extend the LNPM desktop ping monitoring app with a centralized cloud dashboard. LNPM clients optionally send collected ping data to a Nuxt 4 + Nitro backend server. The server stores data in SQLite and broadcasts it live via WebSocket to a public web dashboard that mirrors the LNPM desktop UI.
 
 **Key principles:**
 - No authentication required — public dashboard
@@ -17,7 +17,7 @@ Dashboard-related files live in `./dashboard/` at the project root. The existing
 ```
 ping-monitoring/
 ├── ...                    # existing LNPM desktop app (unchanged)
-├── dashboard/             # cloud dashboard (Nuxt + Nitro server)
+├── dashboard/             # cloud dashboard (Nuxt 4 + Nitro server)
 │   ├── server/            # API routes, WebSocket, database
 │   ├── app/               # web dashboard UI (pages, components)
 │   └── shared/            # shared types and utilities
@@ -48,12 +48,12 @@ ping-monitoring/
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **Backend** | Nuxt + Nitro (persistent `node-server` runtime) | Single codebase for API and UI. Native WebSocket, persistent process (not serverless). |
+| **Backend** | Nuxt 4 + Nitro (persistent `node-server` runtime) | Single codebase for API and UI. Native WebSocket, persistent process (not serverless). |
 | **Storage** | SQLite (`better-sqlite3`) with WAL mode | Single-file storage, zero ops. WAL supports concurrent reads/writes. |
 | **Caching** | In-memory LRU cache (no Redis) | Hot monitor state in process memory. Eviction on max size. |
 | **Real-time** | WebSocket (Nitro native) | Built-in via `server/ws/` routes. Per-monitor topic subscriptions. |
 | **Charts** | uPlot | Already used in LNPM desktop. Canvas-based, fast, small bundle. |
-| **Frontend** | Nuxt + Vue 3 | Same framework as backend. Mirrors desktop app design. |
+| **Frontend** | Nuxt 4 + Vue 3 | Same framework as backend. Mirrors desktop app design. |
 | **Language** | TypeScript | End-to-end type safety from ingest payload to chart data. |
 | **Package Manager** | pnpm (v11) | Already configured in the project. |
 
@@ -190,7 +190,7 @@ Features F9–F14 are parallelizable once their dependencies are complete:
 
 | ADR | Decision | Summary |
 |-----|----------|---------|
-| [ADR-001](./architecture.md) | Nuxt + Nitro for Backend | Single full-stack framework. File-based routing. Native WebSocket. |
+| [ADR-001](./architecture.md) | Nuxt 4 + Nitro for Backend | Single full-stack framework. File-based routing. Native WebSocket. |
 | [ADR-002](./architecture.md) | SQLite with WAL Mode | Single-file storage. WAL enables concurrent reads/writes. Zero ops. |
 | [ADR-003](./architecture.md) | In-memory LRU Cache | No Redis. Hot data in process memory. Recoverable from SQLite. |
 | [ADR-004](./architecture.md) | Client Identity via Username + Hostname + MAC | Human-readable slug. Device-bound identity. Immutable identifier. |

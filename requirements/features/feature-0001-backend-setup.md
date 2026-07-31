@@ -10,7 +10,7 @@ dependencies: []
 # F1: Backend project setup
 
 ## Description
-Establish the foundational backend project using Nuxt with Nitro in a persistent (non-serverless) runtime, SQLite via better-sqlite3 with WAL mode, WebSocket support, and a health endpoint. This is the base layer every other feature depends on — no API route, data model, or real-time feature can exist without it.
+Establish the foundational backend project using Nuxt 4 + Nitro (v2) in a persistent (non-serverless) runtime, SQLite via better-sqlite3 with WAL mode, WebSocket support, and a health endpoint. This is the base layer every other feature depends on — no API route, data model, or real-time feature can exist without it.
 
 ## Acceptance Criteria
 

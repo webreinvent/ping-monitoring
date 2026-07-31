@@ -7,7 +7,7 @@ version: "2.0"
 
 ## 1. Overview
 
-The LNPM Cloud Dashboard is a single-process Node.js application built with Nuxt + Nitro (persistent `node-server` preset), SQLite via `better-sqlite3` with WAL mode, and native WebSocket support. It serves both the REST API and the web dashboard from one codebase.
+The LNPM Cloud Dashboard is a single-process Node.js application built with Nuxt 4 + Nitro (v2, persistent `node-server` preset), SQLite via `better-sqlite3` with WAL mode, and native WebSocket support. It serves both the REST API and the web dashboard from one codebase.
 
 **Deployment model:** Single-node, single-process. No container orchestration, no external database, no Redis. One persistent Node.js process, one SQLite file, one WebSocket server.
 

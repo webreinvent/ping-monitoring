@@ -9,7 +9,7 @@ version: "2.0"
 
 This document defines the complete API contract for the LNPM Cloud Dashboard backend: REST endpoints, WebSocket protocol, request/response shapes, error handling, and the client sync mechanism.
 
-**Backend:** Nuxt + Nitro (persistent `node-server` runtime)
+**Backend:** Nuxt 4 + Nitro (v2, persistent `node-server` runtime)
 **Database:** SQLite (`better-sqlite3`) with WAL mode
 **Real-time:** Nitro native WebSocket
 **Auth:** None in MVP (open read, trust-based ingest via client slug)

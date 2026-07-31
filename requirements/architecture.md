@@ -7,7 +7,7 @@ Dashboard files live in `./dashboard/` at the project root. The existing LNPM de
 ```
 ping-monitoring/
 ├── ...                    # existing LNPM desktop app (unchanged)
-├── dashboard/             # cloud dashboard (Nuxt + Nitro server)
+├── dashboard/             # cloud dashboard (Nuxt 4 + Nitro server)
 │   ├── server/            # API routes, WebSocket, database
 │   ├── app/               # web dashboard UI (pages, components)
 │   └── shared/            # shared types and utilities
@@ -20,7 +20,7 @@ ping-monitoring/
 ```
 +---------------------+       POST /api/ping/ingest       +-------------------------+
 |                     |  (batched, retry w/ backoff)      |                       |
-|  LNPM Desktop Client|---------------------------------->|  Nuxt + Nitro Backend  |
+|  LNPM Desktop Client|---------------------------------->|  Nuxt 4 + Nitro Backend  |
 |                     |                                    |                       |
 |  +-----------------+|                                    |  +------------------+ |
 |  | Local SQLite    ||                                    |  | SQLite (WAL)     | |
@@ -65,13 +65,13 @@ ping-monitoring/
 
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
-| **Framework** | Nuxt + Nitro | Single codebase for API and UI. Nitro provides native WebSocket support, persistent Node.js runtime (`node-server` preset), and built-in HTTP server — no separate Express/Fastify needed. |
+| **Framework** | Nuxt 4 + Nitro | Single codebase for API and UI. Nitro (v2) provides native WebSocket support, persistent Node.js runtime (`node-server` preset), and built-in HTTP server — no separate Express/Fastify needed. Nuxt 4 uses `compatibilityVersion: 4` and has minimal breaking changes from Nuxt 3. |
 | **Runtime** | Node.js (persistent) | WebSocket requires long-lived connections. Nitro's `node-server` preset runs as a persistent process, not serverless. |
 | **Database** | SQLite (`better-sqlite3`) | Single-file storage with zero ops. WAL mode supports concurrent reads/writes. Sufficient for a monitoring dashboard with bounded data (retention cleanup). No Redis needed — in-memory LRU cache covers hot data. |
 | **Caching** | In-memory LRU | No external cache service. Recent monitor state and rollups stay in process memory. Eviction on max size. Keeps the deployment simple — one process, one file. |
 | **Real-time** | Nitro native WebSocket | Built into Nitro via `server/ws/` routes. No Socket.io or separate WS server needed. Per-monitor subscriptions via topic-based fan-out. |
 | **Charts** | uPlot | Already used in the LNPM desktop client. Extremely fast (WebAssembly-free, Canvas-based), small bundle. Mirrors the desktop UI exactly. |
-| **Frontend** | Nuxt + Vue | Same framework as backend. Dashboard UI mirrors the LNPM desktop app design. Shared types and components between server and client via Nuxt's full-stack model. |
+| **Frontend** | Nuxt 4 + Vue 3 | Same framework as backend. Dashboard UI mirrors the LNPM desktop app design. Shared types and components between server and client via Nuxt 4's full-stack model. |
 | **Language** | TypeScript | End-to-end type safety from ingest payload to chart data. Already used in the desktop client (`src/types.ts`). |
 | **Package Manager** | pnpm | Already configured (`packageManager: pnpm@11.9.0` in `package.json`). |
 
@@ -142,7 +142,7 @@ ping-monitoring/
 │       ├── 004_create_minute_rollups.sql # F6
 │       └── 005_create_indexes.sql     # Performance indexes
 │
-├── nuxt.config.ts                     # Nuxt/Nitro config
+├── nuxt.config.ts                     # Nuxt 4 / Nitro config
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -229,20 +229,20 @@ LRU_CACHE_MAX=50000
 
 ## 5. Key Architectural Decision Records (ADRs)
 
-### ADR-001: Nuxt + Nitro for Backend (not Express/Fastify)
+### ADR-001: Nuxt 4 + Nitro for Backend (not Express/Fastify)
 
 **Status:** Accepted
 **Date:** 2026-07-31
 
-**Context:** We need a backend for API endpoints, WebSocket broadcasting, and a web dashboard. The team is already using Nuxt + Vue for the dashboard frontend.
+**Context:** We need a backend for API endpoints, WebSocket broadcasting, and a web dashboard. The team is already using Nuxt 4 + Vue for the dashboard frontend.
 
-**Decision:** Use Nuxt with Nitro as the single full-stack framework. Nitro runs as a persistent `node-server` process (not serverless), providing both the API layer and the dashboard frontend from one codebase.
+**Decision:** Use Nuxt 4 with Nitro (v2) as the single full-stack framework. Nitro runs as a persistent `node-server` process (not serverless), providing both the API layer and the dashboard frontend from one codebase. Nuxt 4 sets `compatibilityVersion: 4` and builds on the stable Nuxt 3 foundation with minimal breaking changes.
 
 **Consequences:**
 - Single deployment artifact. No separate backend and frontend repos.
 - File-based routing (`server/api/`) gives convention-based API handlers.
 - Native WebSocket support via `server/ws/` routes.
-- Shared TypeScript types between server and client via Nuxt's auto-import.
+- Shared TypeScript types between server and client via Nuxt 4's auto-import.
 - Trade-off: Less control over low-level HTTP than a bare Express app, but sufficient for this scope.
 
 ### ADR-002: SQLite with WAL Mode (not PostgreSQL/MySQL)
