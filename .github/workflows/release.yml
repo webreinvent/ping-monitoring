@@ -95,9 +95,6 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             throw "TAURI_SIGNING_PRIVATE_KEY is required"
           }
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
-            throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is required"
-          }
 
       - name: Build and publish native packages
         uses: tauri-apps/tauri-action@action-v1.0.0
