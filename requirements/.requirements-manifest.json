@@ -1,0 +1,214 @@
+{
+  "manifest_version": "1.0",
+  "project": "LNPM Cloud Dashboard",
+  "generated_at": "2026-07-31",
+  "methodology": "User Story Mapping + Specification by Example",
+  "tech_stack": {
+    "backend": "Nuxt + Nitro (persistent runtime)",
+    "storage": "SQLite (WAL mode) + in-memory LRU cache",
+    "realtime": "WebSocket (Nitro native)",
+    "charts": "uPlot",
+    "frontend": "Nuxt + Vue 3",
+    "client_sync": "Batched HTTP POST (10 samples or 5s)"
+  },
+  "features": [
+    {
+      "id": "F1",
+      "name": "Backend project setup",
+      "priority": "Critical",
+      "phase": "MVP",
+      "effort": "Medium",
+      "dependencies": [],
+      "file": "features/feature-0001-backend-setup.md",
+      "acceptance_criteria_count": 4
+    },
+    {
+      "id": "F2",
+      "name": "Client registration & identity",
+      "priority": "Critical",
+      "phase": "MVP",
+      "effort": "Small",
+      "dependencies": ["F1"],
+      "file": "features/feature-0002-client-identity.md",
+      "acceptance_criteria_count": 5
+    },
+    {
+      "id": "F3",
+      "name": "Ping data ingest endpoint",
+      "priority": "Critical",
+      "phase": "MVP",
+      "effort": "Medium",
+      "dependencies": ["F1", "F2"],
+      "file": "features/feature-0003-ping-ingest.md",
+      "acceptance_criteria_count": 6
+    },
+    {
+      "id": "F4",
+      "name": "LNPM client sync service",
+      "priority": "Critical",
+      "phase": "MVP",
+      "effort": "Medium",
+      "dependencies": ["F3"],
+      "file": "features/feature-0004-client-sync.md",
+      "acceptance_criteria_count": 6
+    },
+    {
+      "id": "F5",
+      "name": "Monitors list API",
+      "priority": "Critical",
+      "phase": "MVP",
+      "effort": "Small",
+      "dependencies": ["F3"],
+      "file": "features/feature-0005-monitors-list.md",
+      "acceptance_criteria_count": 4
+    },
+    {
+      "id": "F6",
+      "name": "Monitor history API",
+      "priority": "Critical",
+      "phase": "MVP",
+      "effort": "Large",
+      "dependencies": ["F3"],
+      "file": "features/feature-0006-monitor-history.md",
+      "acceptance_criteria_count": 5
+    },
+    {
+      "id": "F7",
+      "name": "WebSocket live broadcast",
+      "priority": "High",
+      "phase": "MVP",
+      "effort": "Medium",
+      "dependencies": ["F3", "F5"],
+      "file": "features/feature-0007-websocket-broadcast.md",
+      "acceptance_criteria_count": 5
+    },
+    {
+      "id": "F8",
+      "name": "Web dashboard UI",
+      "priority": "High",
+      "phase": "MVP",
+      "effort": "Large",
+      "dependencies": ["F1", "F5", "F6", "F7"],
+      "file": "features/feature-0008-web-dashboard.md",
+      "acceptance_criteria_count": 6
+    },
+    {
+      "id": "F9",
+      "name": "Client settings UI",
+      "priority": "High",
+      "phase": "MVP",
+      "effort": "Small",
+      "dependencies": ["F4"],
+      "file": "features/feature-0009-client-settings.md",
+      "acceptance_criteria_count": 6
+    },
+    {
+      "id": "F10",
+      "name": "Data retention cleanup",
+      "priority": "Medium",
+      "phase": "Enhancement",
+      "effort": "Small",
+      "dependencies": ["F3"],
+      "file": "features/feature-0010-data-retention.md",
+      "acceptance_criteria_count": 4
+    },
+    {
+      "id": "F11",
+      "name": "Dashboard client name editing",
+      "priority": "Medium",
+      "phase": "Enhancement",
+      "effort": "Small",
+      "dependencies": ["F2", "F5"],
+      "file": "features/feature-0011-edit-client-name.md",
+      "acceptance_criteria_count": 4
+    },
+    {
+      "id": "F12",
+      "name": "Backend quality classifier",
+      "priority": "Medium",
+      "phase": "Enhancement",
+      "effort": "Medium",
+      "dependencies": ["F3"],
+      "file": "features/feature-0012-quality-classifier.md",
+      "acceptance_criteria_count": 5
+    },
+    {
+      "id": "F13",
+      "name": "Rate limiting",
+      "priority": "Medium",
+      "phase": "Enhancement",
+      "effort": "Small",
+      "dependencies": ["F3"],
+      "file": "features/feature-0013-rate-limiting.md",
+      "acceptance_criteria_count": 4
+    },
+    {
+      "id": "F14",
+      "name": "Health check endpoint",
+      "priority": "Low",
+      "phase": "Growth",
+      "effort": "Small",
+      "dependencies": ["F1"],
+      "file": "features/feature-0014-health-check.md",
+      "acceptance_criteria_count": 3
+    }
+  ],
+  "quality_attributes": {
+    "performance": {
+      "elicited": true,
+      "targets": {
+        "ingest_latency_ms": 100,
+        "dashboard_update_delay_s": 5,
+        "ws_connections_max": 100
+      }
+    },
+    "reliability": {
+      "elicited": true,
+      "targets": {
+        "data_dedup": "INSERT OR IGNORE with UNIQUE constraint",
+        "retry_policy": "3 retries with exponential backoff",
+        "graceful_degradation": "in-memory cache fallback on DB failure"
+      }
+    },
+    "security": {
+      "elicited": true,
+      "targets": {
+        "write_protection": "client UUID per install",
+        "rate_limiting": "100 req/min ingest, 60 req/min general",
+        "input_validation": "required fields, timestamp window, sample count limits"
+      }
+    },
+    "maintainability": {
+      "elicited": true,
+      "targets": {
+        "data_retention": "30 days samples, 90 days rollups (configurable)",
+        "health_endpoint": "GET /api/health"
+      }
+    }
+  },
+  "files": [
+    "README.md",
+    "architecture.md",
+    "api/api-design.md",
+    "data-models/data-models.md",
+    "deployment/deployment.md",
+    "features/feature-0001-backend-setup.md",
+    "features/feature-0002-client-identity.md",
+    "features/feature-0003-ping-ingest.md",
+    "features/feature-0004-client-sync.md",
+    "features/feature-0005-monitors-list.md",
+    "features/feature-0006-monitor-history.md",
+    "features/feature-0007-websocket-broadcast.md",
+    "features/feature-0008-web-dashboard.md",
+    "features/feature-0009-client-settings.md",
+    "features/feature-0010-data-retention.md",
+    "features/feature-0011-edit-client-name.md",
+    "features/feature-0012-quality-classifier.md",
+    "features/feature-0013-rate-limiting.md",
+    "features/feature-0014-health-check.md"
+  ],
+  "pipeline_handoff": {
+    "next_prompt": "2-plan-generator-optional.md",
+    "manifest_format_version": "1.0"
+  }
+}
