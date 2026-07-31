@@ -27,37 +27,6 @@ Build the client identity system: auto-generate unique slugs from username + hos
 - Create `GET /api/clients/:slug` endpoint
 - Create `PUT /api/clients/:slug/name` endpoint (F11 backend)
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/utils/client.ts`:
-   - `generateSlug(username, hostname, macAddress)`:
-     - Concatenate username, hostname, last 10 hex chars of MAC (colons removed)
-     - Lowercase all segments
-     - Replace spaces/underscores with hyphens
-     - Truncate to 64 chars
-   - `defaultName(username, hostname)`: format as `username@hostname`
-   - `upsertClient(slug, name, username, hostname, macAddress)`: `INSERT OR IGNORE ... ON CONFLICT(slug) DO UPDATE SET updated_at = ...`
-   - `getClientBySlug(slug)`: single query lookup
-   - `updateClientName(slug, name)`: validate 1-100 chars, update name column
-2. Create `server/api/clients/[slug].get.ts`:
-   - Return client record by slug
-   - 404 if not found
-3. Create `server/api/clients/[slug].name.put.ts`:
-   - Accept `{ name }` in request body
-   - Validate: non-empty, 1-100 chars
-   - Update name, return updated client
-   - 400 on invalid, 404 on not found
-4. Verify: slug generation matches spec, upsert is idempotent
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nitro API route patterns | Route creation |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] `generateSlug()` produces URL-safe slugs matching format `<username>-<hostname>-<truncated-mac>`

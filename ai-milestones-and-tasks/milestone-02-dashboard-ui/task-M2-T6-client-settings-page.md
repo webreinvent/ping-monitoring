@@ -27,36 +27,6 @@ Build the client settings page that displays client identity information, sync c
 - Implement sync status indicator with color-coded states
 - Create backend API endpoints for settings CRUD
 
-## Implementation Plan
-
-### Steps
-
-1. Create backend endpoints:
-   - `server/api/clients/[slug]/settings.get.ts` — return full settings object
-   - `server/api/clients/[slug]/settings.put.ts` — update sync settings, broadcast via WS
-2. Create `app/pages/clients/[slug]/settings.vue`:
-   - Settings page layout
-3. Create `app/components/settings/ClientIdentity.vue`:
-   - Read-only: username, hostname, MAC, slug
-   - Editable: display name (F11 inline edit)
-4. Create `app/components/settings/SyncSettings.vue`:
-   - Sync toggle (on/off)
-   - Sync interval selector (1, 5, 10, 15, 30, 60 min)
-   - Backend URL input with validation
-5. Create `app/components/settings/SyncStatusIndicator.vue`:
-   - Connected (green), Syncing (yellow), Disconnected (red), Disabled/Not configured (gray)
-   - Compute from `last_synced_at_ms` vs `now - 2 * sync_interval_min`
-6. Create `app/composables/useClientSettings.ts`:
-   - Fetch/update client settings
-   - Form validation, optimistic updates
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Vue 3 composables, form patterns | Components, API |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] Settings page loads with client identity and sync config

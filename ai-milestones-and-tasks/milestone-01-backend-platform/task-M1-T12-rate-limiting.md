@@ -27,27 +27,6 @@ Add per-IP rate limiting middleware to protect API endpoints from excessive requ
 - Apply different limits for ingest vs other endpoints
 - Return 429 with correct error shape and Retry-After header
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/middleware/rateLimit.ts`:
-   - Extract client IP from `req.ip` or `req.socket.remoteAddress`
-   - Maintain in-memory `Map<string, number[]>` keyed by IP
-   - Sliding window: count requests within rolling 60-second window
-   - Evict stale entries on each request
-   - Limit: 100/min for `/api/ping/ingest`, 60/min for all others
-   - Return 429 with `{ error: "rate_limit_exceeded", retryAfter: <seconds> }` and `Retry-After` header
-2. Configure middleware to run before route handlers
-3. Verify: rate limit enforced, correct limits per endpoint
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nitro middleware patterns | Middleware creation |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] Rate limiting middleware runs before route handlers

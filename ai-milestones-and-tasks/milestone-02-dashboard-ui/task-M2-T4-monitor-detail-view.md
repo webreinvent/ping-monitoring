@@ -27,32 +27,6 @@ Build the per-monitor detail view page with dedicated uPlot chart, quality inter
 - Display range summary metrics (packet loss, latency stats, stability)
 - Show monitor header with current state
 
-## Implementation Plan
-
-### Steps
-
-1. Create `app/pages/monitors/[id].vue`:
-   - Fetch history data for single monitor
-   - Render: header, chart, summary panel
-2. Create `app/components/charts/LatencyChart.vue`:
-   - Single-series uPlot chart
-   - Quality interval bands overlay
-3. Create `app/components/charts/QualityIntervals.vue`:
-   - Render quality intervals as background zones
-4. Create `app/components/charts/MonitorSummary.vue`:
-   - RangeSummary metrics: sampleCount, packetLoss, avg/min/max/p95 latency, stable/unstable/disconnected percent
-5. Create `app/components/charts/MonitorHeader.vue`:
-   - Monitor name, target host, current state, latest latency
-6. Create `app/components/charts/ChartThreshold.vue`:
-   - Threshold line overlay
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Vue 3 composables, uPlot | Chart components |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] Per-monitor detail page loads with chart and metrics

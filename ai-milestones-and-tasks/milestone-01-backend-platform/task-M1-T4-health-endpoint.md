@@ -28,31 +28,6 @@ Create the `GET /api/health` endpoint that returns comprehensive server health m
 - Return extended metrics: db_path, db_size_bytes, monitor_count, sample_count, last_ingest_time
 - Ensure public access (no authentication required)
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/api/health.get.ts`
-2. Implement response with:
-   - `status`: always `"ok"`
-   - `timestamp`: `new Date().toISOString()`
-   - `uptime`: `process.uptime()` rounded to 2 decimals
-   - `version`: read from `package.json`
-   - `db_path`: `DATABASE_PATH` env var
-   - `db_size_bytes`: `fs.statSync(DATABASE_PATH).size`
-   - `monitor_count`: `SELECT COUNT(*) FROM monitors`
-   - `sample_count`: `SELECT COUNT(*) FROM ping_samples`
-   - `last_ingest_time`: `SELECT MAX(timestamp_ms) FROM ping_samples` converted to ISO 8601, or `null`
-3. Handle gracefully when database has no data (return 0 counts, null last_ingest_time)
-4. Test: verify response shape matches API contract
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nitro API route patterns | Route creation |
-| `filesystem` (MCP) | File creation | Writing route file |
-
 ## Acceptance Criteria
 
 - [ ] `GET /api/health` returns 200 OK with JSON

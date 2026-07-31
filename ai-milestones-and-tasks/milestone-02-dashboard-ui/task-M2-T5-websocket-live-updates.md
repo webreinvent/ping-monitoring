@@ -29,34 +29,6 @@ Build the `useWebSocket` composable that manages WebSocket connections, handles 
 - Auto-reconnect with exponential backoff
 - Handle WebSocket disconnect indicator
 
-## Implementation Plan
-
-### Steps
-
-1. Create `app/composables/useWebSocket.ts`:
-   - Connect to `ws://<host>/ws/ping` (or `wss://` in production)
-   - `subscribe(monitorId)`: send subscribe message
-   - `unsubscribe(monitorId)`: send unsubscribe message
-   - Handle incoming messages by type: snapshot, sample, client_name_updated
-   - Auto-reconnect: 1s -> 2s -> 4s -> 8s -> 16s -> 30s (capped)
-   - Track connection state: connecting, connected, disconnected
-   - Re-subscribe to all monitors on reconnect
-2. Integrate with chart components:
-   - On `sample` message, push data point to uPlot series
-   - Batch updates to avoid per-sample re-render (1s interval)
-   - Update sidebar status dot on new sample
-3. Integrate with sidebar:
-   - On `client_name_updated` message, patch client name in sidebar
-4. Add reconnect indicator in header:
-   - "Reconnecting..." indicator during disconnection
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Vue 3 composable patterns | Composable |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] WebSocket connection established on dashboard load
