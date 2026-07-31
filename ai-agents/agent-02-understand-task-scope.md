@@ -1,5 +1,5 @@
 ---
-title: LNPM - Understand Task Scope
+title: LNPM - Agent 02 - Understand Task Scope
 ---
 
 # Understand Task Scope
