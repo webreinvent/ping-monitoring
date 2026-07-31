@@ -1,6 +1,21 @@
 # LNPM Cloud Dashboard — Architecture
 
-## 1. System Architecture
+## 1. Project Structure
+
+Dashboard files live in `./dashboard/` at the project root. The existing LNPM desktop app remains untouched.
+
+```
+ping-monitoring/
+├── ...                    # existing LNPM desktop app (unchanged)
+├── dashboard/             # cloud dashboard (Nuxt + Nitro server)
+│   ├── server/            # API routes, WebSocket, database
+│   ├── app/               # web dashboard UI (pages, components)
+│   └── shared/            # shared types and utilities
+├── requirements/          # requirements documentation
+└── docs/                  # design specs
+```
+
+## 2. System Architecture
 
 ```
 +---------------------+       POST /api/ping/ingest       +-------------------------+

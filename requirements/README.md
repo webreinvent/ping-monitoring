@@ -10,9 +10,20 @@ Extend the LNPM desktop ping monitoring app with a centralized cloud dashboard. 
 - Mirrors LNPM desktop app UI design
 - Optional sync — LNPM works normally without a backend configured
 
----
+## Project Structure
 
-## Table of Contents
+Dashboard-related files live in `./dashboard/` at the project root. The existing LNPM desktop app code remains untouched.
+
+```
+ping-monitoring/
+├── ...                    # existing LNPM desktop app (unchanged)
+├── dashboard/             # cloud dashboard (Nuxt + Nitro server)
+│   ├── server/            # API routes, WebSocket, database
+│   ├── app/               # web dashboard UI (pages, components)
+│   └── shared/            # shared types and utilities
+├── requirements/          # requirements documentation
+└── docs/                  # design specs
+```
 
 ### Core Documentation
 - [Architecture](./architecture.md) — System design, data flow, tech stack justification, directory structure, environment configuration, and ADRs (001–009)
