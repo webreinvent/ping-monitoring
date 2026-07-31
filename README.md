@@ -109,6 +109,20 @@ Docker can run some frontend and Rust checks, but it cannot reliably test the na
 
 Every push and pull request is verified by the cross-platform CI workflow. A version tag such as `v0.2.1` starts the release workflow. The release becomes public only after every platform build succeeds and the workflow verifies the installers, updater signatures, and consolidated `latest.json`.
 
+### Creating a release
+
+1. Bump `version` in [`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json) and `Cargo.toml` (in `src-tauri/`).
+2. Commit the version bump and push to `main`.
+3. Tag and push the release:
+
+   ```bash
+   git tag v0.2.1
+   git push origin main --tags
+   ```
+
+4. The release workflow builds all four platforms (macOS ARM, macOS Intel, Windows, Linux), signs the updater artifacts, and publishes the GitHub release with installer assets.
+5. Download installers from the release page at **https://github.com/xxsLuna/LNPM/releases**.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## Project administrator
