@@ -27,28 +27,6 @@ Implement a scheduled background task that periodically purges old ping samples 
 - Log statistics (deleted counts, duration)
 - Support runtime config via environment variables
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/utils/retention.ts`:
-   - `runCleanup()`: single transaction deleting old samples and rollups
-   - Read retention config from env vars: `RETENTION_ENABLED`, `RETENTION_SAMPLE_DAYS`, `RETENTION_ROLLUP_DAYS`
-   - Log: `[retention] cleanup cycle: deleted N ping_samples, M minute_rollups in Xms`
-   - Optional `VACUUM` if rows deleted > threshold
-2. Create `server/plugins/retention.ts`:
-   - `setInterval` every `RETENTION_INTERVAL_MIN` minutes (default 60)
-   - Wrap in `try/catch` — failure doesn't crash server
-   - Skip if `RETENTION_ENABLED` is false
-3. Verify: cleanup runs on schedule, old data deleted, logs correct
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nitro plugin patterns | Plugin creation |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] Cleanup runs on configurable interval (default 60 minutes)

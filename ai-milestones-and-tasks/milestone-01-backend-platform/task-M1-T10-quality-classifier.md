@@ -28,35 +28,6 @@ Build the backend quality classifier that analyzes raw ping samples in a 5-minut
 - Persist quality state on monitor row
 - Update monitors list API response with quality_state
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/utils/quality-states.ts`:
-   - Define `QualityState` type: `warmingUp | low | medium | high | veryHigh | unstable | disconnected`
-   - Define threshold constants (50ms, 150ms, 300ms, 10% loss, 0.5 CV, 5min window, 10 sample min)
-2. Create `server/utils/quality-classifier.ts`:
-   - `classifyMonitor(monitorId)`:
-     - Fetch samples in last 5 minutes
-     - Compute: sample_count, success_count, packet_loss, avg_latency, stddev_latency, CV
-     - Apply classification rules in priority order
-     - Update monitor row: `quality_state`, `state_since_ms`, `quality_state_updated_at`
-   - `classifyAllActive()`: iterate monitors with samples in last 10 minutes
-3. Create `server/plugins/quality-sweep.ts`:
-   - `setInterval` every 60 seconds
-   - Call `classifyAllActive()`
-4. Integrate with ingest (M1-T6):
-   - After batch commit, call `classifyMonitor()` for each distinct monitor_id
-5. Verify: classification is correct, sweep runs, states persist
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `sequential-thinking` | Classification algorithm | Rule ordering |
-| `nuxt` | Nitro plugin patterns | Background sweep |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] `classifyMonitor()` computes correct quality state from 5-minute window

@@ -29,39 +29,6 @@ Build the all-monitors combined uPlot line chart that renders all monitors as se
 - Support monitor toggle (show/hide series)
 - Reuse existing `src/chart.ts` bucketing logic
 
-## Implementation Plan
-
-### Steps
-
-1. Create `app/composables/useMonitorHistory.ts`:
-   - Fetch `GET /api/monitors/:id?fromMs=&toMs=&maxPoints=`
-   - Transform response into uPlot-ready data arrays
-2. Create `app/composables/useChartSeries.ts`:
-   - `historyToUPlotData(series)`: transform `HistoryPoint[]` to `[[timestamp, latency], ...]`
-   - Handle null values and gaps
-3. Create `app/composables/useDashboardPalette.ts`:
-   - Fixed 12-color palette for categorical series
-   - Dark mode variant
-4. Create `app/composables/useTimeWindow.ts`:
-   - Manage selected time range
-   - Presets: 1h, 6h, 24h, 7d
-   - Expose `fromMs`, `toMs` computed values
-5. Create `app/components/charts/AllMonitorsChart.vue`:
-   - uPlot instance with multiple series
-   - Threshold lines as additional series
-   - Time range selector
-   - Monitor toggle sync from sidebar
-6. Create `app/components/shared/TimeRangeSelector.vue`:
-   - Preset buttons: 1h, 6h, 24h, 7d
-   - Emit selection event
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Vue 3 composables, uPlot integration | Chart components |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] uPlot chart renders with all monitors as separate series

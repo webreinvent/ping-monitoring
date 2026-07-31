@@ -28,36 +28,6 @@ Build the `useMonitors` composable for fetching and caching the monitors list, a
 - Create `MonitorRow` with status dot, name, toggle
 - Create `StatusDot` with quality state colors
 
-## Implementation Plan
-
-### Steps
-
-1. Create `app/composables/useMonitors.ts`:
-   - Fetch `GET /api/monitors` on mount
-   - Cache in Pinia store or ref
-   - Group by client (slug, name)
-   - Expose: `monitors`, `clientGroups`, `loading`, `error`, `refresh()`
-2. Create `app/components/sidebars/DashboardSidebar.vue`:
-   - Iterate client groups, render ClientGroup
-   - "All Monitors" header at top
-3. Create `app/components/sidebars/ClientGroup.vue`:
-   - Collapsible client group section
-   - Client name header (with edit button for F11)
-   - List MonitorRow for each monitor
-4. Create `app/components/sidebars/MonitorRow.vue`:
-   - Monitor name, status dot, latest latency
-   - Toggle checkbox for show/hide in all-monitors chart
-   - Click navigates to detail view
-5. Create `app/components/shared/StatusDot.vue`:
-   - Green: low/medium, Yellow: high/veryHigh, Red: unstable/disconnected, Gray: warmingUp/unknown
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Vue 3 composable patterns | Composables, components |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] `useMonitors` fetches and groups monitors by client

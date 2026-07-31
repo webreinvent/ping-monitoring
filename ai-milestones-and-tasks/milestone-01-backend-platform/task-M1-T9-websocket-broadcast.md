@@ -28,31 +28,6 @@ Build the WebSocket endpoint at `/ws/ping` for real-time ping data broadcast. Ma
 - Broadcast new samples to subscribers after ingest
 - Clean up stale connections on close/error
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/ws/ping.ts`:
-   - Maintain `Map<number, Set<WebSocket>>` for monitor subscriptions
-   - Handle `subscribe` message: add client to set, send `subscribed` ack + `snapshot`
-   - Handle `unsubscribe` message: remove from set, send `unsubscribed` ack
-   - Handle `close` and `error` events: cleanup subscriptions
-2. Create `server/utils/ws-broadcast.ts`:
-   - `broadcastSample(monitorId, sample)`: send to all subscribers of monitor
-   - `getSnapshot(monitorId, limit=100)`: query last N samples ordered chronologically
-   - `broadcastToAll(message)`: send to all connected clients (for name changes, settings)
-3. Integrate with ingest endpoint (M1-T6):
-   - After successful ingest, call `broadcastSample()` for each new sample
-   - Fire-and-forget (don't block ingest response)
-4. Verify: subscribe/unsubscribe protocol works, samples arrive in real time
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nitro WebSocket patterns | WS route creation |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] WebSocket connection accepted at `/ws/ping`

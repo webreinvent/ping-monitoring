@@ -29,36 +29,6 @@ Build `GET /api/monitors/:id` endpoint that returns historical ping data formatt
 - Compute range summary (packet loss, latency stats, stable/unstable percent)
 - Down-sample when point count exceeds maxPoints
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/api/monitors/[id].get.ts`:
-   - Parse path param `id` and query params `fromMs`, `toMs`, `maxPoints`
-   - Default: last 1 hour, maxPoints=2000
-   - Validate: fromMs < toMs, maxPoints <= 5000
-2. Create `server/utils/history-queries.ts`:
-   - SQL for minute-level aggregation (GROUP BY truncated timestamp)
-   - Down-sampling: increase bucket size when count > maxPoints
-   - Bucket sizes: [1000, 5000, 10000, 30000, 60000, 300000, 900000, 1800000, 3600000]
-3. Implement quality interval computation:
-   - Sliding window classifier on aggregated points
-   - States: warmingUp, low, medium, high, veryHigh, unstable, disconnected
-4. Implement range summary computation:
-   - sampleCount, successCount, failureCount, packetLossPercent
-   - avg/min/max/p95 latency
-   - stableMs, unstableMs, disconnectedMs, percentages
-5. Return `HistoryResponse` shape matching F6 API contract
-6. Handle edge cases: 404 for unknown monitor, 400 for invalid params, empty points for no data
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `sequential-thinking` | Aggregation + down-sampling logic | Complex SQL |
-| `nuxt` | Nitro API route patterns | Route creation |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] Returns `HistoryResponse` with series, points, intervals, and summary

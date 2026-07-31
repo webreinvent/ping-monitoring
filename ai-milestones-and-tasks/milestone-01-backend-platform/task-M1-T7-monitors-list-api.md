@@ -28,27 +28,6 @@ Build `GET /api/monitors` endpoint that returns all monitors with their latest s
 - Sort by recency with stable tiebreaker
 - Return empty array when no monitors exist
 
-## Implementation Plan
-
-### Steps
-
-1. Create `server/api/monitors.get.ts`:
-   - Single SQL query joining `monitors` with `clients`
-   - SELECT: monitor id, client_slug, client_name, target_host, target_name, status, latencyMs, qualityState, lastSeenMs, createdAt
-   - ORDER BY last_seen_ms DESC, monitors.id ASC
-   - Return `{ monitors: [...] }` shape
-2. Handle edge cases:
-   - Empty database returns `[]`
-   - Monitors with no samples have null latest state fields
-3. Verify: response shape matches F5 API contract
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nitro API route patterns | Route creation |
-| `filesystem` (MCP) | File creation | Writing route file |
-
 ## Acceptance Criteria
 
 - [ ] Returns array of monitors with client slug, client name, and latest state

@@ -27,34 +27,6 @@ Add inline editing capability for client names in the sidebar. Click edit icon t
 - Broadcast to all connected clients via WebSocket
 - Handle errors and cancellation
 
-## Implementation Plan
-
-### Steps
-
-1. Update `app/components/sidebars/ClientGroup.vue`:
-   - Add edit icon button in client name header
-   - Click to show inline text input with Save/Cancel
-   - Auto-focus input
-2. Create `app/composables/useClientEdit.ts`:
-   - Manage edit state
-   - Call `PUT /api/clients/:slug/name`
-   - Optimistic UI update
-   - Revert on failure
-3. Backend integration:
-   - `PUT /api/clients/:slug/name` (already created in M1-T5)
-   - WebSocket `client_name_updated` broadcast (already integrated in M1-T9)
-4. Handle edge cases:
-   - Empty/whitespace name rejected (400)
-   - >100 chars rejected (400)
-   - Escape/Cancel reverts to original name
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Vue 3 composable patterns | Component update |
-| `filesystem` (MCP) | File editing | Modifying components |
-
 ## Acceptance Criteria
 
 - [ ] Edit icon in sidebar client group header

@@ -27,32 +27,6 @@ Create the Nuxt 4 app shell with default layout, routing structure, and the side
 - Create responsive layout: sidebar collapses on narrow viewports
 - Create minimal app styling matching LNPM desktop design
 
-## Implementation Plan
-
-### Steps
-
-1. Create `app/app.vue` with layout wrapper
-2. Create `app/layouts/default.vue`:
-   - Sidebar (fixed width, left side)
-   - Main content area (flex-grow, right side)
-   - Responsive: sidebar hides on mobile, hamburger toggle
-3. Create page files:
-   - `app/pages/index.vue` — all-monitors view (placeholder)
-   - `app/pages/monitors/[id].vue` — per-monitor detail (placeholder)
-   - `app/pages/clients/[slug].vue` — client overview (placeholder)
-4. Create `app/components/layouts/DashboardSidebar.vue`:
-   - Empty sidebar shell with header
-5. Create `app/components/shared/EmptyState.vue`:
-   - "No monitors configured" message
-6. Create base styles (CSS/Tailwind or scoped)
-
-### Skills & MCP Servers
-
-| Resource | Purpose | When to Invoke |
-|---|---|---|
-| `nuxt` | Nuxt 4 layout/routing patterns | Layout, pages |
-| `filesystem` (MCP) | File creation | Writing files |
-
 ## Acceptance Criteria
 
 - [ ] Default layout renders with sidebar + main content area
