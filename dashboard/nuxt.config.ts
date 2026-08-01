@@ -1,5 +1,8 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  // Nuxt 4 compatibility date
+  compatibilityDate: "2026-08-01",
+
   // Persistent node-server runtime (not serverless)
   nitro: {
     preset: "node-server",
