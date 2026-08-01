@@ -1,9 +1,10 @@
 -- 005_create_indexes.sql
--- F1: Backend project setup
+-- F1: Backend project setup, F9: Client settings
 -- Creates all indexes for query performance.
 
 CREATE INDEX IF NOT EXISTS idx_clients_slug ON clients(slug);
 CREATE INDEX IF NOT EXISTS idx_clients_mac ON clients(mac_address);
+CREATE INDEX IF NOT EXISTS idx_clients_last_synced ON clients(last_synced_at_ms);
 CREATE INDEX IF NOT EXISTS idx_monitors_client ON monitors(client_id);
 CREATE INDEX IF NOT EXISTS idx_monitors_last_seen ON monitors(last_seen_ms);
 CREATE INDEX IF NOT EXISTS idx_monitors_client_target ON monitors(client_id, target_host);

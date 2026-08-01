@@ -1,18 +1,22 @@
 -- LNPM Cloud Dashboard — Full Schema
--- F1: Backend project setup
+-- F1: Backend project setup, F9: Client settings
 -- Assembled from migrations 001-005 in schema/migrations/
 -- Source: requirements/data-models/data-models.md
 
 -- Migration 001: clients
 CREATE TABLE IF NOT EXISTS clients (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug        TEXT    NOT NULL UNIQUE,
-  name        TEXT    NOT NULL,
-  username    TEXT    NOT NULL,
-  hostname    TEXT    NOT NULL,
-  mac_address TEXT    NOT NULL,
-  created_at  INTEGER NOT NULL,
-  updated_at  INTEGER NOT NULL
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug              TEXT    NOT NULL UNIQUE,
+  name              TEXT    NOT NULL,
+  username          TEXT    NOT NULL,
+  hostname          TEXT    NOT NULL,
+  mac_address       TEXT    NOT NULL,
+  sync_enabled      BOOLEAN NOT NULL DEFAULT 1,
+  sync_interval_min INTEGER NOT NULL DEFAULT 5,
+  backend_url       TEXT    NOT NULL DEFAULT '',
+  last_synced_at_ms INTEGER,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL
 );
 
 -- Migration 002: monitors
@@ -62,6 +66,7 @@ CREATE TABLE IF NOT EXISTS minute_rollups (
 -- Migration 005: indexes
 CREATE INDEX IF NOT EXISTS idx_clients_slug ON clients(slug);
 CREATE INDEX IF NOT EXISTS idx_clients_mac ON clients(mac_address);
+CREATE INDEX IF NOT EXISTS idx_clients_last_synced ON clients(last_synced_at_ms);
 CREATE INDEX IF NOT EXISTS idx_monitors_client ON monitors(client_id);
 CREATE INDEX IF NOT EXISTS idx_monitors_last_seen ON monitors(last_seen_ms);
 CREATE INDEX IF NOT EXISTS idx_monitors_client_target ON monitors(client_id, target_host);
