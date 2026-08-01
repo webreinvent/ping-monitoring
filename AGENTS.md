@@ -32,8 +32,8 @@ dashboard/
 ├── shared/                 # TypeScript types shared between server and client
 │   └── types.ts            # Interfaces: PingSample, Monitor, WsMessage, etc.
 ├── schema/                 # SQLite migrations
-│   ├── index.sql           # Schema placeholder
-│   └── migrations/         # Numbered migration files (001_initial_setup.sql)
+│   ├── index.sql           # Assembled full-schema reference (documentation only)
+│   └── migrations/         # Numbered migration files (001-005, execute in order)
 ├── test/                   # Test setup and fixtures
 │   ├── setup.ts            # Vitest setup (console silence, DB cleanup)
 │   └── fixtures.ts         # Factory functions for test data
@@ -66,11 +66,20 @@ dashboard/
 - Cache module-level constants (e.g., `package.json` version) using IIFE — don't re-read files on every request
 
 ### Database
-- **Singleton pattern**: `server/plugins/database.ts` initializes one `better-sqlite3` connection per process
-- DB instance stored on `globalThis.__db` (access via `getDb()` from `server/utils/db.ts`)
-- Always enable WAL mode (`PRAGMA journal_mode = WAL`) and foreign keys (`PRAGMA foreign_keys = ON`)
-- **Migrations**: Numbered files in `schema/migrations/` (e.g., `001_initial_setup.sql`). The tracking table is created by the plugin (not a migration file). Each migration is tracked by filename — the plugin skips already-applied ones.
-- Wrap every migration in try/catch with `console.error` + rethrow
+- **Singleton pattern**: `server/plugins/database.ts` initializes one `better-sqlite3` connection per process via module-level `let dbInstance` variable
+- DB instance stored on `globalThis.__db` (typed via `declare global { var __db }` in `server/utils/db.ts`)
+- Access via `getDb()` from `~/server/utils/db` — never import the plugin directly (circular dependency risk)
+- **Recommended pragmas** (apply in this order on every connection):
+  1. `journal_mode = WAL` — concurrent read/write
+  2. `foreign_keys = ON` — enforce FK constraints
+  3. `synchronous = NORMAL` — balance safety/performance
+  4. `cache_size = -64000` — 64MB cache
+  5. `temp_store = MEMORY` — temp tables in RAM
+  6. `busy_timeout = 5000` — 5s busy timeout
+  7. `wal_autocheckpoint = 1000` — WAL checkpoint threshold
+- **Migrations**: Numbered files in `schema/migrations/` (e.g., `001_create_clients.sql`). The plugin auto-creates a `migrations` tracking table (not a migration file). Each migration is tracked by filename — the plugin skips already-applied ones.
+- Wrap every migration in try/catch with structured `error()` logging + rethrow
+- **Shutdown**: Return a cleanup function from `defineNitroPlugin` to close the DB on server shutdown (Nitro calls it automatically). Do NOT use `process.on('beforeExit')` or `SIGTERM` handlers.
 
 ### WebSocket
 - Use `defineWebSocketHandler` with `open`, `message`, `close` lifecycle
@@ -97,8 +106,12 @@ dashboard/
 
 ### Testing
 - **Vitest** (unit/integration): Node environment, global test functions, V8 coverage
+  - `globals: true` — `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` available without imports. Explicit imports are optional but may be needed for IDE/linter support.
+  - `~` and `@` aliases resolve to `dashboard/` root — use `~/server/utils/db` for imports
   - Test setup (`test/setup.ts`) silences `console.*` by default and clears `globalThis.__db` before each test
   - Fixtures (`test/fixtures.ts`) use factory functions with `Partial<T>` overrides
+  - **Native modules**: `better-sqlite3` is a native C++ addon — mock the `Database` interface instead of loading real connections in tests (Vitest forked workers may crash)
+  - Mock minimal interface: `{ prepare(), exec(), pragma(), close() }`
 - **Playwright** (E2E): Browser tests targeting `data-testid` attributes
 - Use `nuxt typecheck` (not `nuxi typecheck`) in Nuxt 4
 
@@ -115,6 +128,41 @@ dashboard/
 - WebSocket support requires `nitro.experimental.websocket: true`
 - CORS is configured via `routeRules` in `nuxt.config.ts`
 - `ssr: true` is required for server routes to work
+
+### Nitro Plugin Lifecycle
+- Use `defineNitroPlugin(() => { ... })` for server startup logic
+- Return a cleanup function from the plugin for graceful shutdown — Nitro calls it automatically on server stop
+- The plugin runs before any API routes execute
+- Store shared state on `globalThis` (with typed `declare global` augmentation) rather than module imports to avoid circular dependencies
+
+### Vitest Configuration
+- `globals: true` — test functions available without imports
+- `~` and `@` aliases resolve to `dashboard/` root for import paths
+- `environment: "node"` — Node.js environment for server tests
+- `setupFiles: ["./test/setup.ts"]` — runs console suppression and global cleanup
+- Coverage: V8 provider, outputs to `./coverage/`
+
+## Schema and Migrations
+
+### Migration Files
+The project uses 5 numbered migration files that execute in order:
+
+| File | Purpose |
+|------|---------|
+| `001_create_clients.sql` | `clients` table (device identity) |
+| `002_create_monitors.sql` | `monitors` table (ping targets) |
+| `003_create_ping_samples.sql` | `ping_samples` table (raw ping data) |
+| `004_create_minute_rollups.sql` | `minute_rollups` table (aggregated metrics) |
+| `005_create_indexes.sql` | Performance indexes on all tables |
+
+The `schema/index.sql` file is a hand-assembled reference of the complete schema (documentation only, not executed).
+
+### Migration Conventions
+- Each file is a single SQL statement or a set of statements for one logical schema change
+- Numbered with 3-digit zero-padded prefix for sort order
+- The plugin reads `schema/migrations/*.sql`, sorts alphabetically, and executes missing files
+- Use `CREATE TABLE IF NOT EXISTS` for idempotency (the tracking table ensures each runs once, but the SQL itself should be safe)
+- `schema/index.sql` serves as a documentation reference — update it when migrations change
 
 ## ADRs (Architectural Decision Records)
 

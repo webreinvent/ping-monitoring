@@ -3,7 +3,7 @@ taskId: M1-T2
 milestone: M1
 title: Create SQLite database plugin with WAL mode and migration runner
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "2-3 hours"
 features:
   - F1
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 2-3 hours
 
 ## Description
@@ -29,28 +29,28 @@ Build the SQLite database initialization plugin using `better-sqlite3` with WAL 
 
 ## Acceptance Criteria
 
-- [ ] Database plugin initializes SQLite connection on server start
-- [ ] WAL mode is enabled (`PRAGMA journal_mode = WAL` returns `wal`)
-- [ ] Foreign keys are enforced (`PRAGMA foreign_keys = ON`)
-- [ ] Recommended pragmas are set (cache_size, busy_timeout, synchronous)
-- [ ] Migration runner executes all SQL files in `schema/migrations/` in order
-- [ ] Migration runner logs each migration result
-- [ ] `getDb()` exports a singleton connection accessible from any route
-- [ ] Database closes cleanly on server shutdown
-- [ ] Database file created at configured `DATABASE_PATH`
+- [x] Database plugin initializes SQLite connection on server start
+- [x] WAL mode is enabled (`PRAGMA journal_mode = WAL` returns `wal`)
+- [x] Foreign keys are enforced (`PRAGMA foreign_keys = ON`)
+- [x] Recommended pragmas are set (cache_size, busy_timeout, synchronous)
+- [x] Migration runner executes all SQL files in `schema/migrations/` in order
+- [x] Migration runner logs each migration result
+- [x] `getDb()` exports a singleton connection accessible from any route
+- [x] Database closes cleanly on server shutdown
+- [x] Database file created at configured `DATABASE_PATH`
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Database file created at expected path
-- [ ] WAL mode confirmed via PRAGMA check
-- [ ] Migration files execute without errors
-- [ ] `getDb()` returns valid connection from any import
+- [x] Database file created at expected path
+- [x] WAL mode confirmed via PRAGMA check
+- [x] Migration files execute without errors
+- [x] `getDb()` returns valid connection from any import
 
 ## Dependencies
 
