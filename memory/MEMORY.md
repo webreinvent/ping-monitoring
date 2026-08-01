@@ -4,3 +4,18 @@
 - [LNPM Milestones & Tasks Planner](lnpm-milestones-tasks-planner.md) — planner prompt generated
 - [LNPM Milestones Plan](lnpm-milestones-plan.md) — 2 milestones, 19 tasks, 14 features
 - [Agent Prompts Generated](agent-prompts-generated.md) — 16 agent pipeline files in ai-agents/
+- [UI/UX Design Decisions](ui-ux-design-decisions.md) — dashboard styling, state management, chart approach, i18n strategy
+- [Agent 05 Implementation Plan](agent-05-implementation-plan.md) — updated plan: M1-T1 complete, 73 files to create, 8 to modify, 10 phases
+- [Implementation Plan (original)](implementation-plan.md) — 9 phases, 78 files (superseded by agent-05)
+- [Agent 06 Audit Results](agent-06-audit-results.md) — principles audit, progress report, risk findings
+- [Agent 07 M1-T1 Implementation](agent-07-m1-t1.md) — Nuxt 4 + Nitro project setup complete
+- [Agent 08 Code Review](agent-08-code-review.md) — 8 issues found and fixed, all gates passed
+- [Agent 09 UAT Results](agent-09-uat-results.md) — 38/38 criteria passed, zero bugs, M1-T1 complete
+- [Agent 10 Test Results](agent-10-test-results.md) — 115 tests, 8 files, zero failures, M1-T1 tests complete
+- [Session Context M1-T1](session-context-m1-t1.md) — M1-T1 already complete by agents 07-10
+- [Agent 03 Code Analysis](agent-03-code-analysis.md) — code analysis results: patterns, reusable code, conventions
+- [Agent 04 UI/UX Plan](agent-04-ui-ux-plan.md) — UI/UX design plan: design system, components, state management, accessibility
+- [Patterns Established](lnpm-patterns-established.md) — M1-T1 patterns: DB plugin, migrations, logger, WebSocket, tests
+- [Decisions Made](lnpm-decisions-made.md) — M1-T1 decisions: Nuxt 4, node-server, better-sqlite3, globalThis DB
+- [Lessons Learned](lnpm-lessons-learned.md) — M1-T1 errors and fixes: 8 issues found by Agent 08
+- [Task Complete M1-T1](lnpm-task-complete-m1-t1.md) — M1-T1 summary: agents 07-10, 115 tests, 38/38 UAT

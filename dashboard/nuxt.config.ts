@@ -2,10 +2,9 @@
 export default defineNuxtConfig({
   // Persistent node-server runtime (not serverless)
   nitro: {
-    preset: 'node-server',
-    // CORS for API routes
-    routeRules: {
-      '/api/**': { cors: true },
+    preset: "node-server",
+    experimental: {
+      websocket: true,
     },
   },
 
@@ -13,14 +12,6 @@ export default defineNuxtConfig({
   typescript: {
     strict: true,
   },
-
-  // Import shared types
-  imports: {
-    dirs: ['shared'],
-  },
-
-  // CSS / module configuration
-  css: [],
 
   // Dev server on port 3000
   devServer: {
@@ -32,6 +23,6 @@ export default defineNuxtConfig({
 
   // CORS for API routes
   routeRules: {
-    '/api/**': { cors: true },
+    "/api/**": { cors: true },
   },
 });

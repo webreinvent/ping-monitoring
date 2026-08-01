@@ -3,7 +3,7 @@ taskId: M1-T1
 milestone: M1
 title: Setup Nuxt 4 + Nitro project with persistent runtime
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "2-3 hours"
 features:
   - F1
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 2-3 hours
 
 ## Description
@@ -30,26 +30,26 @@ Initialize the Nuxt 4 + Nitro v2 project inside the `dashboard/` directory with 
 
 ## Acceptance Criteria
 
-- [ ] `pnpm run dev` starts the Nitro server on port 3000 with persistent Node.js runtime
-- [ ] Server is NOT running in serverless mode (verify Nitro preset)
-- [ ] `nuxt.config.ts` contains correct configuration for persistent runtime
-- [ ] Project directory structure matches architecture spec
-- [ ] `.env.example` contains all environment variables from requirements README
-- [ ] TypeScript is configured with strict mode
-- [ ] `npx nuxi typecheck` passes with no errors
+- [x] `pnpm run dev` starts the Nitro server on port 3000 with persistent Node.js runtime
+- [x] Server is NOT running in serverless mode (verify Nitro preset)
+- [x] `nuxt.config.ts` contains correct configuration for persistent runtime
+- [x] Project directory structure matches architecture spec
+- [x] `.env.example` contains all environment variables from requirements README
+- [x] TypeScript is configured with strict mode
+- [x] `npx nuxi typecheck` passes with no errors
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
-- [ ] Server responds to HTTP requests on port 3000
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
+- [x] Server responds to HTTP requests on port 3000
 
 ## Testing Checklist
 
-- [ ] Server starts without errors
-- [ ] Persistent runtime confirmed (not serverless)
-- [ ] TypeScript compilation succeeds
+- [x] Server starts without errors
+- [x] Persistent runtime confirmed (not serverless)
+- [x] TypeScript compilation succeeds
 
 ## Dependencies
 

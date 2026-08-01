@@ -1,0 +1,133 @@
+/**
+ * Test fixtures — mock data and factory helpers for tests.
+ */
+
+import type {
+  ClientIdentity,
+  PingSample,
+  Monitor,
+  WsMessage,
+  HealthResponse,
+  HealthErrorResponse,
+  IngestRequest,
+  IngestResponse,
+} from "~/shared/types";
+
+/** Create a valid PingSample with optional overrides. */
+export function createPingSample(
+  overrides: Partial<PingSample> = {},
+): PingSample {
+  return {
+    timestamp: "2025-01-01T00:00:00.000Z",
+    clientName: "test-client",
+    rtt: 42,
+    target: "8.8.8.8",
+    packetLoss: 0,
+    jitter: 2,
+    ...overrides,
+  };
+}
+
+/** Create a batch of PingSamples. */
+export function createPingSamples(
+  count: number,
+  overrides: Partial<PingSample> = {},
+): PingSample[] {
+  return Array.from({ length: count }, (_, i) =>
+    createPingSample({
+      ...overrides,
+      timestamp: `2025-01-01T00:0${i}:00.000Z`,
+    }),
+  );
+}
+
+/** Create a valid ClientIdentity with optional overrides. */
+export function createClientIdentity(
+  overrides: Partial<ClientIdentity> = {},
+): ClientIdentity {
+  return {
+    slug: "test-client",
+    name: "Test Client",
+    ip: "192.168.1.1",
+    os: "Linux",
+    hostname: "test-host",
+    ...overrides,
+  };
+}
+
+/** Create a valid Monitor with optional overrides. */
+export function createMonitor(
+  overrides: Partial<Monitor> = {},
+): Monitor {
+  return {
+    id: 1,
+    clientSlug: "test-client",
+    name: "Test Monitor",
+    target: "8.8.8.8",
+    lastPingAt: "2025-01-01T00:00:00.000Z",
+    status: "up",
+    avgRtt: 42,
+    avgPacketLoss: 0,
+    ...overrides,
+  };
+}
+
+/** Create a valid WsMessage with optional overrides. */
+export function createWsMessage(
+  overrides: Partial<WsMessage> = {},
+): WsMessage {
+  return {
+    type: "ping_update",
+    data: {},
+    timestamp: "2025-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/** Create a valid IngestRequest with optional overrides. */
+export function createIngestRequest(
+  overrides: Partial<IngestRequest> = {},
+): IngestRequest {
+  return {
+    samples: [createPingSample()],
+    ...overrides,
+  };
+}
+
+/** Create a valid IngestResponse with optional overrides. */
+export function createIngestResponse(
+  overrides: Partial<IngestResponse> = {},
+): IngestResponse {
+  return {
+    accepted: 1,
+    rejected: 0,
+    clientSlug: "test-client",
+    ...overrides,
+  };
+}
+
+/** Create a valid HealthResponse with optional overrides. */
+export function createHealthResponse(
+  overrides: Partial<HealthResponse> = {},
+): HealthResponse {
+  return {
+    status: "ok",
+    timestamp: "2025-01-01T00:00:00.000Z",
+    uptime: 100,
+    version: "0.1.0",
+    database: "ok",
+    ...overrides,
+  };
+}
+
+/** Create a valid HealthErrorResponse with optional overrides. */
+export function createHealthErrorResponse(
+  overrides: Partial<HealthErrorResponse> = {},
+): HealthErrorResponse {
+  return {
+    status: "error",
+    timestamp: "2025-01-01T00:00:00.000Z",
+    message: "Something went wrong",
+    ...overrides,
+  };
+}
