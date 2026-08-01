@@ -1,0 +1,4 @@
+-- 001_initial_setup.sql
+-- F1: Backend project setup
+-- Placeholder — the migrations tracking table is created automatically by the database plugin.
+-- Feature-specific tables should be added in subsequent migration files.

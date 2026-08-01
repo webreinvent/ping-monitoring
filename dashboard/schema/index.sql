@@ -1,0 +1,4 @@
+-- LNPM Cloud Dashboard — Initial Schema
+-- F1: Backend project setup
+-- Dependent features (F2-F14) add their own migration files in schema/migrations/
+-- This file is a placeholder — tables are created by feature-specific migrations
