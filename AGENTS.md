@@ -163,6 +163,55 @@ The `schema/index.sql` file is a hand-assembled reference of the complete schema
 - The plugin reads `schema/migrations/*.sql`, sorts alphabetically, and executes missing files
 - Use `CREATE TABLE IF NOT EXISTS` for idempotency (the tracking table ensures each runs once, but the SQL itself should be safe)
 - `schema/index.sql` serves as a documentation reference — update it when migrations change
+- **Feature ID annotations**: Each migration file includes a comment header with feature IDs (e.g., `-- F1: Backend project setup, F9: Client settings`) for traceability
+
+### Schema Details
+
+**4 tables, 39 total columns, 9 indexes.** All migrations are verified against `requirements/data-models/data-models.md`.
+
+#### Table: `clients` (12 columns — 8 base + 4 F9)
+- Primary key: `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- Unique: `slug TEXT NOT NULL UNIQUE`
+- **CRUD entity**: has `created_at` AND `updated_at`
+- **F9 sync columns**: `sync_enabled` (BOOLEAN DEFAULT 1), `sync_interval_min` (INTEGER DEFAULT 5), `backend_url` (TEXT DEFAULT ''), `last_synced_at_ms` (INTEGER)
+
+#### Table: `monitors` (11 columns)
+- Primary key: `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- FK: `client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE`
+- Unique: `(client_id, target_host)`
+- Quality state: `quality_state TEXT DEFAULT 'warmingUp'`, `state_since_ms INTEGER`
+- **CRUD entity**: has `created_at` AND `updated_at`
+
+#### Table: `ping_samples` (8 columns)
+- Primary key: `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- FK: `monitor_id INTEGER NOT NULL REFERENCES monitors(id) ON DELETE CASCADE`
+- Unique dedup: `(monitor_id, timestamp_ms, resolved_address)` — enables `INSERT OR IGNORE` for safe retries
+- **Append-only time series**: has `created_at` only, no `updated_at`
+
+#### Table: `minute_rollups` (10 columns)
+- No surrogate `id` — uses composite UNIQUE `(monitor_id, timestamp_ms)` as effective primary key
+- FK: `monitor_id INTEGER NOT NULL REFERENCES monitors(id) ON DELETE CASCADE`
+- Aggregation columns: `sample_count`, `success_count`, `failure_count`, `avg_latency`, `min_latency`, `max_latency`, `p95_latency`
+- **Append-only time series**: has `created_at` only, no `updated_at`
+
+#### Indexes (9 total — 8 spec + 1 F9)
+| Index | Table | Column(s) |
+|-------|-------|-----------|
+| `idx_clients_slug` | `clients` | `slug` |
+| `idx_clients_mac` | `clients` | `mac_address` |
+| `idx_clients_last_synced` | `clients` | `last_synced_at_ms` (F9) |
+| `idx_monitors_client` | `monitors` | `client_id` |
+| `idx_monitors_last_seen` | `monitors` | `last_seen_ms` |
+| `idx_monitors_client_target` | `monitors` | `client_id, target_host` |
+| `idx_ping_monitor_time` | `ping_samples` | `monitor_id, timestamp_ms` |
+| `idx_ping_status` | `ping_samples` | `status` |
+| `idx_rollup_monitor_time` | `minute_rollups` | `monitor_id, timestamp_ms` |
+
+### Schema Testing Convention
+- **SQL text validation**: Parse migration SQL files as text to verify columns, constraints, and index definitions — do not execute against a real database in tests (`better-sqlite3` crashes Vitest workers)
+- **Schema reference tests**: `schema/full-schema.test.ts` verifies `schema/index.sql` matches all migration files — if a migration changes, the test fails until `index.sql` is updated
+- **94 schema tests** across 2 test files (`migrations.test.ts`, `full-schema.test.ts`)
+- **Distinguish CRUD from append-only**: Only `clients` and `monitors` have `updated_at`; `ping_samples` and `minute_rollups` are append-only time series with `created_at` only
 
 ## ADRs (Architectural Decision Records)
 
@@ -201,4 +250,4 @@ pnpm run typecheck    # TypeScript type checking
 
 ---
 
-*Last updated: 2026-08-01 (Agent 14 — Update Project Context)*
+*Last updated: 2026-08-01 (Agent 14 — M1-T3 schema details, 9 indexes, schema testing convention, CRUD vs append-only convention)*
