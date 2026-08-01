@@ -95,13 +95,18 @@ export interface WsMessage {
 
 /**
  * Health endpoint response (success).
+ * Extended with F14 metrics: database size, monitor/sample counts, last ingest time.
  */
 export interface HealthResponse {
   status: "ok";
   timestamp: string;
   uptime: number;
   version: string;
-  database: "ok" | "error";
+  db_path: string;
+  db_size_bytes: number;
+  monitor_count: number;
+  sample_count: number;
+  last_ingest_time: string | null;
 }
 
 /**

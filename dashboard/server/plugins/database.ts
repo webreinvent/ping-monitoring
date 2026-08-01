@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
-import { info, warn, error } from "~/server/utils/logger";
+import { info, warn, error } from "../utils/logger";
 
 let dbInstance: Database | null = null;
 
