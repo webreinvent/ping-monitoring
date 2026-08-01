@@ -11,6 +11,7 @@ export default defineConfig({
       ".data",
       ".output",
       "coverage",
+      "tests/e2e",
     ],
     environment: "node",
     setupFiles: ["./test/setup.ts"],

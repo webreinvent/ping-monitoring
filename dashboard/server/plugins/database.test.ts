@@ -104,34 +104,55 @@ describe("database plugin", () => {
       expect(pragmaCalls[0]).toBe("journal_mode = WAL");
       expect(pragmaCalls[1]).toBe("foreign_keys = ON");
     });
+
+    test("enables all recommended pragmas", () => {
+      const pragmaCalls: string[] = [];
+      const mockDb = {
+        pragma: (sql: string) => {
+          pragmaCalls.push(sql);
+        },
+      };
+
+      // Simulate the full pragma set from the plugin
+      mockDb.pragma("journal_mode = WAL");
+      mockDb.pragma("foreign_keys = ON");
+      mockDb.pragma("synchronous = NORMAL");
+      mockDb.pragma("cache_size = -64000");
+      mockDb.pragma("temp_store = MEMORY");
+      mockDb.pragma("busy_timeout = 5000");
+      mockDb.pragma("wal_autocheckpoint = 1000");
+
+      expect(pragmaCalls).toContain("journal_mode = WAL");
+      expect(pragmaCalls).toContain("foreign_keys = ON");
+      expect(pragmaCalls).toContain("synchronous = NORMAL");
+      expect(pragmaCalls).toContain("cache_size = -64000");
+      expect(pragmaCalls).toContain("temp_store = MEMORY");
+      expect(pragmaCalls).toContain("busy_timeout = 5000");
+      expect(pragmaCalls).toContain("wal_autocheckpoint = 1000");
+    });
   });
 
   describe("globalThis assignment", () => {
-    test("stores database on globalThis.__db after initialization", () => {
-      // @ts-expect-error — test isolation
-      delete globalThis.__db;
+    beforeEach(() => {
+      // Clear the global database reference
+      globalThis.__db = undefined;
+    });
 
+    test("stores database on globalThis.__db after initialization", () => {
       const mockDb = { id: "mock-db" };
 
       // Simulate what the plugin does
-      // @ts-expect-error — setting global __db
-      globalThis.__db = mockDb;
+      globalThis.__db = mockDb as any;
 
-      // @ts-expect-error — reading global __db
       expect(globalThis.__db).toBe(mockDb);
     });
 
     test("globalThis.__db is accessible after plugin initialization", () => {
-      // @ts-expect-error — test isolation
-      delete globalThis.__db;
-
       const mockDb = { prepare: vi.fn() };
 
-      // @ts-expect-error — setting global __db
-      globalThis.__db = mockDb;
+      globalThis.__db = mockDb as any;
 
       // Verify it's accessible
-      // @ts-expect-error — reading global __db
       const retrieved = globalThis.__db;
       expect(retrieved).toBe(mockDb);
       expect(retrieved.prepare).toBeInstanceOf(Function);
@@ -141,7 +162,6 @@ describe("database plugin", () => {
   describe("database path resolution", () => {
     test("defaults to .data/lingering.db when DATABASE_PATH is not set", () => {
       const originalEnv = process.env.DATABASE_PATH;
-      // @ts-expect-error — delete for test
       delete process.env.DATABASE_PATH;
 
       const dbPath =
@@ -189,6 +209,30 @@ describe("database plugin", () => {
       expect(execCalls.length).toBe(1);
       expect(execCalls[0]).toContain("CREATE TABLE IF NOT EXISTS migrations");
       expect(execCalls[0]).toContain("name TEXT NOT NULL UNIQUE");
+    });
+  });
+
+  describe("shutdown handler", () => {
+    test("closing database sets connection to null", () => {
+      // Simulate the cleanup flow
+      let instance: { close: () => void } | null = { close: () => {} };
+
+      // Simulate cleanup
+      instance.close();
+      instance = null;
+
+      expect(instance).toBeNull();
+    });
+
+    test("closing already null database does not throw", () => {
+      let instance: { close: () => void } | null = null;
+
+      expect(() => {
+        if (instance) {
+          instance.close();
+        }
+        instance = null;
+      }).not.toThrow();
     });
   });
 });

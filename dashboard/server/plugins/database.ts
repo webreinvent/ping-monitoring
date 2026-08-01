@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { info, warn, error } from "~/server/utils/logger";
 
 let dbInstance: Database | null = null;
 
@@ -22,10 +23,28 @@ function getDatabase(): Database {
   dbInstance = new Database(fullDbPath);
 
   // Enable WAL mode for concurrent read/write
-  dbInstance.pragma("journal_mode = WAL");
+  const walResult = dbInstance.pragma("journal_mode = WAL");
+  info("WAL mode enabled", { result: walResult });
 
   // Enable foreign key constraints
   dbInstance.pragma("foreign_keys = ON");
+  info("Foreign keys enabled");
+
+  // Recommended pragmas for performance and reliability
+  dbInstance.pragma("synchronous = NORMAL");
+  info("Pragma applied: synchronous = NORMAL");
+
+  dbInstance.pragma("cache_size = -64000");
+  info("Pragma applied: cache_size = -64000 (64MB)");
+
+  dbInstance.pragma("temp_store = MEMORY");
+  info("Pragma applied: temp_store = MEMORY");
+
+  dbInstance.pragma("busy_timeout = 5000");
+  info("Pragma applied: busy_timeout = 5000");
+
+  dbInstance.pragma("wal_autocheckpoint = 1000");
+  info("Pragma applied: wal_autocheckpoint = 1000");
 
   // Run migrations
   runMigrations(dbInstance);
@@ -37,6 +56,7 @@ function runMigrations(db: Database.Database): void {
   // Run numbered migration files in order
   const migrationsDir = resolve("schema/migrations");
   if (!existsSync(migrationsDir)) {
+    warn("Migrations directory not found, skipping migrations");
     return;
   }
 
@@ -59,8 +79,12 @@ function runMigrations(db: Database.Database): void {
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
+  let appliedCount = 0;
+  let skippedCount = 0;
+
   for (const file of files) {
     if (applied.includes(file)) {
+      skippedCount++;
       continue;
     }
 
@@ -69,13 +93,25 @@ function runMigrations(db: Database.Database): void {
       const sql = readFileSync(path, "utf-8");
       db.exec(sql);
       db.prepare("INSERT INTO migrations (name) VALUES (?)").run(file);
+      appliedCount++;
+      info(`Migration applied: ${file}`);
     } catch (err) {
-      console.error(
-        `Migration "${file}" failed: ${err instanceof Error ? err.message : err}`,
-      );
+      error(`Migration failed: ${file}`, {
+        error: err instanceof Error ? err.message : String(err),
+        file,
+      });
       throw err;
     }
   }
+
+  info(
+    `Migrations complete: ${appliedCount} applied, ${skippedCount} already applied`,
+    {
+      applied: appliedCount,
+      skipped: skippedCount,
+      total: files.length,
+    },
+  );
 }
 
 // Initialize database on plugin load
@@ -83,4 +119,20 @@ export default defineNitroPlugin(() => {
   const db = getDatabase();
   // Store on globalThis for use in API routes
   (globalThis as any).__db = db;
+
+  // Return cleanup function for graceful shutdown
+  return () => {
+    if (dbInstance) {
+      try {
+        dbInstance.close();
+        info("Database connection closed");
+      } catch (err) {
+        error("Failed to close database connection", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        dbInstance = null;
+      }
+    }
+  };
 });

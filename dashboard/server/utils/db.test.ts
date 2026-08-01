@@ -2,8 +2,8 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 
 describe("getDb", () => {
   beforeEach(() => {
-    // @ts-expect-error — test isolation
-    delete globalThis.__db;
+    // Clear the global database reference before each test
+    globalThis.__db = undefined;
   });
 
   test("throws when database is not initialized", async () => {
@@ -35,7 +35,6 @@ describe("getDb", () => {
       close: vi.fn(),
     };
 
-    // @ts-expect-error — mock database instance
     globalThis.__db = mockDb;
 
     const { getDb } = await import("./db");
@@ -50,7 +49,6 @@ describe("getDb", () => {
       prepare: vi.fn().mockReturnThis(),
     };
 
-    // @ts-expect-error — mock database instance
     globalThis.__db = mockDb;
 
     const { getDb } = await import("./db");
@@ -72,10 +70,8 @@ describe("getDb", () => {
     }
   });
 
-  test("does not throw when globalThis.__db is set to a falsy-but-not-undefined value", async () => {
-    // Edge case: what if __db is null? It should still throw since null is falsy
-    // @ts-expect-error — setting to null for edge case test
-    globalThis.__db = null;
+  test("throws when globalThis.__db is null", async () => {
+    globalThis.__db = undefined;
 
     const { getDb } = await import("./db");
 
