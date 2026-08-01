@@ -19,3 +19,17 @@
 - [Decisions Made](lnpm-decisions-made.md) — M1-T1 decisions: Nuxt 4, node-server, better-sqlite3, globalThis DB
 - [Lessons Learned](lnpm-lessons-learned.md) — M1-T1 errors and fixes: 8 issues found by Agent 08
 - [Task Complete M1-T1](lnpm-task-complete-m1-t1.md) — M1-T1 summary: agents 07-10, 115 tests, 38/38 UAT
+- [M1-T3 Session Context](M1-T3-session-context.md) — M1-T3 scope: 5 migration files exist (from M1-T2), F9 sync columns gap identified
+- [M1-T3 Code Analysis](M1-T3-code-analysis.md) — Code analysis: 5 existing migrations, F9 sync column gap, patterns to follow
+- [M1-T3 Implementation Plan](M1-T3-implementation-plan.md) — Implementation plan: verification sequence, file inventory, all schema verified
+- [M1-T2 Session Context](M1-T2-session-context.md) — SQLite database plugin task context
+- [M1-T2 Scope Summary](M1-T2-scope-summary.md) — Task scope analysis: objective, acceptance criteria, affected files
+- [M1-T2 Code Analysis](M1-T2-code-analysis.md) — Code analysis: existing patterns, gaps, reusable code, migration files needed
+- [UI/UX Plan](ui-ux-plan.md) — Complete UI/UX design plan: color palette, component hierarchy, composables, styling, chart, accessibility, responsive, i18n
+- [Implementation Plan](implementation-plan.md) — M1-T2 implementation sequence: 5 migrations, database plugin enhancement, typed exports, tests
+- [Audit Results](audit-results.md) — Principles audit: all passed, no violations, 5 create + 4 modify + 1 delete
+- [Code Review Results](code-review-results.md) — Code review M1-T3: all checks passed, 0 issues found, 133 tests pass
+- [Patterns Established](patterns-established.md) — 5 patterns: Nitro plugin lifecycle, SQLite singleton, migration runner, structured logging, WAL pragmas
+- [Decisions Made](decisions-made.md) — 6 decisions: enhance vs rewrite, all migrations at once, Nitro cleanup, globalThis access, placeholder deletion, assembled reference
+- [Lessons Learned](lessons-learned.md) — 3 lessons: better-sqlite3 crashes Vitest workers, unused imports, globals: true
+- [Task Complete M1-T2](task-complete.md) — M1-T2 summary: all criteria met, 118 tests pass, 6 created + 5 modified + 1 deleted

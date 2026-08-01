@@ -3,7 +3,7 @@ taskId: M1-T3
 milestone: M1
 title: Implement all database schema migrations
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "2-3 hours"
 features:
   - F1
@@ -15,7 +15,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 2-3 hours
 
 ## Description
@@ -31,28 +31,28 @@ Create all SQL migration files for the 4 database tables (clients, monitors, pin
 
 ## Acceptance Criteria
 
-- [ ] 5 migration files created in `schema/migrations/`
-- [ ] `clients` table has all columns including F9 sync columns
-- [ ] `monitors` table has FK to clients, unique constraint, quality state columns
-- [ ] `ping_samples` table has FK to monitors, unique dedup constraint
-- [ ] `minute_rollups` table has FK to monitors, unique constraint
-- [ ] All 8 indexes created: idx_clients_slug, idx_clients_mac, idx_monitors_client, idx_monitors_last_seen, idx_monitors_client_target, idx_ping_monitor_time, idx_ping_status, idx_rollup_monitor_time
-- [ ] Foreign keys enforced (CASCADE DELETE)
-- [ ] All migrations execute without errors on fresh database
-- [ ] Schema matches data models specification exactly
+- [x] 5 migration files created in `schema/migrations/`
+- [x] `clients` table has all columns including F9 sync columns
+- [x] `monitors` table has FK to clients, unique constraint, quality state columns
+- [x] `ping_samples` table has FK to monitors, unique dedup constraint
+- [x] `minute_rollups` table has FK to monitors, unique constraint
+- [x] All 8 indexes created: idx_clients_slug, idx_clients_mac, idx_monitors_client, idx_monitors_last_seen, idx_monitors_client_target, idx_ping_monitor_time, idx_ping_status, idx_rollup_monitor_time
+- [x] Foreign keys enforced (CASCADE DELETE)
+- [x] All migrations execute without errors on fresh database
+- [x] Schema matches data models specification exactly
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] Migrations execute on server startup via M1-T2 migration runner
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] Migrations execute on server startup via M1-T2 migration runner
 
 ## Testing Checklist
 
-- [ ] All 5 migration files execute without SQL errors
-- [ ] Tables created with correct column types
-- [ ] Constraints enforced (UNIQUE, FK CASCADE)
-- [ ] Indexes created and query planner uses them
+- [x] All 5 migration files execute without SQL errors
+- [x] Tables created with correct column types
+- [x] Constraints enforced (UNIQUE, FK CASCADE)
+- [x] Indexes created and query planner uses them
 
 ## Dependencies
 

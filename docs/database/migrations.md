@@ -120,11 +120,11 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 | File | Description | Tables |
 |------|-------------|--------|
-| `001_create_clients.sql` | Client identity | `clients` |
+| `001_create_clients.sql` | Client identity + F9 sync | `clients` |
 | `002_create_monitors.sql` | Ping targets | `monitors` |
 | `003_create_ping_samples.sql` | Raw ping data | `ping_samples` |
 | `004_create_minute_rollups.sql` | Aggregated stats | `minute_rollups` |
-| `005_create_indexes.sql` | Query indexes | (8 indexes) |
+| `005_create_indexes.sql` | Query indexes | (9 indexes) |
 
 ## Checking Applied Migrations
 

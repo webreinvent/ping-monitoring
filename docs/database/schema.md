@@ -221,12 +221,17 @@ Stores LNPM desktop client installations.
 | `username` | `TEXT` | `NOT NULL` |
 | `hostname` | `TEXT` | `NOT NULL` |
 | `mac_address` | `TEXT` | `NOT NULL` |
+| `sync_enabled` | `BOOLEAN` | `NOT NULL DEFAULT 1` |
+| `sync_interval_min` | `INTEGER` | `NOT NULL DEFAULT 5` |
+| `backend_url` | `TEXT` | `NOT NULL DEFAULT ''` |
+| `last_synced_at_ms` | `INTEGER` | `DEFAULT NULL` |
 | `created_at` | `INTEGER` | `NOT NULL` (Unix milliseconds) |
 | `updated_at` | `INTEGER` | `NOT NULL` (Unix milliseconds) |
 
 **Indexes:**
 - `idx_clients_slug` on `slug`
 - `idx_clients_mac` on `mac_address`
+- `idx_clients_last_synced` on `last_synced_at_ms`
 
 ### `monitors`
 
