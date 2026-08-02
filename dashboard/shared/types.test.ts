@@ -132,37 +132,43 @@ describe("shared types", () => {
   });
 
   describe("HealthResponse", () => {
-    test("requires status 'ok', timestamp, uptime, version, and database", () => {
+    test("requires status 'ok', timestamp, uptime, version, and F14 fields", () => {
       const resp = {
         status: "ok" as const,
         timestamp: "2025-01-01T00:00:00.000Z",
         uptime: 100,
         version: "0.1.0",
-        database: "ok" as const,
+        db_path: "/tmp/lingering.db",
+        db_size_bytes: 8192,
+        monitor_count: 0,
+        sample_count: 0,
+        last_ingest_time: null,
       };
 
       expect(resp.status).toBe("ok");
       expect(resp.uptime).toBe(100);
       expect(resp.version).toBe("0.1.0");
-      expect(resp.database).toBe("ok");
+      expect(typeof resp.db_path).toBe("string");
+      expect(typeof resp.db_size_bytes).toBe("number");
+      expect(typeof resp.monitor_count).toBe("number");
+      expect(typeof resp.sample_count).toBe("number");
+      expect(resp.last_ingest_time).toBeNull();
     });
 
-    test("database can be 'ok' or 'error'", () => {
-      const okResp = {
+    test("last_ingest_time is string when samples exist", () => {
+      const resp = {
         status: "ok" as const,
         timestamp: "2025-01-01T00:00:00.000Z",
         uptime: 100,
         version: "0.1.0",
-        database: "ok" as const,
+        db_path: "/tmp/lingering.db",
+        db_size_bytes: 8192,
+        monitor_count: 5,
+        sample_count: 100,
+        last_ingest_time: "2025-01-01T00:00:00.000Z",
       };
 
-      const errResp = {
-        ...okResp,
-        database: "error" as const,
-      };
-
-      expect(okResp.database).toBe("ok");
-      expect(errResp.database).toBe("error");
+      expect(resp.last_ingest_time).toBe("2025-01-01T00:00:00.000Z");
     });
   });
 

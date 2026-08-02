@@ -108,7 +108,11 @@ interface HealthResponse {
   timestamp: string;
   uptime: number;
   version: string;
-  database: "ok" | "error";
+  db_path: string;
+  db_size_bytes: number;
+  monitor_count: number;
+  sample_count: number;
+  last_ingest_time: string | null;
 }
 
 interface HealthErrorResponse {
@@ -118,7 +122,19 @@ interface HealthErrorResponse {
 }
 ```
 
-**Used by:** `GET /api/health` endpoint.
+**Used by:** `GET /api/health` endpoint (F14 — health check with extended metrics).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `"ok"` | Always `"ok"` if endpoint responds |
+| `timestamp` | `string` | ISO 8601 server time |
+| `uptime` | `number` | Server uptime in seconds (2 decimal places) |
+| `version` | `string` | Backend version from `package.json` |
+| `db_path` | `string` | Absolute path to SQLite database file |
+| `db_size_bytes` | `number` | Size of the main SQLite file in bytes |
+| `monitor_count` | `number` | Total monitors in database |
+| `sample_count` | `number` | Total ping samples in database |
+| `last_ingest_time` | `string \| null` | ISO 8601 of most recent sample, or `null` |
 
 ---
 

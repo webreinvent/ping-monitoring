@@ -26,8 +26,7 @@ function getExtendedMetrics(): {
   sample_count: number;
   last_ingest_time: string | null;
 } {
-  const dbPath =
-    (process.env.DATABASE_PATH as string) || ".data/lingering.db";
+  const dbPath = (process.env.DATABASE_PATH as string) || ".data/lingering.db";
   const fullDbPath = resolve(dbPath);
 
   // File size via statSync — cheap for infrequent health checks

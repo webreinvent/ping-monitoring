@@ -248,6 +248,48 @@ pnpm run typecheck    # TypeScript type checking
 - `dashboard/shared/types.ts` — Shared TypeScript interfaces
 - `dashboard/schema/migrations/` — Numbered SQL migration files
 
+### Health Endpoint Pattern (F14 Extended Metrics)
+- **Single endpoint** serving both basic health (F1) and extended metrics (F14): `GET /api/health`
+- **Public access** — no authentication required (external monitoring services like Uptime Robot, Pingdom)
+- **Extended metrics** gathered in a separate `getExtendedMetrics()` function: `statSync` for DB file size, `COUNT(*)` for monitors/samples, `MAX(timestamp_ms)` for last ingest time
+- **Error response shape**: `{ status: "error", timestamp, message }` — structured JSON, not raw text. The absence of a successful response IS the failure signal.
+- **`last_ingest_time`** is `null` (not empty string, not 0) when no samples exist — semantically correct mapping of "no ingest time"
+- **Internal DB probe**: `SELECT 1` to verify connectivity; `dbStatus` is logged but not exposed in response (status is always `"ok"` if endpoint responds per spec)
+- **Uptime** is rounded to 2 decimal places: `Math.round(process.uptime() * 100) / 100`
+
+### Version Caching Pattern (IIFE at Module Level)
+- Cache runtime-expensive reads (e.g., `package.json` version) using a module-level IIFE
+- Runs once at module load time; safely handles missing/corrupt files with fallback defaults
+- No need for `setTimeout` or lazy caching — module loads once per process
+```typescript
+const pkgVersion = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version?: string };
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
+```
+
+### Shared Types — Health Response
+- `HealthResponse`: success shape with `status`, `timestamp`, `uptime`, `version`, `db_path`, `db_size_bytes`, `monitor_count`, `sample_count`, `last_ingest_time`
+- `HealthErrorResponse`: error shape with `status`, `timestamp`, `message`
+- Both types are in `shared/types.ts` and imported explicitly (Nuxt auto-import does NOT work for type-only exports)
+
+### Test Patterns — Health Endpoint
+- **Error handler edge cases**: test that Error, string, null, number, and boolean thrown values all produce structured `{ status: "error", message }` responses
+- **Version parsing tests**: verify fallback to `"0.0.0"` when `package.json` is missing or corrupt
+- **Path resolution tests**: verify `DATABASE_PATH` env var is resolved to absolute path; test contract (absolute path, correct filename) rather than exact path format
+- **COUNT query simulation**: mock `db.prepare().get()` to return `{ cnt: N }` for monitor/sample counts
+- **Full integration test**: mock DB + handler flow to verify end-to-end response shape
+
+### Lessons Learned
+- **Type drift**: `shared/types.ts` fields can drift from the API design document. Always cross-reference against `requirements/api/api-design.md` before implementing endpoints. The `database` vs `db_path` mismatch was caught by code review.
+- **Internal state vs. response fields**: `dbStatus` is an internal variable for logging only — never expose it in the response. The response status is determined by whether the endpoint completes or throws.
+- **E2E test artifacts**: Playwright produces `.last-run.json`, error context files, and screenshots. Ensure `.gitignore` covers `test-results/`, `.last-run.json`, and screenshot directories.
+- **Test the contract, not the format**: For path assertions, test `path.endsWith("expected.db")` and `path.startsWith("/")` rather than exact path strings that vary by environment.
+
 ---
 
-*Last updated: 2026-08-01 (Agent 14 — M1-T3 schema details, 9 indexes, schema testing convention, CRUD vs append-only convention)*
+*Last updated: 2026-08-02 (Agent 14 — M1-T4 health endpoint conventions, F14 extended metrics, version caching IIFE, health test patterns, lessons learned)*

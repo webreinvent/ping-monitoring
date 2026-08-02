@@ -115,7 +115,11 @@ export function createHealthResponse(
     timestamp: "2025-01-01T00:00:00.000Z",
     uptime: 100,
     version: "0.1.0",
-    database: "ok",
+    db_path: "/tmp/test.db",
+    db_size_bytes: 8192,
+    monitor_count: 0,
+    sample_count: 0,
+    last_ingest_time: null,
     ...overrides,
   };
 }
