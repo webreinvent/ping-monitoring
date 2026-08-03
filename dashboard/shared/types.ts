@@ -118,18 +118,3 @@ export interface HealthErrorResponse {
   message: string;
 }
 
-/**
- * Ingest request payload.
- */
-export interface IngestRequest {
-  samples: PingSample[];
-}
-
-/**
- * Ingest response.
- */
-export interface IngestResponse {
-  accepted: number;
-  rejected: number;
-  clientSlug: string;
-}

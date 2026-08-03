@@ -2,7 +2,7 @@
 type: project-dashboard
 version: "1.0"
 project: "LNPM Cloud Dashboard"
-lastUpdated: "2026-08-01"
+lastUpdated: "2026-08-03"
 ---
 
 # LNPM Cloud Dashboard — Project Dashboard
@@ -23,7 +23,7 @@ lastUpdated: "2026-08-01"
 | M1-T3 | Implement all database schema migrations | 🟢 Complete | Critical | 2-3 hours | M1 | M1-T2 |
 | M1-T4 | Build health check endpoint with server metrics | 🟢 Complete | Critical | 1-2 hours | M1 | M1-T1, M1-T2 |
 | M1-T5 | Implement client identity: slug generation, registration, upsert | 🟢 Complete | Critical | 3-4 hours | M1 | M1-T3 |
-| M1-T6 | Build ping data ingest endpoint with validation and dedup | Not Started | Critical | 4-6 hours | M1 | M1-T3, M1-T5 |
+| M1-T6 | Build ping data ingest endpoint with validation and dedup | 🟢 Complete | Critical | 4-6 hours | M1 | M1-T3, M1-T5 |
 | M1-T7 | Implement monitors list API with client join and latest state | Not Started | Critical | 2-3 hours | M1 | M1-T6 |
 | M1-T8 | Build monitor history API with aggregation and time windows | Not Started | Critical | 4-6 hours | M1 | M1-T6, M1-T7 |
 | M1-T9 | Create WebSocket live broadcast with subscription management | Not Started | High | 4-6 hours | M1 | M1-T6, M1-T8 |
@@ -59,8 +59,8 @@ lastUpdated: "2026-08-01"
 
 ## Progress
 
-- **Overall:** 5/19 tasks complete (26%)
-- **M1 Backend Platform:** 5/12 tasks complete (42%)
+- **Overall:** 6/19 tasks complete (32%)
+- **M1 Backend Platform:** 6/12 tasks complete (50%)
 - **M2 Dashboard UI:** 0/7 tasks complete (0%)
 - **Total Estimated Effort:** 17-22 days
 

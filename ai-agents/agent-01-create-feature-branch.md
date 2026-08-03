@@ -1,39 +1,58 @@
 ---
 title: LNPM - Agent 01 - Create Feature Branch
+description: Create a feature branch from the latest feature branch using GitFlow branching strategy
+version: 2.0
 ---
 
 # Create Feature Branch
 
 ## Purpose
 
-Create a feature branch following the project's GitFlow branching strategy and Conventional Commits convention.
+Create a feature branch from the latest feature branch following the project's GitFlow branching strategy and Conventional Commits convention.
+
+## Instructions
+
+- Always create branches from the **latest feature branch**, NOT from `develop`.
+- Use the `git` MCP server for all git operations — do NOT use Bash for git commands.
+- Write down the branch name inline so it survives context compaction.
+- IF the branch already exists, THEN switch to it and verify it is up-to-date.
+- Faithful reporting: IF the branch creation fails or the latest feature branch cannot be found, report it as Blocked — do not guess.
 
 ## Scope Boundaries
 
 **This agent MUST:**
-- Determine the correct base branch (GitFlow: `develop` for features)
-- Create and checkout a new feature branch
-- Verify the branch is up-to-date
+- Find the latest feature branch (most recent `feature/*` branch by commit date)
+- Create a new feature branch from that latest feature branch
+- Verify the branch is active and up-to-date
 
 **This agent MUST NOT:**
 - Commit any changes
 - Push the branch to remote
 - Modify any files
 - Run build commands or tests
+- Create branches from `develop` directly — always from the latest feature branch
 
 ## Variables
 
-- **`{{PROJECT_NAME}}`** _(static)_ — `LNPM Cloud Dashboard`
-- **`{{BASE_BRANCH}}`** _(static)_ — `develop`
+- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
+- **`{{TASK_ID}}`** *(dynamic)* — The task ID from session context (e.g., `M1-T7`). Provided by Agent 00.
+- **`{{BRANCH_NAME}}`** *(dynamic)* — Derived as `feature/{{TASK_ID}}-short-description`. Example: `feature/M1-T7-monitors-list-api`.
+
+## Codebase Structure
+
+```
+GitFlow branches:
+  main              — Production releases only
+  develop           — Integration branch
+  feature/*         — Feature branches (this agent creates from the latest one)
+```
 
 ## MCP Servers
 
-| Server | Purpose | Install / Configure | When to Use |
-|--------|---------|-------------------|-------------|
-| `git` | Version control — branches, commits, diffs, status | No install needed | Branch creation, checkout, status |
-| `memory` | Cross-session persistence | No install needed | Share data between agents |
-| `filesystem` | File and directory operations | No install needed | Read/write files, explore directories |
-| `sequential-thinking` | Structured problem decomposition | No install needed | Complex decisions and analysis |
+| Server | Purpose | When to Use |
+|--------|---------|-------------|
+| `git` | Version control — branches, commits, diffs, status | Branch creation, checkout, status |
+| `memory` | Cross-session persistence | Read {{TASK_ID}} from Agent 00 session context |
 
 ## Skills
 
@@ -41,33 +60,46 @@ No skills required for this agent.
 
 ## Workflow
 
-**Step 1: Determine Branching Strategy**
+### Step 1: Load Task ID
 
-- **Gitflow** → base branch is `develop` (this project uses GitFlow with `develop` as the integration branch)
-- Main branch is `main` — only for releases
+Read `{{TASK_ID}}` from memory (session context passed by Agent 00).
 
-**Step 2: Create Branch**
+**Gate:** IF `{{TASK_ID}}` is not found in memory, THEN stop and ask the user for the task ID.
 
-**Invoke `git` MCP server:**
-1. Switch to `develop` branch
-2. Pull latest changes from remote
-3. Create branch: `feature/task-id-short-description` (or `fix/` prefix for bug fixes). Derive task id from memory (session context from Agent 00). Example: `feature/M1-T1-setup-nuxt-project`
-4. Verify the branch is active and up-to-date
+### Step 2: Find Latest Feature Branch
 
-**Error recovery:** IF the branch already exists, switch to it and confirm it is up-to-date with `develop`.
+List all local `feature/*` branches sorted by most recent commit. Identify the latest feature branch.
 
-## Output
+**Gate:** IF no `feature/*` branches exist, THEN fall back to `develop` as the base. Note this fallback in the report.
+
+### Step 3: Create Branch
+
+1. Checkout the latest feature branch identified in Step 2
+2. Pull latest changes from remote to ensure it's up-to-date
+3. Create new branch: `feature/{{TASK_ID}}-short-description`
+4. Verify the new branch is active
+
+**Error recovery:** IF a branch with `{{BRANCH_NAME}}` already exists locally or remotely, THEN switch to it and verify it is up-to-date with its parent feature branch.
+
+### Step 4: Verify Branch
+
+Confirm:
+- The branch name matches `{{BRANCH_NAME}}`
+- The branch is active (HEAD points to it)
+- Note the parent branch it was created from
+
+## Report
+
+After completing the workflow, output this summary:
 
 ```
 Branch Created
-  Branch name: feature/task-id-short-description
-  Base branch: develop
-  Status: Active and up-to-date
+  Task: {{TASK_ID}}
+  Branch name: {{BRANCH_NAME}}
+  Parent branch: [latest feature branch or develop if fallback]
+  Status: Complete | Partial | Blocked
+  Branch existed: [true/false — reused existing]
+  Verification: [branch is active, commit count vs parent]
+  Notes: [any fallbacks, warnings, or decisions]
   Next agent: Agent 02 (Understand Task Scope)
 ```
-
-## Gate
-
-- [ ] Branching strategy identified (GitFlow, base = develop)
-- [ ] Branch created from correct base
-- [ ] Branch is active

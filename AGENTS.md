@@ -292,7 +292,7 @@ const pkgVersion = (() => {
 
 ---
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T5 client identity conventions, parameterized routes, upsert pattern, ClientRow/ClientResponse type separation)*
+*Last updated: 2026-08-03 (Agent 14 — M1-T6 ping ingest conventions appended)*
 
 ## Client Identity Pattern (M1-T5 / F2)
 
@@ -347,3 +347,103 @@ const pkgVersion = (() => {
 - **Name validation edge cases:** Empty string, whitespace-only, exactly 100 chars, 101 chars, null/undefined
 - **404 tests:** Non-existent slug returns proper error shape, not internal error
 - **Integration tests:** Mock DB + handler flow to verify end-to-end response shape (including `toClientResponse` conversion)
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-03)
+
+### Ping Ingest Endpoint (M1-T6 / F3)
+
+The `POST /api/ping/ingest` endpoint is the primary data ingestion path for all ping telemetry.
+
+#### Type-First Module Pattern
+- **File**: `server/utils/ping-types.ts`
+- **Pattern**: Dedicated type file per feature domain, co-located with implementation in `server/utils/`
+- **Defines**: `PingSampleIngest`, `IngestPayload`, `IngestResponse`, `Rejection`, `ValidationResult`
+- **No runtime logic** — pure TypeScript interfaces. Imported by both the route handler and ingest engine.
+- **Rationale**: Keeps types in one place without scattering across implementation files. `shared/types.ts` is reserved for client-server shared types; server-only types stay co-located.
+
+#### 3-Phase Ingest Pipeline Pattern
+- **File**: `server/utils/ping-ingest.ts` → `ingestPingBatch()`
+- **Phase 1 — Client lookup**: `getClientBySlug()` or auto-register via `upsertClient()` when identity fields are provided
+- **Phase 2 — Validation**: Per-sample validation delegating to `validateSample()`, accumulating rejections
+- **Phase 3 — Transactional ingest**: `db.transaction()` wrapping monitor auto-create, `INSERT OR IGNORE` dedup, monitor state update, client `last_synced_at_ms` update
+- **Returns**: `IngestResponse` with `accepted`, `duplicate`, `rejected` counts and optional `rejections[]` array
+- **Key**: Returns `null` for unknown clients — the route handler maps to 401. Separates business logic from HTTP concerns.
+
+#### Validation Rule Pattern
+- **File**: `server/utils/ping-validation.ts` → `validateSample()`
+- **Returns**: `ValidationResult { valid: boolean, rejections: Rejection[] }`
+- **Pattern**: Each rule is a named block (Rule 1–7) that independently pushes rejections. Multiple rejections accumulate per sample.
+- **Rules**:
+  1. `targetHost` required (non-empty string)
+  2. `timestampMs` must be positive integer, within future window (`INGEST_FUTURE_WINDOW_MS`)
+  3. `status` must be enum: `success` | `timeout` | `error`
+  4. `latencyMs` required when status is `success`; must be non-negative number
+  5. `resolvedAddress` required when status is `success`; must be non-empty string
+  6. `latencyMs` must be `undefined` when status is NOT `success`
+  7. `resolvedAddress` must be `undefined` when status is NOT `success`
+- **Helper**: `isValidPositiveInteger()` — handles NaN, Infinity, non-integer edge cases
+- **Rejected count = unique sample indices**: A sample with 3 validation failures counts as 1 rejected sample (not 3). Uses `new Set(rejections.map(r => r.index)).size`.
+
+#### Transactional Ingest Pattern
+- **File**: `server/utils/ping-ingest.ts` → `ingestSamples()`
+- **`db.transaction()`** wraps 4 phases:
+  1. Resolve monitor IDs with `ensureMonitor()` (`INSERT OR IGNORE` + `SELECT`)
+  2. Bulk insert samples with `INSERT OR IGNORE`, tracking `stmt.run().changes` (0 = duplicate, 1 = inserted)
+  3. Update monitor latest state per affected monitor
+  4. Update client `last_synced_at_ms`
+- **Dedup**: `INSERT OR IGNORE` on unique index `(monitor_id, timestamp_ms, resolved_address)` — `stmt.run().changes` returns 0 for ignored (duplicate) rows, 1 for inserted rows.
+- **Monitor auto-creation**: `ensureMonitor()` uses `INSERT INTO monitors ... ON CONFLICT DO NOTHING` then `SELECT id` to get existing or new monitor ID.
+
+#### Route Handler Status Code Logic
+- **File**: `server/api/ping/ingest.post.ts`
+- **`sendResponse(event, statusCode, body)` helper**: Calls `setResponseStatus(event, statusCode)` then returns body. Separates status code setting from body return.
+- **Status code determination**:
+  - `201`: All accepted (no dupes, no rejected)
+  - `200`: All dupes OR all rejected (request processed successfully)
+  - `207`: Mixed (some accepted + some duplicate/rejected)
+  - `400`: Empty batch or validation error
+  - `401`: Unknown client slug (no identity provided)
+  - `413`: Batch exceeds `INGEST_MAX_SAMPLES` (default 1000)
+- **Error shape**: `createError({ statusCode, statusMessage, data: { error, code } })` — consistent with F3 API contract.
+
+#### Batch Limits
+- **`INGEST_MAX_SAMPLES`**: Read from env at function call time (not module load). Default 1000. Batches exceeding this limit return 413.
+- **Empty batch**: Returns 400 immediately — no database access.
+
+### Mock DB Pattern for Tests (M1-T6)
+
+- **Pattern**: Mock `getDb()` to return an object with `prepare(sql)` that dispatches based on SQL string matching
+- **Implementation**: `vi.fn((sql) => { if (sql.includes("INSERT INTO monitors")) ... })` to return the right mock statement
+- **Transaction mock**: `transaction: vi.fn((fn) => () => fn())` — runs the function synchronously without actual transaction wrapper
+- **Avoids**: The `better-sqlite3` segfault in Vitest forked workers entirely
+- **Lesson**: SQL string matching is fragile — if SQL changes, mocks need updating. This is the tradeoff for avoiding real SQLite in tests.
+
+### Environment Variable Reading Pattern (M1-T6)
+
+- **Pattern**: Read env vars inside functions (not at module scope) when they need to be testable
+- **Example**: `INGEST_MAX_SAMPLES` and `INGEST_FUTURE_WINDOW_MS` are read at function call time
+- **Benefit**: Tests can stub env vars with `vi.stubEnv()` and the module picks up new values without re-import
+
+### ADRs — Ping Ingest (M1-T6)
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-010 | Client Auto-Registration on First Ingest | First ping batch from unknown client registers it if identity fields provided; eliminates separate registration step |
+| ADR-011 | INSERT OR IGNORE for Dedup | Uses unique index + `INSERT OR IGNORE` over two-phase SELECT-then-INSERT; eliminates race conditions, `stmt.run().changes` counts accepted vs duplicate |
+| ADR-012 | Rejected Count = Unique Sample Indices | A sample with 3 validation failures counts as 1 rejected sample; `rejections[]` array contains all reasons for traceability |
+| ADR-013 | Status Code 200 for All-Rejected | 200 indicates "request processed successfully" even when all samples rejected; 207 reserved for mixed outcomes only |
+| ADR-014 | sendResponse Helper for Status Codes | `setResponseStatus(event, code)` + return body pattern; Nitro doesn't let you set custom status and return body in one expression |
+
+### Ping Ingest — Test Patterns
+
+- **Unit tests mock the DB entirely** — `vi.mock("./db", () => ({ getDb: vi.fn() }))` with SQL string dispatching
+- **Integration tests use in-memory SQLite** — Limited by `better-sqlite3` segfault in forked workers; use `--pool=threads` flag
+- **vi.mock() at top level** — `vi.doMock()` inside test blocks causes parse errors; always use top-level `vi.mock()`
+- **Vitest include pattern**: `**/*.test.ts` — NOT `**/*.spec.ts` (which are Playwright tests). Naming convention prevents conflicts.
+- **478 tests across 30+ files** — Agent 10 established comprehensive test coverage for the entire codebase
+
+### Known Limitations (M1-T6)
+
+- **F12 hook (quality classifier)** — Not implemented yet (deferred to M1-T7)
+- **F7 hook (WebSocket broadcast)** — Not implemented yet (deferred to M1-T9)
+- **Integration tests with better-sqlite3** — Segfault in Vitest forked workers; unit tests mock the DB, integration tests are limited to in-memory SQLite

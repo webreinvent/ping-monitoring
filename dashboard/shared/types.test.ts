@@ -172,34 +172,4 @@ describe("shared types", () => {
     });
   });
 
-  describe("IngestRequest", () => {
-    test("requires samples array", () => {
-      const req = {
-        samples: [
-          {
-            timestamp: "2025-01-01T00:00:00.000Z",
-            clientName: "test",
-            rtt: 42,
-            target: "8.8.8.8",
-          },
-        ],
-      };
-
-      expect(Array.isArray(req.samples)).toBe(true);
-    });
-  });
-
-  describe("IngestResponse", () => {
-    test("requires accepted, rejected, and clientSlug", () => {
-      const resp = {
-        accepted: 5,
-        rejected: 1,
-        clientSlug: "test-client",
-      };
-
-      expect(typeof resp.accepted).toBe("number");
-      expect(typeof resp.rejected).toBe("number");
-      expect(typeof resp.clientSlug).toBe("string");
-    });
-  });
 });
