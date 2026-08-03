@@ -75,6 +75,16 @@ ping-monitoring/
 
 ## Workflow
 
+### Step 0: Prepare Environment
+
+Before running any checks, ensure the development environment is properly set up:
+
+1. **Set Node.js version** — Run `nvm use 22` to switch to Node.js 22.
+2. **Start the dev server** — Run `npm run dev` in the dashboard directory and confirm it starts without errors.
+3. **Fix any startup errors** — If the dev server fails to start or reports errors, diagnose and fix the underlying issue before proceeding.
+
+**Gate:** The dev server must be running without errors before proceeding to quality checks.
+
 ### Step 1: Install Skills
 
 Check and install each skill if needed.

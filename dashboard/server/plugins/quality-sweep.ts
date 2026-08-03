@@ -1,4 +1,4 @@
-import { defineNitroPlugin } from "nitropack";
+import { defineNitroPlugin } from "#imports";
 import { info, error as logError } from "#server/utils/logger";
 import { getDb } from "#server/utils/db";
 import { classifyMonitorsBatch } from "#server/utils/quality-classifier";
