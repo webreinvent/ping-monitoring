@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 10 - Write Unit Tests
+description: Set up test infrastructure if needed, write unit and integration tests for all business logic and API endpoints
+version: 2.0
 ---
 
 # Write Unit Tests
@@ -7,6 +9,14 @@ title: LNPM - Agent 10 - Write Unit Tests
 ## Purpose
 
 MANDATORY — Unit tests are NOT skippable. IF the testing framework is not configured in the dashboard directory, this agent configures it first, then writes the tests. There is no skip path.
+
+## Instructions
+
+- Use the Read tool for file reads, NOT `cat`, `head`, or `tail`.
+- Use the Grep/Glob tools for file searches, NOT `find`, `ls`, or `rg`.
+- Parallelize independent test file creation where possible.
+- Invoke MCP servers before executing any workflow step that requires them.
+- Write down key findings inline — file paths, patterns, constraints. This survives context compaction.
 
 ## Scope Boundaries
 
@@ -29,6 +39,26 @@ MANDATORY — Unit tests are NOT skippable. IF the testing framework is not conf
 - **`{{PROJECT_ROOT}}`** _(static)_ — `/Users/pk/Projects/ping-monitoring`
 - **`{{DASHBOARD_DIR}}`** _(static)_ — `dashboard/`
 
+## Codebase Structure
+
+```
+ping-monitoring/
+├── dashboard/
+│   ├── server/                 # Nitro server (API, middleware, plugins, utils)
+│   │   ├── api/                # API route handlers
+│   │   ├── middleware/         # Rate limiting, auth middleware
+│   │   ├── plugins/            # Database plugin
+│   │   ├── utils/              # Business logic (targets for unit tests)
+│   │   │   ├── ping-validation.ts
+│   │   │   ├── ping-ingest.ts
+│   │   │   ├── client.ts
+│   │   │   ├── quality-classifier.ts
+│   │   │   ├── rate-limiter.ts
+│   │   │   └── cache.ts
+│   │   └── ws/                 # WebSocket handlers
+│   └── shared/                 # Shared types between client and server
+```
+
 ## MCP Servers
 
 | Server | Purpose | Install / Configure | When to Use |
@@ -48,11 +78,11 @@ MANDATORY — Unit tests are NOT skippable. IF the testing framework is not conf
 
 ## Workflow
 
-**Step 1: Install Skills**
+### Step 1: Install Skills
 
 Check and install each skill if needed.
 
-**Step 2: Check & Configure Test Infrastructure**
+### Step 2: Check & Configure Test Infrastructure
 
 **IF the dashboard directory does not have a configured test runner:**
 1. Install Vitest `^4.1.10` (matching the project's existing version) and any required plugins
@@ -68,7 +98,9 @@ Check and install each skill if needed.
 - Test files co-located: `*.test.ts` next to source files
 - Mock database sessions — never hit a real database in unit tests
 
-**Step 3: Write Integration Tests**
+**Gate:** Test infrastructure must be configured and verified (test runner executes successfully) before writing tests.
+
+### Step 3: Write Integration Tests
 
 For each API endpoint or service:
 - Create or extend a test file co-located with source
@@ -84,7 +116,7 @@ Test targets:
 - `server/utils/cache.ts` — LRU cache operations
 - API routes — test request/response shapes
 
-**Step 4: Write Unit Tests**
+### Step 4: Write Unit Tests
 
 Write for:
 - Pure business-logic functions with non-trivial branches
@@ -93,18 +125,24 @@ Write for:
 - Edge-case handling that integration tests cannot exercise
 - State machines, transition logic, status guards
 
-**Step 5: Run Tests**
+### Step 5: Run Tests
 
 Run the full test suite: `cd dashboard && pnpm test -- --run`. All tests must pass.
 
-**Step 6: Type Check & Lint**
+**Gate:** All tests must pass with zero failures before proceeding.
+
+### Step 6: Type Check & Lint
 
 Run typecheck and linter. Zero errors.
 
-## Output
+**Gate:** Zero typecheck errors and zero lint errors.
+
+## Report
+
+After completing the workflow, output this summary:
 
 ```
-Unit Tests
+Unit Tests — LNPM Cloud Dashboard
   Test infrastructure: [existing / configured]
   Integration tests: [N files, N tests]
   Unit tests: [N files, N tests]
@@ -112,12 +150,6 @@ Unit Tests
   Fail: [N]
   Typecheck: [pass]
   Lint: [pass]
+  Status: Complete | Partial | Blocked
   Next agent: Agent 11 (Write E2E Tests)
 ```
-
-## Gate
-
-- [ ] Test infrastructure configured (or verified existing)
-- [ ] All unit and integration tests pass
-- [ ] Zero typecheck errors
-- [ ] Zero lint errors

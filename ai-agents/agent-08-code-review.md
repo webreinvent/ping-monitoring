@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 08 - Code Review
+description: Review all implemented code against quality standards, coding principles, and project conventions; fix any issues found
+version: 2.0
 ---
 
 # Code Review
@@ -7,6 +9,14 @@ title: LNPM - Agent 08 - Code Review
 ## Purpose
 
 Review all implemented code for the LNPM Cloud Dashboard against coding principles, quality standards, and project conventions. Find issues, bugs, and quality problems before UAT. Fix any issues found.
+
+## Instructions
+
+- Use the Read tool for file reads, NOT `cat`, `head`, or `tail`.
+- Use the Grep/Glob tools for file searches, NOT `find`, `ls`, or `rg`.
+- Parallelize all independent reads. Mark sequential dependencies explicitly.
+- Invoke MCP servers and skills before executing any workflow step that requires them.
+- Write down key findings inline — file paths, patterns, constraints. This survives context compaction.
 
 ## Scope Boundaries
 
@@ -28,6 +38,24 @@ Review all implemented code for the LNPM Cloud Dashboard against coding principl
 - **`{{PROJECT_ROOT}}`** _(static)_ — `/Users/pk/Projects/ping-monitoring`
 - **`{{DASHBOARD_DIR}}`** _(static)_ — `dashboard/`
 
+## Codebase Structure
+
+```
+ping-monitoring/
+├── dashboard/
+│   ├── app/                    # Frontend (pages, components, composables)
+│   │   ├── components/         # Vue UI components
+│   │   ├── composables/        # Shared composition functions
+│   │   └── pages/              # File-based routing pages
+│   ├── server/                 # Nitro server (API, middleware, plugins, utils)
+│   │   ├── api/                # API route handlers
+│   │   ├── middleware/         # Rate limiting, auth middleware
+│   │   ├── plugins/            # Database plugin
+│   │   ├── utils/              # Business logic utilities
+│   │   └── ws/                 # WebSocket handlers
+│   └── shared/                 # Shared types between client and server
+```
+
 ## MCP Servers
 
 | Server | Purpose | Install / Configure | When to Use |
@@ -47,11 +75,11 @@ Review all implemented code for the LNPM Cloud Dashboard against coding principl
 
 ## Workflow
 
-**Step 1: Install Skills**
+### Step 1: Install Skills
 
 Check and install each skill if needed.
 
-**Step 2: Run Quality Checks**
+### Step 2: Run Quality Checks
 
 1. **Formatter** — Auto-format all changed files (`pnpm format` or equivalent)
 2. **Linter** — Run ESLint. Zero warnings allowed. Fix issues.
@@ -59,7 +87,9 @@ Check and install each skill if needed.
 4. **Dead code** — Scan for unused imports, variables, functions. Remove them.
 5. **Complexity** — Review each function: >30 lines? >3 nesting levels? Multiple concerns? Refactor.
 
-**Step 3: Principles Audit**
+**Gate:** All quality checks must pass (formatter, linter, typecheck) before proceeding to principles audit.
+
+### Step 3: Principles Audit
 
 Review against:
 - **DRY** — no duplicated logic; shared types in `dashboard/shared/types.ts`
@@ -71,18 +101,22 @@ Review against:
 - **Security** — input validation on ingest, rate limiting, SQL injection prevention (parameterized queries), CSP compliance
 - **Accessibility** — semantic HTML, ARIA labels, keyboard navigation (UI only)
 
-**Step 4: Diff Review**
+### Step 4: Diff Review
 
 **Invoke `git` MCP server** (`git diff`) to review all staged changes. Confirm no debug artifacts, no commented-out code, no console.log statements left in production code.
 
-**Step 5: Document Issues**
+**Gate:** Diff must be clean — no debug artifacts, no commented-out code, no console.log in production.
+
+### Step 5: Document Issues
 
 List all issues found with file path, line, description, and severity. Fix each issue.
 
-## Output
+## Report
+
+After completing the workflow, output this summary:
 
 ```
-Code Review
+Code Review — LNPM Cloud Dashboard
   Formatter: [pass]
   Linter: [pass / issues found and fixed]
   Type check: [pass / issues found and fixed]
@@ -92,15 +126,6 @@ Code Review
   Issues found: [count]
   Issues fixed: [count]
   Diff reviewed: [clean]
+  Status: Complete | Partial | Blocked
   Next agent: Agent 09 (Automated UAT & Bug Fixes)
 ```
-
-## Gate
-
-- [ ] Formatter — all files formatted
-- [ ] Linter — zero warnings
-- [ ] Type check — zero errors
-- [ ] Dead code — removed
-- [ ] Complexity — functions within limits
-- [ ] Principles — all passed or fixed
-- [ ] Diff reviewed — clean

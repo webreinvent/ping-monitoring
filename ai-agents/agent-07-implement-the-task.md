@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 07 - Implement the Task
+description: Execute the approved implementation plan step by step, following layer-order. Only agent authorized to write application code.
+version: 2.0
 ---
 
 # Implement the Task
@@ -7,6 +9,13 @@ title: LNPM - Agent 07 - Implement the Task
 ## Purpose
 
 Execute the approved implementation plan step by step for the LNPM Cloud Dashboard. This is the ONLY agent in the pipeline authorized to write application code. Follow layer-order to avoid dependency issues. All new code lives in the `dashboard/` subdirectory.
+
+## Instructions
+
+- **Tool-first approach:** Use MCP servers and skills before any manual exploration. Invoke `nuxt` and `tailwind-best-practices` skills before writing framework code.
+- **Parallel reads:** Independent files can be created in parallel when there are no dependencies: `PARALLEL: Create shared types, Create schema migrations`.
+- **Sequential reads:** Layer-order enforcement: `SEQUENTIAL: Project setup -> Shared types -> Data layer -> Business logic -> API -> WebSocket -> Frontend -> Tests`.
+- **Compaction survival:** After each major layer is complete, save progress to memory so the plan state survives context window compaction.
 
 ## Scope Boundaries
 
@@ -50,15 +59,19 @@ Execute the approved implementation plan step by step for the LNPM Cloud Dashboa
 
 ## Workflow
 
-**Step 1: Install Skills**
+### Step 1: Install Skills
 
 Check and install each skill if needed. Confirm installation.
 
-**Step 2: Load Implementation Plan**
+**Gate:** Skills installed and confirmed before proceeding.
+
+### Step 2: Load Implementation Plan
 
 **Invoke `memory` MCP server:** Load `"LNPM Cloud Dashboard — Implementation Plan"`.
 
-**Step 3: Execute in Layer Order**
+**Gate:** Plan loaded successfully before proceeding.
+
+### Step 3: Execute in Layer Order
 
 Follow the plan sequence. For each step:
 1. Create or modify the file
@@ -97,28 +110,53 @@ Follow the plan sequence. For each step:
 - File naming: kebab-case for components, `.vue` for Vue components, `.ts` for utilities
 - Nitro file-based routing: `server/api/[route].get.ts`, `server/api/[route].post.ts`
 
-**Step 4: Review Diff**
+After each layer, save progress to memory for compaction survival.
+
+**Gate:** All plan steps executed, typecheck passes, lint passes, tests pass.
+
+### Step 4: Review Diff
 
 **Invoke `git` MCP server** (`git diff`) to review all changes. Confirm only intended changes are present. Verify no changes to `src/` or `src-tauri/` unless required.
 
-## Output
+**Gate:** Diff reviewed — only intended changes present.
+
+## Report
+
+Status: [Complete | Partial | Blocked]
+
+Files created: [N files, paths relative to dashboard/]
+Files modified: [N files, paths relative to dashboard/]
+Inline tests written: [N tests, paths relative to dashboard/]
+Typecheck: [pass / fail]
+Lint: [pass / fail]
+Tests: [pass: N / fail: N]
+Diff reviewed: [only intended changes / unexpected changes noted]
+Next agent: Agent 08 (Code Review)
+
+If Blocked, state the reason and what is needed to unblock.
+
+## Codebase Structure
 
 ```
-Implementation
-  Files created: [list with paths relative to dashboard/]
-  Files modified: [list with paths]
-  Inline tests written: [list with paths]
-  Typecheck: [pass/fail]
-  Lint: [pass/fail]
-  Tests: [pass/fail count]
-  Diff reviewed: [only intended changes]
-  Next agent: Agent 08 (Code Review)
+ping-monitoring/
+├── dashboard/          # Cloud Dashboard (this task's target)
+│   ├── server/
+│   │   ├── api/            # Nitro API routes (file-based routing)
+│   │   ├── ws/             # WebSocket routes
+│   │   ├── plugins/        # database.ts, websocket.ts
+│   │   ├── utils/          # db.ts, client.ts, ping-validation.ts, etc.
+│   │   └── middleware/     # rate-limit.ts
+│   ├── app/
+│   │   ├── pages/          # Nuxt pages (index.vue, settings.vue)
+│   │   ├── components/     # Vue components (Layout, Sidebar, Chart, etc.)
+│   │   └── composables/    # useMonitors, useWebSocket, useChart
+│   ├── schema/
+│   │   ├── index.sql       # Main SQLite schema
+│   │   └── migrations/     # Migration files
+│   └── shared/
+│       └── types.ts        # Shared TypeScript interfaces
+├── src/                # Desktop app source (do not modify unless required)
+├── src-tauri/          # Tauri backend (do not modify unless required)
+├── requirements/       # Architecture, ADRs, specifications
+└── ai-agents/          # Agent definitions (this directory)
 ```
-
-## Gate
-
-- [ ] All plan steps executed
-- [ ] Typecheck passes
-- [ ] Lint passes
-- [ ] Tests pass
-- [ ] Diff reviewed — only intended changes

@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 03 - Analyze Related Code
+description: Analyze existing code to find reusable patterns, components, types, and utilities for the Cloud Dashboard
+version: 2.0
 ---
 
 # Analyze Related Code
@@ -7,6 +9,14 @@ title: LNPM - Agent 03 - Analyze Related Code
 ## Purpose
 
 Analyze existing code in the LNPM project to find reusable patterns, components, types, and utilities for the Cloud Dashboard. This agent is a READ-ONLY analysis — it produces a code analysis summary that subsequent agents consume.
+
+## Instructions
+
+- This agent is **strictly read-only** — no writes, no edits, no file creation, no git operations.
+- Use the Read tool for file reads, NOT `cat`, `head`, or `tail`.
+- Parallelize all independent reads. Mark sequential dependencies explicitly.
+- Write down key findings inline — file paths, patterns, conventions. This survives context compaction.
+- IF any referenced file doesn't exist, THEN note the gap and proceed — do not block.
 
 ## Scope Boundaries
 
@@ -27,6 +37,24 @@ Analyze existing code in the LNPM project to find reusable patterns, components,
 
 - **`{{PROJECT_ROOT}}`** _(static)_ — `/Users/pk/Projects/ping-monitoring`
 
+## Codebase Structure
+
+```
+ping-monitoring/
+├── src/                        # Desktop app (Tauri) — READ-ONLY reference
+│   ├── types.ts               # Shared TypeScript types
+│   ├── chart.ts               # uPlot chart implementation
+│   ├── api.ts                 # Tauri IPC API layer
+│   ├── main.ts                # UI patterns, event handling
+│   ├── dashboard-selection.ts # Multi-target aggregation
+│   ├── update-state.ts        # State machine pattern
+│   └── i18n.ts                # Internationalization (5 locales)
+├── src-tauri/                  # Rust backend — READ-ONLY, do not modify
+└── dashboard/                  # Nuxt 4 + Nitro v2 application
+    ├── server/                 # API routes, middleware, utils
+    └── app/                    # Pages, components, composables
+```
+
 ## MCP Servers
 
 | Server | Purpose | Install / Configure | When to Use |
@@ -42,7 +70,7 @@ No skills required for this agent.
 
 ## Workflow
 
-**Step 1: Identify Related Files**
+### Step 1: Identify Related Files
 
 Based on the task scope, identify existing components, modules, or functions this task extends or modifies. Key reference files:
 - `src/types.ts` — shared TypeScript types (Target, PingSample, QualityMetrics, HistoryResponse) used across desktop and dashboard
@@ -54,7 +82,7 @@ Based on the task scope, identify existing components, modules, or functions thi
 - `src/i18n.ts` — internationalization pattern (5 locales: en, ko, ja, zh-CN, zh-TW)
 - Existing `dashboard/` files if any — already-implemented dashboard code
 
-**Step 2: Read Related Code**
+### Step 2: Read Related Code
 
 Read in parallel:
 - Existing components/modules/functions this task extends
@@ -62,7 +90,7 @@ Read in parallel:
 - Relevant utilities or helpers
 - Shared types, interfaces, and schemas in `src/types.ts`
 
-**Step 3: Analyze Patterns**
+### Step 3: Analyze Patterns
 
 Document:
 - **Coding style:** Strict TypeScript (`strict: true`, `noUnusedLocals`, `noUnusedParameters`). No `any` types. Explicit return types.
@@ -73,7 +101,7 @@ Document:
 - **Test patterns:** Vitest with descriptive `describe`/`test` blocks. Assertion style: `expect().toBe()`, `expect().toEqual()`. Test files co-located: `*.test.ts`.
 - **Chart patterns:** uPlot with canvas rendering. Series colors from fixed palette. Quality state coloring (green/yellow/red).
 
-**Step 4: Find Reusable Code**
+### Step 4: Find Reusable Code
 
 Identify code that can be reused, extended, or adapted:
 - `src/types.ts` — share types between dashboard and desktop app via `dashboard/shared/`
@@ -84,11 +112,15 @@ Flag code that must not be modified:
 - `src/` — desktop app code, do not modify
 - `src-tauri/` — Rust backend, do not modify
 
-**Step 5: Architectural Decisions**
+**Gate:** All reusable code must be documented before proceeding. IF no reusable code is found, note that explicitly.
+
+### Step 5: Architectural Decisions
 
 IF this task involves an architectural decision, **invoke `sequential-thinking` MCP server** to analyze options. Reference ADRs in `requirements/architecture.md` (ADR-001 through ADR-009).
 
-## Output
+## Report
+
+After completing the workflow, output this summary:
 
 ```
 Code Analysis
@@ -98,12 +130,6 @@ Code Analysis
   Error handling pattern: [idiom]
   Code to avoid modifying: [list with reason]
   Architectural decisions: [decisions made, referencing ADRs]
+  Status: Complete | Partial | Blocked
   Next agent: Agent 04 (Plan UI/UX Design)
 ```
-
-## Gate
-
-- [ ] Related code identified and read
-- [ ] Patterns documented
-- [ ] Reusable code identified
-- [ ] Conventions noted

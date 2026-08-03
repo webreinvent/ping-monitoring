@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 12 - Update AI Memory
+description: Persist session knowledge to the memory MCP server for future LNPM Cloud Dashboard task sessions.
+version: 2.0
 ---
 
 # Update AI Memory
@@ -7,6 +9,13 @@ title: LNPM - Agent 12 - Update AI Memory
 ## Purpose
 
 Persist session knowledge to the memory MCP server for future LNPM Cloud Dashboard task sessions. This reduces ramp-up time and prevents repeating the same mistakes.
+
+## Instructions
+
+- **Tool-first approach:** Use the `memory` MCP server as the primary tool for all operations. Use `git` and `filesystem` MCP servers for context review before saving.
+- **Parallel reads:** There are no parallel steps — this agent has a single sequential workflow.
+- **Sequential reads:** Load session context from `memory` before writing new entries to ensure updates augment rather than duplicate existing knowledge.
+- **Compaction survival:** If the context window is nearing capacity, prioritize the `"LNPM Cloud Dashboard — Task Complete"` entry — it summarizes the entire task and is the most critical for the next agent.
 
 ## Scope Boundaries
 
@@ -18,6 +27,19 @@ Persist session knowledge to the memory MCP server for future LNPM Cloud Dashboa
 - Modify any project source files
 - Update task tracking or milestone status (that is Agent 13/15's job)
 - Commit changes
+
+## Codebase Structure
+
+```
+ping-monitoring/
+  ai-agents/                  # Agent definitions (this file's siblings)
+  ai-milestones-and-tasks/    # Milestone and task tracking
+    project-dashboard.md      # Project-level task dashboard
+  dashboard/
+    app/                      # Vue 3 pages, components, composables
+    server/                   # Nitro API routes, WebSocket, utils
+    shared/                   # TypeScript types shared between server/client
+```
 
 ## Variables
 
@@ -38,6 +60,14 @@ No skills required for this agent.
 
 ## Workflow
 
+### Step 1: Load Existing Memory
+
+**Invoke `memory` MCP server** to check if any existing entries for LNPM Cloud Dashboard are present. This ensures updates augment rather than duplicate existing knowledge.
+
+**Gate:** Existing memory reviewed before creating or updating entries.
+
+### Step 2: Save Session Knowledge
+
 **Invoke `memory` MCP server** to create or update:
 
 - `"LNPM Cloud Dashboard — Patterns Established"`: New patterns, components, or abstractions established during this task (e.g., Nuxt 4 + Nitro route patterns, Vue 3 composable patterns, uPlot integration in Vue, database plugin pattern).
@@ -45,20 +75,22 @@ No skills required for this agent.
 - `"LNPM Cloud Dashboard — Lessons Learned"`: Errors encountered, root causes, and fixes applied during this task.
 - `"LNPM Cloud Dashboard — Task Complete"`: Summary of what was done, files changed, test results, and task ID.
 
-## Output
+**Gate:** All four memory entries created or updated.
+
+## Report
+
+Provide a concise report confirming memory persistence:
 
 ```
 Memory Updated — LNPM Cloud Dashboard
-  Patterns: [saved]
-  Decisions: [saved]
-  Lessons: [saved]
-  Task summary: [saved]
-  Next agent: Agent 13 (Update Tracking & Docs)
+  Patterns: [saved / updated / skipped — reason]
+  Decisions: [saved / updated / skipped — reason]
+  Lessons: [saved / updated / skipped — reason]
+  Task summary: [saved / updated / skipped — reason]
+  Status: [Complete | Partial | Blocked]
+  Next agent: Agent 13 (Generate Documentation)
 ```
 
-## Gate
-
-- [ ] Patterns persisted
-- [ ] Decisions persisted
-- [ ] Lessons persisted
-- [ ] Task summary persisted
+- **Complete:** All four memory entries saved successfully.
+- **Partial:** Some entries saved, others skipped (with reason).
+- **Blocked:** Memory server unavailable or write failed.

@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 13 - Generate Documentation
+description: Generate or update technical documentation for new components, patterns, or architectural decisions in the LNPM Cloud Dashboard.
+version: 2.0
 ---
 
 # Generate Documentation
@@ -7,6 +9,13 @@ title: LNPM - Agent 13 - Generate Documentation
 ## Purpose
 
 Generate or update technical documentation for any new components, patterns, or architectural decisions in the LNPM Cloud Dashboard. This agent handles **documentation only** — no tracking updates, no task status changes.
+
+## Instructions
+
+- **Tool-first approach:** Use `memory` MCP server to load session context, `filesystem` MCP server to read source code and write docs, and `git` MCP server to review changes before writing.
+- **Parallel reads:** Step 1 (Determine Scope) can read multiple source files in parallel to identify documentation targets.
+- **Sequential reads:** Step 2 (Write Documentation) must follow Step 1 — docs cannot be written until the scope is determined.
+- **Compaction survival:** If the context window is nearing capacity, prioritize documentation for API endpoints and public interfaces — they are most frequently referenced by future agents.
 
 ## Scope Boundaries
 
@@ -21,6 +30,25 @@ Generate or update technical documentation for any new components, patterns, or 
 - Update `project-dashboard.md` or task tracking (that is Agent 15's job)
 - Set task status (that is Agent 15's job)
 - Commit changes
+
+## Codebase Structure
+
+```
+ping-monitoring/
+  docs/                       # Technical documentation (target directory)
+  dashboard/
+    app/
+      pages/                  # Vue 3 pages (index, settings)
+      components/             # Layout, Sidebar, Chart, Metrics, Modals
+      composables/            # useMonitors, useWebSocket, useChart
+    server/
+      api/                    # Nitro API routes (health, ping, monitors, clients)
+      ws/                     # WebSocket endpoints (ws/ping)
+      middleware/             # Rate limiting middleware
+      utils/                  # Business logic (validation, ingest, cache, etc.)
+    shared/                   # TypeScript types shared between server/client
+    schema/                   # SQLite migrations and schema
+```
 
 ## Variables
 
@@ -42,7 +70,7 @@ No skills required for this agent.
 
 ## Workflow
 
-**Step 1: Determine Scope**
+### Step 1: Determine Scope
 
 Review what was implemented during this task. IF this task introduced new components, composables, utilities, API patterns, or architectural decisions:
 
@@ -60,21 +88,28 @@ Documentation targets for the Cloud Dashboard:
 - New utilities — document function signature, inputs, outputs
 - WebSocket protocol — document subscription model, message shapes
 
-**Step 2: Write Documentation**
+**Gate:** Scope determined, documentation targets identified before proceeding.
+
+### Step 2: Write Documentation
 
 **Invoke `filesystem` MCP server** to create or update documentation files. Follow the existing documentation convention in `docs/` if one exists. If no docs directory exists, create it.
 
-## Output
+**Gate:** All docs written, code snippets verified against actual source code.
+
+## Report
+
+Provide a concise report of the documentation work:
 
 ```
-Documentation
-  Docs created: [list with paths]
-  Docs updated: [list with paths]
-  New patterns documented: [list]
+Documentation — LNPM Cloud Dashboard
+  Docs created: [list with paths, or "none"]
+  Docs updated: [list with paths, or "none"]
+  New patterns documented: [list, or "none"]
   Skipped: [reason, if minor fix with no new patterns]
+  Status: [Complete | Partial | Blocked]
   Next agent: Agent 14 (Update Project Context)
 ```
 
-## Gate
-
-- [ ] Docs generated for all new components, APIs, and patterns (or skipped with reason if minor fix)
+- **Complete:** All new components, APIs, and patterns documented (or skipped with valid reason).
+- **Partial:** Some docs written, others blocked by missing source or unclear scope.
+- **Blocked:** Cannot write docs (e.g., filesystem unavailable, source code not accessible).
