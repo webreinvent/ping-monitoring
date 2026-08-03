@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -132,3 +132,53 @@
 **Fix:** The `as unknown as Database` cast is acceptable for test mocks. The mock only needs to satisfy the methods actually called by the code under test (`prepare().all()`). TypeScript's structural typing means the mock only needs the methods that are actually invoked.
 
 **Prevention:** Use `as unknown as Database` sparingly — only in test code, not in production. The mock should implement only the methods used by the code under test, keeping tests focused on behavior, not type satisfaction.
+
+## Lesson 14: M1-T8 implementation was pre-built by earlier Agent 07 attempt
+
+**Error:** The M1-T8 code (history.ts, [id].get.ts, tests, types) was already created as untracked files on the `feature/M1-T8-monitor-history-api` branch by an earlier Agent 07 attempt. The current Agent 07 run fixed TypeScript errors and verified correctness rather than implementing from scratch.
+
+**Root cause:** Agent 05 (Plan) and Agent 06 (Audit) created the implementation plan and audit, but the code was actually already written during a previous session. The context files were missing so the agent started from the plan but found files already existed.
+
+**Fix:** Agent 07 focused on fixing TS2345/TS18048 errors (non-null assertions for array access, exported MonitorRow/ClientRow interfaces, ClientRow import in route handler) and running verification (typecheck, dev server).
+
+**Prevention:** When a feature branch already has untracked implementation files, Agent 02 (Understand Task Scope) should check for existing implementation before planning. The audit should also verify whether code exists before proposing implementation steps.
+
+## Lesson 15: better-sqlite3 native module segfaults on Linux container
+
+**Error:** `better-sqlite3` native module crashes with segfault when run in the Linux container environment (macOS prebuilt binary running on Linux kernel).
+
+**Root cause:** The `better-sqlite3` package ships prebuilt binaries for macOS which don't work on Linux containers. The tests use mock DBs (the `globalThis.__db` pattern) which avoids importing the native module.
+
+**Fix:** Tests use mock databases exclusively — `vi.mock("../utils/db")` with `createMockDb()` returning minimal `Database` stubs. This is the established pattern and works correctly.
+
+**Prevention:** When testing code that depends on `better-sqlite3`, always use mock DB injection. The `globalThis.__db` pattern is the project standard. Tests that directly import the real DB will crash in this environment.
+
+## Lesson 16: TypeScript non-null assertions for array access in tests
+
+**Error:** TS2345 errors when accessing array elements without non-null assertions (e.g., `intervals[0]` when TypeScript can't prove the array is non-empty).
+
+**Root cause:** TypeScript's type narrowing doesn't always propagate from `expect(intervals.length).toBe(1)` to the next line. The test code accesses `intervals[0]` which TypeScript sees as `QualityIntervalRecord | undefined`.
+
+**Fix:** Use non-null assertions (`intervals[0]!`) in test code where the test itself has already verified the array has elements. This is safe in tests because the assertion is the test's own verification.
+
+**Prevention:** In test code, use non-null assertions after verifying array length. In production code, use optional chaining or explicit checks.
+
+## Lesson 17: ClientRow interface needs to be exported from history.ts
+
+**Error:** `history.ts` uses `ClientRow` type for `buildTarget()` but the interface was defined locally. The route handler ([id].get.ts) needed to import it but it wasn't exported.
+
+**Root cause:** The interface was defined in `history.ts` without `export`, but the route handler needed the same type for casting DB results.
+
+**Fix:** Exported `MonitorRow` and `ClientRow` interfaces from `history.ts`. The route handler imports `ClientRow` from `../utils/history` for type assertions.
+
+**Prevention:** When a type is used by multiple modules (utility + route handler), define it in a shared location or export it from the utility module. Consider moving DB row types to `shared/types.ts` if they're used across multiple endpoints.
+
+## Lesson 18: Defensive copies for mutable arrays in interval computation
+
+**Error:** Test expected that `intervals[0].reasons` would be a defensive copy that couldn't be mutated by external code. The initial implementation used `[...currentReasons]` when pushing — but the test modifies the returned array and expects the original to be unchanged.
+
+**Root cause:** The reasons array was spread when creating each interval — but the test was checking that mutation of the returned array's reasons didn't affect the internal state. The spread was correct but the test needed to verify the copy semantics.
+
+**Fix:** The `[...currentReasons]` spread in the interval construction is sufficient — each interval gets its own copy of the reasons array. The test verifies this by pushing to `intervals[0].reasons` and checking that the original classifier state is unchanged.
+
+**Prevention:** When returning arrays of objects with mutable sub-arrays, always create defensive copies. The spread operator (`[...]`) for arrays and object spread (`{...obj}`) are the standard patterns.

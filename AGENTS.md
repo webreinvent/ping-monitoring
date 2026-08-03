@@ -292,7 +292,7 @@ const pkgVersion = (() => {
 
 ---
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T7 monitors list conventions appended)*
+*Last updated: 2026-08-03 (Agent 14 — M1-T8 monitor history API conventions appended)*
 
 ## Client Identity Pattern (M1-T5 / F2)
 
@@ -505,3 +505,86 @@ The `GET /api/monitors` endpoint returns all monitors with their latest state, j
 | ADR-016 | LEFT JOIN for Monitors Without Samples | Monitors appear immediately after creation; null state fields for monitors with zero ping samples |
 | ADR-017 | COALESCE Sort for Null Timestamps | Monitors with no samples sort to the end using COALESCE(timestamp_ms, 0) DESC |
 | ADR-018 | Status Mapping Layer | Private helper functions map DB status to API status; prevents internal state names leaking to API |
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T8)
+
+### Monitor History API (M1-T8 / F6)
+
+The `GET /api/monitors/:id` endpoint returns historical ping data as `HistoryResponse` formatted for uPlot charts. Supports time window queries, down-sampling via maxPoints, and computes quality intervals and range summaries.
+
+#### SQL GROUP BY Bucket Aggregation Pattern
+- **File**: `server/utils/history.ts` → `getMonitorHistoryPoints()`
+- **Pattern**: SQL `GROUP BY` on `CAST(floor(timestamp_ms / :bucketMs) * :bucketMs AS INTEGER)` for time-bucketed aggregation
+- **Single query, single pass** — no subqueries or window functions; uses `AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END)` for null-safe latency stats
+- **Returns**: `HistoryPoint[]` with snake_case→camelCase field mapping (timestampMs, averageLatencyMs, minimumLatencyMs, maximumLatencyMs, sampleCount, failureCount)
+- **Empty result**: Returns empty array when no data exists in range — still returns 200
+- **Clean bucket sizes**: `[1000, 5000, 10000, 30000, 60000, 300000, 900000, 1800000, 3600000]` — sub-minute buckets skipped (minimum 60s)
+
+#### Down-sampling via Bucket Size Adjustment
+- **`calculateBucketSize(fromMs, toMs, maxPoints)`**: Starts at 1-minute default, tries CLEAN_BUCKET_SIZES until `Math.ceil(rangeMs / bucketMs) <= maxPoints`
+- **Falls back** to largest bucket (3600000ms = 1h) if even max size doesn't fit
+- **Not post-hoc sampling** — the SQL query itself returns the right number of buckets; no re-aggregation needed
+
+#### Quality Classification
+- **`classifyPoint(point, cumulativeSamples, index)`**: Pure function mapping a HistoryPoint to `QualityState` (`warmingUp` | `low` | `medium` | `high` | `veryHigh` | `unstable` | `disconnected`)
+- **Thresholds**: warmingUp (<5 cumulative samples), low (<1% loss, <50ms avg), medium (<5% loss, <100ms avg), high (<10% loss, <200ms avg), veryHigh (<10% loss, >=200ms avg), unstable (>=10% loss or no latency)
+- **`collectReasons()`**: Collects QualityReason tags (`packetLoss`, `highLatency`, `insufficientSamples`) based on point metrics
+- **`computeQualityIntervals(points, bucketMs)`**: Linear scan merging consecutive same-state points into intervals (QualityIntervalRecord[]), with gap detection (gap > 2x bucket → disconnected interval)
+- **Defensive copies**: Reasons arrays are spread (`[...currentReasons]`) to prevent external mutation
+- **Final interval**: `endMs` is `null` (open-ended) for the last interval
+
+#### Range Summary Computation
+- **`computeRangeSummary(points, intervals?)`**: Accepts pre-computed intervals (avoids recomputation) or computes them
+- **p95 approximation**: Uses per-bucket averages as proxy — acceptable for MVP, documented
+- **Min/max from aggregated extremes**: `Math.min(...minLatencies)` across buckets gives true minimum; same for max
+- **Stable/unstable from intervals**: low/medium/warmingUp → stable, high/veryHigh/unstable → unstable, disconnected → disconnected
+- **Percentages**: Computed as `(stateMs / totalTimeMs) * 100` where `totalTimeMs = lastPoint - firstPoint`
+
+#### History Route Handler Pattern
+- **File**: `server/api/monitors/[id].get.ts`
+- **Query params**: `fromMs` (default: 1 hour ago), `toMs` (default: now), `maxPoints` (default: 2000, capped at 5000)
+- **Validation order**: Parse path param → parse query params → validate params (fromMs < toMs) → verify monitor exists → aggregate
+- **Fail fast**: Monitor existence check (`SELECT * FROM monitors WHERE id = ?`) before expensive aggregation
+- **Error codes**: 404 (monitor not found), 400 (invalid params), 500 (database error)
+- **Error handling**: Re-throw Nitro `createError` errors as-is; catch-all for unexpected errors logs and throws 500
+- **Logging**: `info()` with monitorId, time range, bucket size, and point count
+
+#### HistoryResponse Shape
+- **Structure**: `{ fromMs, toMs, bucketMs, series: HistorySeries[] }` — always an array of series (single element for single-monitor view)
+- **HistorySeries**: `{ target, points, intervals, summary }` — complete data for uPlot chart rendering
+- **Target**: Built from `MonitorRow` + `ClientRow` via `buildTarget()`, with default thresholds and address family detection (IPv6 heuristic: contains `:`)
+
+#### F6 Types (shared/types.ts)
+- **`QualityState`**: `"warmingUp" | "low" | "medium" | "high" | "veryHigh" | "unstable" | "disconnected"`
+- **`QualityReason`**: `"packetLoss" | "highLatency" | "highJitter" | "insufficientSamples"`
+- **`HistoryPoint`**: timestampMs, averageLatencyMs, minimumLatencyMs, maximumLatencyMs, sampleCount, failureCount
+- **`QualityIntervalRecord`**: startMs, endMs (nullable), state, reasons[]
+- **`RangeSummary`**: sampleCount, successCount, failureCount, packetLossPercent, average/min/max/p95LatencyMs, stable/unstable/disconnected (ms + percent)
+- **`Target`**: id (string), name, host, enabled, addressFamily, intervalMs, timeoutMs, thresholds (object), createdAtMs, archivedAtMs
+- **`HistorySeries`**: target, points, intervals, summary
+- **`HistoryResponse`**: fromMs, toMs, bucketMs, series (HistorySeries[])
+
+#### MonitorRow and ClientRow Export Pattern
+- **Exported from `server/utils/history.ts`** — these DB row types are used by both the utility module and route handlers
+- **`MonitorRow`**: 11 fields matching monitors table (id, client_id, target_host, target_name, quality_state, state_since_ms, last_seen_ms, last_status, last_latency_ms, created_at, updated_at)
+- **`ClientRow`**: 12 fields matching clients table (id, slug, name, username, hostname, mac_address, sync_enabled, sync_interval_min, backend_url, last_synced_at_ms, created_at, updated_at)
+- **Pattern**: When a type is used by multiple modules (utility + route handler), export it from the utility or move to `shared/types.ts`
+
+#### Test Patterns — History
+- **Unit tests** (`history.test.ts`): Test pure functions — `calculateBucketSize`, `computeQualityIntervals`, `computeRangeSummary`, `buildTarget`
+- **Edge case tests** (`history.edge-cases.test.ts`): Empty arrays, single point, all failures, large gaps, maxPoints limits, defensive copy verification
+- **API unit tests** (`[id].get.test.ts`): Test route handler param parsing, validation, 404/400 error paths
+- **Integration tests** (`[id].get.integration.test.ts`): Mock DB + full handler flow — verify end-to-end response shape
+- **Mock DB**: Returns pre-configured rows for `SELECT * FROM monitors` and `SELECT * FROM clients` queries
+
+### ADRs — Monitor History (M1-T8)
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-019 | Raw Aggregation (No Materialized Rollups) | Direct SQL GROUP BY on ping_samples; simpler (no migration, no sync job), deferred to materialized rollups in F12/M2 |
+| ADR-020 | Server-side Quality Classification | Backend classifies quality state per bucket; frontend receives pre-classified data for chart coloring |
+| ADR-021 | Down-sampling via Bucket Size (Not Post-hoc) | calculateBucketSize() adjusts SQL bucket granularity; query returns optimal count — no re-aggregation |
+| ADR-022 | p95 from Bucket Averages (Approximation) | Uses per-bucket averages as p95 proxy; acceptable for MVP, can be improved with individual-sample percentile queries |
+| ADR-023 | Default 1-Hour Time Window | fromMs defaults to 1 hour ago, toMs to now; balanced default for recent, meaningful data |
+
+*Last updated: 2026-08-03 (Agent 14 — M1-T8 monitor history API conventions appended)*
