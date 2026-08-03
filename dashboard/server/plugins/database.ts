@@ -118,7 +118,7 @@ function runMigrations(db: Database.Database): void {
 export default defineNitroPlugin(() => {
   const db = getDatabase();
   // Store on globalThis for use in API routes
-  (globalThis as any).__db = db;
+  globalThis.__db = db;
 
   // Return cleanup function for graceful shutdown
   return () => {

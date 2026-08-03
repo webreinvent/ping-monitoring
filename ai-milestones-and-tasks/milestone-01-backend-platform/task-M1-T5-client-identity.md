@@ -3,7 +3,7 @@ taskId: M1-T5
 milestone: M1
 title: Implement client identity: slug generation, registration, upsert
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "3-4 hours"
 features:
   - F2
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 3-4 hours
 
 ## Description
@@ -29,27 +29,27 @@ Build the client identity system: auto-generate unique slugs from username + hos
 
 ## Acceptance Criteria
 
-- [ ] `generateSlug()` produces URL-safe slugs matching format `<username>-<hostname>-<truncated-mac>`
-- [ ] Slug is deterministic: same inputs always produce same slug
-- [ ] `upsertClient()` creates new client on first call, no-op on subsequent calls
-- [ ] `GET /api/clients/:slug` returns full client record
-- [ ] `PUT /api/clients/:slug/name` updates name, returns updated record
-- [ ] Name validation: rejects empty, whitespace-only, or >100 char names
-- [ ] 404 for non-existent slug on both endpoints
-- [ ] Response shapes match F2 API contract
+- [x] `generateSlug()` produces URL-safe slugs matching format `<username>-<hostname>-<truncated-mac>`
+- [x] Slug is deterministic: same inputs always produce same slug
+- [x] `upsertClient()` creates new client on first call, no-op on subsequent calls
+- [x] `GET /api/clients/:slug` returns full client record
+- [x] `PUT /api/clients/:slug/name` updates name, returns updated record
+- [x] Name validation: rejects empty, whitespace-only, or >100 char names
+- [x] 404 for non-existent slug on both endpoints
+- [x] Response shapes match F2 API contract
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors and health endpoint returns 200
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors and health endpoint returns 200
 
 ## Testing Checklist
 
-- [ ] Slug generation produces correct format
-- [ ] Upsert is idempotent (no duplicate records)
-- [ ] Name editing validates input
-- [ ] API endpoints return correct shapes
+- [x] Slug generation produces correct format
+- [x] Upsert is idempotent (no duplicate records)
+- [x] Name editing validates input
+- [x] API endpoints return correct shapes
 
 ## Dependencies
 

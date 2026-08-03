@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
-> Saved: 2026-08-02
-> Task: M1-T4 — Build health check endpoint with server metrics
+> Saved: 2026-08-03
+> Tasks: M1-T4 (health check), M1-T5 (client identity)
 
 ## Technology Stack Decisions
 
@@ -73,3 +73,35 @@
 ### Response field types
 - **Decision:** All counts are numbers (0 for empty), `last_ingest_time` is `string | null`, `uptime` is number (2 decimal places)
 - **Rationale:** Matches F14 API contract exactly; consistent with TypeScript interface `HealthResponse`
+
+## Client Identity Decisions (M1-T5 / F2)
+
+### Slug Generation Algorithm
+- **Decision:** Use `<username>-<hostname>-<last-10-hex-chars-of-MAC>` as slug format
+- **Rationale:** Deterministic (same inputs always produce same slug), URL-safe, human-readable, and collision-resistant (MAC address provides entropy)
+- **Impact:** Slug is computed once on ingest; all subsequent client lookups use this deterministic value
+
+### ClientRow vs ClientResponse Type Separation
+- **Decision:** Maintain separate TypeScript interfaces for DB rows (`ClientRow`) and API responses (`ClientResponse`)
+- **Rationale:** Prevents leaking internal DB fields (sync settings, backend URL, epoch timestamps) to API consumers
+- **Impact:** `toClientResponse()` is the sole serialization function — single source of truth for API shape
+
+### Upsert via INSERT OR IGNORE with ON CONFLICT
+- **Decision:** Use SQLite's `INSERT ... ON CONFLICT(slug) DO UPDATE SET` for client registration
+- **Rationale:** Single SQL statement handles both new and existing clients; no race conditions; no application-level existence checks needed
+- **Impact:** Idempotent client registration — safe to call multiple times with same inputs
+
+### Default Name: username@hostname
+- **Decision:** Auto-generate client name as `username@hostname` on first registration
+- **Rationale:** Provides meaningful default without requiring client-side input; follows convention of "who@where"
+- **Impact:** Can be overridden later via `PUT /api/clients/:slug/name` (F11)
+
+### Name Validation: 1-100 characters after trim
+- **Decision:** Trim whitespace and reject empty strings, whitespace-only strings, or strings >100 chars
+- **Rationale:** Prevents database abuse; 100 chars is generous for display names but prevents pathological inputs
+- **Impact:** Returns 400 Bad Request with descriptive error message
+
+### Timestamps: ISO 8601 strings in API, epoch-ms in DB
+- **Decision:** Store timestamps as epoch milliseconds in DB (better-sqlite3 stores as numbers), convert to ISO 8601 strings in API responses
+- **Rationale:** Epoch-ms is efficient for storage and comparison; ISO 8601 is human-readable and matches API contract
+- **Impact:** `toClientResponse()` handles the conversion transparently

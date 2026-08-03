@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
-> Saved: 2026-08-02
-> Task: M1-T4 — Build health check endpoint with server metrics
+> Saved: 2026-08-03
+> Tasks: M1-T4 (health check), M1-T5 (client identity)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -72,3 +72,33 @@
 **Fix:** Full rewrite of `shared/types.ts` to match API design document (Section 15). This was identified as a DRY violation in the plan audit.
 
 **Prevention:** Treat shared types as the source of truth and update them first when API contracts change. Use the implementation plan's Step 1 (types) as the foundation for all subsequent work.
+
+## Lesson 8: M1-T5 was already implemented by Agent 00 during M1-T4
+
+**Error:** The task M1-T5 (Client Identity) was listed as "Not Started" in the project dashboard, but all code had already been implemented by Agent 00 during the M1-T4 (backend setup) phase.
+
+**Root cause:** Agent 00 built the client identity code (`client.ts`, API endpoints, tests) as part of the broader M1-T4 backend setup tasks because client identity was a foundational dependency for the database schema and health endpoint. The task tracking was never updated to reflect this.
+
+**Fix:** Recognized during Agent 02 (Understand Task Scope) that all M1-T5 acceptance criteria were already met. The session focused on verification rather than implementation.
+
+**Prevention:** When agents implement code that fulfills future task acceptance criteria, they should document which tasks were completed. The project dashboard should be updated after each session, not just after dedicated task sessions.
+
+## Lesson 9: better-sqlite3@13 requires Node 22+, crashes on Node 20
+
+**Error:** New test files (client.test.ts, [slug].get.test.ts, [slug].name.put.test.ts) crashed the Vitest worker with a better-sqlite3 segfault when run on Node 20.
+
+**Root cause:** better-sqlite3@13 (the version installed with npm) requires Node.js 22+ for native bindings. The existing 242 tests pass because they use mock DBs (via `globalThis.__db` injection) and never actually import better-sqlite3.
+
+**Fix:** The existing tests use mock databases (the `globalThis.__db` pattern), which works around this issue. The server itself would crash when first accessing the DB on Node 20, but this is a deployment-time issue, not a code issue.
+
+**Prevention:** When writing tests that import modules using native bindings, prefer mock injection over direct imports. The `globalThis.__db` pattern is the project standard for this reason.
+
+## Lesson 10: Task context files use different naming conventions
+
+**Error:** The task specification file for M1-T5 is `task-M1-T5-client-identity.md` (with the descriptive suffix), but the project dashboard references it simply as `task-M1-T5.md`.
+
+**Root cause:** Task files in the milestone directories include descriptive suffixes (e.g., `-client-identity`), making exact filename lookups unreliable.
+
+**Fix:** Used Explore agent to search for files matching patterns like `**/task*{M1,T5}*` rather than trying to construct the exact path.
+
+**Prevention:** When looking for task files, search for patterns rather than constructing exact paths. The Explore agent is well-suited for this.

@@ -292,4 +292,58 @@ const pkgVersion = (() => {
 
 ---
 
-*Last updated: 2026-08-02 (Agent 14 — M1-T4 health endpoint conventions, F14 extended metrics, version caching IIFE, health test patterns, lessons learned)*
+*Last updated: 2026-08-03 (Agent 14 — M1-T5 client identity conventions, parameterized routes, upsert pattern, ClientRow/ClientResponse type separation)*
+
+## Client Identity Pattern (M1-T5 / F2)
+
+### Slug Generation
+- **Pure function** `generateSlug(username, hostname, macAddress)` with no external dependencies
+- **Format:** `<username>-<hostname>-<truncated-mac>` where truncated-mac is the last 10 hex characters of the MAC address
+- **Steps:** strip non-hex from MAC → build raw string → replace non-alphanumeric with hyphens → collapse consecutive hyphens → trim leading/trailing hyphens
+- **Throws** on empty inputs (fail-fast validation)
+- **Deterministic:** same inputs always produce same slug
+- **Example:** `alice`, `desktop`, `aa:00:bb:11:cc:22` → `alice-desktop-00bb11cc22`
+
+### ClientRow vs ClientResponse Type Separation
+- **`ClientRow`** — raw database row shape (snake_case, epoch-ms timestamps, includes internal fields like `sync_enabled`, `sync_interval_min`, `backend_url`, `last_synced_at_ms`)
+- **`ClientResponse`** — API response shape (snake_case keys matching API contract, ISO 8601 string timestamps, excludes internal sync/backend fields)
+- **`toClientResponse(row: ClientRow): ClientResponse`** — the sole serialization function; prevents leaking DB internals to API consumers
+- **Pattern:** Always maintain separate interfaces for DB rows and API responses — never return raw DB rows from API handlers
+
+### Upsert Pattern
+- **SQL:** `INSERT ... ON CONFLICT(slug) DO UPDATE SET` — single SQL statement, no application-level existence checks
+- **Default name** is `username@hostname` (auto-generated on first registration)
+- **Idempotent** — safe to call multiple times with same inputs; no duplicate records
+- **Returns** the upserted row by querying `getClientBySlug()` after insert
+- **Pattern:** Use `ON CONFLICT` for all entity registration — avoids race conditions and N+1 queries
+
+### Name Validation
+- Trim whitespace, then validate: reject empty, whitespace-only, or >100 characters
+- Returns HTTP 400 with descriptive error message on validation failure
+- Pattern: Validate input in API handler before calling utility function; utility functions assume valid input
+
+### Parameterized Routes (Nitro Dynamic Routes)
+- **Pattern:** `server/api/clients/[slug].get.ts` — the `[slug]` segment is a dynamic parameter extracted from the URL
+- **Nested routes:** `server/api/clients/[slug].name.put.ts` maps to `PUT /api/clients/:slug/name`
+- **Access params:** Use `event.context.params.slug` or `getRouterParameter(event, 'slug')` to extract the parameter value
+- **Convention:** Always validate parameter values (empty strings, invalid format) before processing
+
+### Client API Endpoint Patterns
+- `GET /api/clients/:slug` — Returns full client record or 404
+- `PUT /api/clients/:slug/name` — Updates name with validation, returns updated record or 404
+- Both follow: parse params → validate → call utility → return `toClientResponse()` or throw error
+- Error codes: 400 for validation errors, 404 for missing resources
+
+## Client Identity ADR
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-004 | Client Identity via Username + Hostname + MAC | Human-readable slug, device-bound identity, immutable identifier |
+
+## Client-Specific Test Patterns
+
+- **Slug generation tests:** Verify format, determinism, edge cases (special chars in hostname/username, MAC formats)
+- **Upsert idempotency tests:** Call twice with same inputs, verify no duplicate records, verify `updated_at` changes
+- **Name validation edge cases:** Empty string, whitespace-only, exactly 100 chars, 101 chars, null/undefined
+- **404 tests:** Non-existent slug returns proper error shape, not internal error
+- **Integration tests:** Mock DB + handler flow to verify end-to-end response shape (including `toClientResponse` conversion)
