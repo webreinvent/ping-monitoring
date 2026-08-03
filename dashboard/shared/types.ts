@@ -118,3 +118,46 @@ export interface HealthErrorResponse {
   message: string;
 }
 
+/**
+ * Monitor item in the monitors list API response (F5).
+ * Represents a single monitor with its latest state and client info.
+ */
+export interface MonitorListItem {
+  /** Unique monitor ID */
+  id: number;
+
+  /** Client slug (immutable identifier) */
+  clientSlug: string;
+
+  /** Client human-readable name */
+  clientName: string;
+
+  /** Target hostname or IP being monitored */
+  targetHost: string;
+
+  /** Human-readable target name (falls back to targetHost) */
+  targetName: string;
+
+  /** Latest status: up (success), down (timeout/error), or null (no samples) */
+  status: "up" | "down" | null;
+
+  /** Latest latency in milliseconds, or null if no samples */
+  latencyMs: number | null;
+
+  /** Quality classification from monitor row */
+  qualityState: "good" | "degraded" | "poor" | "unknown";
+
+  /** Timestamp in epoch ms of the latest ping sample, or null */
+  lastSeenMs: number | null;
+
+  /** ISO 8601 creation timestamp */
+  createdAt: string;
+}
+
+/**
+ * Response from GET /api/monitors (F5).
+ */
+export interface MonitorsListResponse {
+  monitors: MonitorListItem[];
+}
+

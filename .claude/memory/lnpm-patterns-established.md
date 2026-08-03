@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -128,3 +128,58 @@ afterEach(() => {
 - `PUT /api/clients/[slug].name.put.ts` — nested route with method-specific handler
 - Both follow: parse params → validate → call utility → return response or throw error
 - 400 for validation errors, 404 for missing resources
+
+## CTE + ROW_NUMBER Pattern for Latest-State Queries (M1-T7 / F5)
+
+**Pattern:** Use a CTE with `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ... DESC)` to efficiently fetch the latest row per entity, then LEFT JOIN to the main table.
+
+```sql
+WITH latest_samples AS (
+  SELECT monitor_id, status, latency_ms, timestamp_ms,
+    ROW_NUMBER() OVER (PARTITION BY monitor_id ORDER BY timestamp_ms DESC) AS rn
+  FROM ping_samples
+)
+SELECT m.id, c.slug AS client_slug, c.name AS client_name,
+  m.target_host, m.target_name,
+  ls.status AS last_status, ls.latency_ms AS last_latency_ms, ls.timestamp_ms AS last_seen_ms,
+  m.quality_state, m.created_at
+FROM monitors m
+INNER JOIN clients c ON m.client_id = c.id
+LEFT JOIN latest_samples ls ON m.id = ls.monitor_id AND ls.rn = 1
+ORDER BY COALESCE(ls.timestamp_ms, 0) DESC, m.id ASC
+```
+
+- **Single query, no N+1** — all data fetched in one SQL call
+- **LEFT JOIN** ensures monitors with no samples still appear (with null state fields)
+- **COALESCE(null_timestamp, 0) DESC** pushes monitors with no samples to the end of results
+- **Stable tiebreaker**: `m.id ASC` ensures deterministic order when timestamps match
+
+## Monitors List Utility Pattern (M1-T7)
+
+**Pattern:** Separate `utils/monitors.ts` utility with `getAllMonitorsWithLatestState()` returning `MonitorListItem[]`, followed by field mapping.
+
+- Pure utility function with no HTTP context — testable in isolation
+- SQL query returns snake_case DB fields; `.map()` transforms to camelCase API fields
+- Mapping functions (`mapSampleStatus`, `mapQualityState`) are private helpers within the module
+- Null-safe: `target_name ?? target_host` for fallback, `null` for missing sample fields
+- `created_at` (epoch ms in DB) → `new Date(row.created_at).toISOString()` for API
+
+## Mock DB Pattern for Integration Tests (M1-T7)
+
+**Pattern:** Mock `getDb()` with `vi.mock()` and construct a minimal `Database` stub returning pre-configured rows.
+
+```typescript
+vi.mock("../utils/db", () => ({ getDb: vi.fn() }));
+
+function createMockDb(rows: Array<{ ... }>): Database {
+  return {
+    prepare: vi.fn().mockReturnValue({
+      all: vi.fn().mockReturnValue(rows),
+    }),
+  } as unknown as Database;
+}
+```
+
+- Avoids better-sqlite3 segfault on Node 20 by never importing the real DB
+- Tests the full query + mapping pipeline without a real database
+- Follows the same pattern established by `ping-ingest.integration.test.ts`
