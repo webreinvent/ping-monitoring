@@ -57,6 +57,13 @@ export function generateSlug(
   hostname: string,
   macAddress: string,
 ): string {
+  // Validate inputs are non-empty
+  if (!username.trim() || !hostname.trim() || !macAddress.trim()) {
+    throw new Error(
+      "Username, hostname, and macAddress must all be non-empty strings",
+    );
+  }
+
   // Strip non-hex characters from MAC and take last 10 hex chars
   const cleanMac = macAddress.replace(/[^a-f0-9]/gi, "");
   const truncatedMac = cleanMac.slice(-10);
@@ -114,14 +121,17 @@ export function upsertClient(
 ): ClientRow {
   const db = getDb();
   const now = Date.now();
-  const slug = generateSlug(username, hostname, macAddress);
-  const name = `${username}@${hostname}`;
+  const slug = generateSlug(
+    username.trim(),
+    hostname.trim(),
+    macAddress.trim(),
+  );
+  const name = `${username.trim()}@${hostname.trim()}`;
 
   const stmt = db.prepare(`
     INSERT INTO clients (slug, name, username, hostname, mac_address, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET
-      name = excluded.name,
       username = excluded.username,
       hostname = excluded.hostname,
       mac_address = excluded.mac_address,
@@ -163,9 +173,9 @@ export function updateClientName(slug: string, name: string): ClientRow | null {
   const stmt = db.prepare(
     "UPDATE clients SET name = ?, updated_at = ? WHERE slug = ?",
   );
-  const result = stmt.run(name, now, slug);
+  const result = stmt.run(name, now, slug) as { changes: number };
 
-  if ((result as any).changes === 0) {
+  if (result.changes === 0) {
     return null;
   }
 

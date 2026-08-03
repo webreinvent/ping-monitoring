@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
-> Saved: 2026-08-02
-> Task: M1-T4 — Build health check endpoint with server metrics
+> Saved: 2026-08-03
+> Tasks: M1-T4 (health check), M1-T5 (client identity)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -102,3 +102,29 @@ afterEach(() => {
 - COUNT query simulation tests
 - Path resolution tests (DATABASE_PATH env var)
 - Full endpoint integration tests (mock DB + handler flow)
+
+## Client Identity Pattern (M1-T5 / F2)
+
+**Pattern:** Slug generation as a pure function with deterministic, URL-safe output; client upsert via `INSERT ... ON CONFLICT`; separation of `ClientRow` (DB shape) from `ClientResponse` (API shape).
+
+### Slug Generation
+- Pure function `generateSlug(username, hostname, macAddress)` with no external dependencies
+- Format: `<username>-<hostname>-<truncated-mac>` (last 10 hex chars of MAC)
+- Steps: strip non-hex from MAC → build raw string → replace non-alphanumeric with hyphens → collapse consecutive hyphens → trim leading/trailing hyphens
+- Throws on empty inputs (fail-fast validation)
+
+### ClientRow vs ClientResponse Type Separation
+- `ClientRow` — raw database row shape (snake_case, epoch-ms timestamps, internal fields)
+- `ClientResponse` — API response shape (snake_case keys matching API contract, ISO 8601 string timestamps, excludes internal fields like `sync_enabled`, `sync_interval_min`, `backend_url`, `last_synced_at_ms`)
+- `toClientResponse(row: ClientRow): ClientResponse` is the sole serialization function — prevents leaking DB internals
+
+### Upsert Pattern
+- Uses `INSERT ... ON CONFLICT(slug) DO UPDATE SET` — single SQL statement, no application-level existence checks
+- Default name is `username@hostname` (auto-generated)
+- Returns the upserted row via `getClientBySlug()` after insert
+
+### API Endpoint Pattern (Parameterized Routes)
+- `GET /api/clients/[slug].get.ts` — uses Nitro's file-based routing with dynamic `[slug]` parameter
+- `PUT /api/clients/[slug].name.put.ts` — nested route with method-specific handler
+- Both follow: parse params → validate → call utility → return response or throw error
+- 400 for validation errors, 404 for missing resources

@@ -6,8 +6,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "Missing slug parameter" });
   }
 
-  const body = await readBody(event);
-  const { name } = body as { name?: unknown };
+  const body = (await readBody(event)) as { name?: unknown } | null;
+  const { name } = body ?? {};
 
   // Validate: must be a string
   if (typeof name !== "string") {

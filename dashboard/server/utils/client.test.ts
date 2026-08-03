@@ -58,6 +58,30 @@ describe("generateSlug", () => {
     const slug = generateSlug("user name", "host name", "aa:bb:cc:dd:ee:ff");
     expect(slug).toMatch(/^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$/);
   });
+
+  it("rejects empty username", () => {
+    expect(() => generateSlug("", "host", "aa:bb:cc:dd:ee:ff")).toThrow(
+      "Username, hostname, and macAddress must all be non-empty strings",
+    );
+  });
+
+  it("rejects empty hostname", () => {
+    expect(() => generateSlug("user", "", "aa:bb:cc:dd:ee:ff")).toThrow(
+      "Username, hostname, and macAddress must all be non-empty strings",
+    );
+  });
+
+  it("rejects empty macAddress", () => {
+    expect(() => generateSlug("user", "host", "")).toThrow(
+      "Username, hostname, and macAddress must all be non-empty strings",
+    );
+  });
+
+  it("rejects whitespace-only inputs", () => {
+    expect(() => generateSlug("  ", "  ", "  ")).toThrow(
+      "Username, hostname, and macAddress must all be non-empty strings",
+    );
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -158,13 +182,12 @@ describe("upsertClient SQL construction", () => {
     expect(name).toBe("alice@desktop");
   });
 
-  it("upsert uses INSERT with ON CONFLICT", () => {
+  it("upsert uses INSERT with ON CONFLICT (preserves custom name)", () => {
     // Verify the SQL pattern used by upsertClient
     const sql = `
     INSERT INTO clients (slug, name, username, hostname, mac_address, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET
-      name = excluded.name,
       username = excluded.username,
       hostname = excluded.hostname,
       mac_address = excluded.mac_address,
@@ -172,7 +195,8 @@ describe("upsertClient SQL construction", () => {
   `;
     expect(sql).toContain("INSERT INTO clients");
     expect(sql).toContain("ON CONFLICT(slug) DO UPDATE");
-    expect(sql).toContain("excluded.name");
+    // Name should NOT be updated on conflict — preserves user-edited names
+    expect(sql).not.toContain("excluded.name");
   });
 });
 
