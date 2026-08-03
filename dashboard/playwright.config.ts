@@ -51,10 +51,10 @@ export default defineConfig({
     command: "NUXT_IGNORE_LOCK=1 pnpm dev",
     port: 3000,
     timeout: (() => {
-    const raw = process.env.START_SERVER_TIMEOUT ?? "60";
-    const seconds = Number(raw);
-    return Number.isNaN(seconds) ? 60_000 : Math.floor(seconds * 1000);
-  })(),
+      const raw = process.env.START_SERVER_TIMEOUT ?? "60";
+      const seconds = Number(raw);
+      return Number.isNaN(seconds) ? 60_000 : Math.floor(seconds * 1000);
+    })(),
     reuseExistingServer: true,
   },
 });

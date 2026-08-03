@@ -153,12 +153,31 @@ Client → server message types. Used by the WebSocket handler to dispatch inbou
 #### WsOutboundType
 
 ```typescript
-type WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample";
+type WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample" | "client_name_updated";
 ```
 
 Server → client message types. Used by the WebSocket handler and broadcast function.
 
 **Used by:** `server/ws/ping.ts`, `broadcastSample()`.
+
+#### WsClientNameUpdated
+
+```typescript
+interface WsClientNameUpdated {
+  type: "client_name_updated";
+  clientSlug: string;   // The client's unique slug
+  newName: string;      // The new display name
+}
+```
+
+Broadcast to all connected WebSocket clients when a client's display name is updated. Used by the frontend `useWebSocket` composable via `onClientNameUpdated()` callback.
+
+**Used by:** `server/ws/ping.ts` (broadcast), `app/composables/useWebSocket.ts` (callback registration).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `clientSlug` | `string` | The client's unique slug identifier |
+| `newName` | `string` | The new display name |
 
 #### WsPingSample
 

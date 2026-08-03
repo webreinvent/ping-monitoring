@@ -3,7 +3,7 @@ taskId: M2-T4
 milestone: M2
 title: Build per-monitor detail view with chart and metrics
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "3-4 hours"
 features:
   - F8
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M2 (Dashboard UI)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 3-4 hours
 
 ## Description

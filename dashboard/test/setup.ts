@@ -1,9 +1,17 @@
 /**
  * Shared test setup.
  * Clears global state before each test so tests are isolated.
+ * Also provides a mock for better-sqlite3 so tests that create in-memory
+ * databases can run without the native module.
  */
 
-import { beforeAll, beforeEach, afterEach, afterAll } from "vitest";
+import { beforeAll, beforeEach, afterEach, vi } from "vitest";
+import MockDatabase from "~/test/mock-db-factory";
+
+// Mock better-sqlite3 globally — tests that import Database will get the mock
+vi.mock("better-sqlite3", () => ({
+  default: MockDatabase,
+}));
 
 // Silently capture console output during tests to keep output clean.
 // Tests can still spy on console methods when they need to assert output.

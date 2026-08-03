@@ -3,7 +3,7 @@ taskId: M2-T5
 milestone: M2
 title: Implement WebSocket composable with live chart updates
 priority: High
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "3-4 hours"
 features:
   - F8
@@ -14,7 +14,7 @@ features:
 
 > **Milestone:** M2 (Dashboard UI)
 > **Priority:** High
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 3-4 hours
 
 ## Description

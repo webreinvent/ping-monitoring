@@ -1,14 +1,15 @@
 # Client Identity API
 
-**Endpoints:** `GET /api/clients/:slug`, `PUT /api/clients/:slug/name`
-**Files:** `server/api/clients/[slug].get.ts`, `server/api/clients/[slug].name.put.ts`
-**Features:** F2 (Client registration & identity), F11 (Dashboard client name editing)
+**Endpoints:** `GET /api/clients/:slug`, `PUT /api/clients/:slug/name`, `PUT /api/clients/:slug/settings`
+**Files:** `server/api/clients/[slug].get.ts`, `server/api/clients/[slug].name.put.ts`, `server/api/clients/[slug].settings.put.ts`
+**Features:** F2 (Client registration & identity), F9 (Client sync settings), F11 (Dashboard client name editing)
 
 ## Purpose
 
-The Client Identity API exposes two endpoints:
+The Client Identity API exposes three endpoints:
 1. **Retrieve a client** by its unique slug — returns the full client record with formatted timestamps.
 2. **Update a client's display name** — allows dashboard users to rename a client for human readability.
+3. **Update a client's sync settings** — enables/disables sync, sets the sync interval and backend URL.
 
 These endpoints serve the dashboard's client management UI and are the foundation for all client identification in the system. The slug is the primary identifier — deterministic, derived from `username`, `hostname`, and `mac_address`, and used across all data tables.
 
@@ -189,5 +190,7 @@ interface ClientResponse {
 - [Client Utility Documentation](../utils/client.md) — `generateSlug()`, `upsertClient()`, `getClientBySlug()`, `updateClientName()`
 - [Database Schema: clients table](../database/clients-table.md) — Table definition and constraints
 - [Shared Types](../shared/types.md) — `ClientIdentity` type
+- [Client Settings API](./clients-settings.md) — `PUT /api/clients/:slug/settings` endpoint
 - [Feature F2 Specification](../../requirements/features/feature-0002-client-identity.md) — Client registration & identity requirements
+- [Feature F9 Specification](../../requirements/features/feature-0009-client-settings.md) — Client sync settings requirements
 - [Feature F11 Specification](../../requirements/features/feature-00011-edit-client-name.md) — Dashboard client name editing requirements

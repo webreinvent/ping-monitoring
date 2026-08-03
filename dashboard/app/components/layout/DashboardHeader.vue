@@ -19,13 +19,39 @@
         <p>Cloud Dashboard</p>
       </div>
     </div>
-    <div class="connection-status">
-      <span class="connection-dot" />
-      <span>Live</span>
+    <div class="connection-status" :class="wsStateClass">
+      <span class="connection-dot" :class="wsDotClass" />
+      <span>{{ wsStateText }}</span>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
 const { toggle } = useResponsiveSidebar();
+const { connectionState } = useWebSocket();
+
+const wsStateClass = computed(() => {
+  switch (connectionState.value) {
+    case "connected": return "ws-connected";
+    case "reconnecting": return "ws-reconnecting";
+    default: return "ws-disconnected";
+  }
+});
+
+const wsDotClass = computed(() => {
+  switch (connectionState.value) {
+    case "connected": return "ws-dot connected";
+    case "reconnecting": return "ws-dot reconnecting";
+    default: return "ws-dot disconnected";
+  }
+});
+
+const wsStateText = computed(() => {
+  switch (connectionState.value) {
+    case "connected": return "Live";
+    case "reconnecting": return "Reconnecting...";
+    case "connecting": return "Connecting...";
+    default: return "Disconnected";
+  }
+});
 </script>

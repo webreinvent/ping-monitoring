@@ -3,7 +3,7 @@ import { getDb } from "./db";
 /**
  * Raw row shape from the `clients` table.
  */
-interface ClientRow {
+export interface ClientRow {
   id: number;
   slug: string;
   name: string;

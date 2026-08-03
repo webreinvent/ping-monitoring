@@ -30,7 +30,7 @@ export default defineNuxtConfig({
   },
 
   // Global CSS
-  css: ["~/assets/css/dashboard.css"],
+  css: ["~/assets/css/dashboard.css", "~/assets/css/charts.css"],
 
   // App head defaults
   app: {

@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
 
     // Validate top-level fields
     if (!body || typeof body.clientSlug !== "string" || !body.clientSlug.trim()) {
-      return createError({
+      throw createError({
         statusCode: 400,
         statusMessage: "Bad Request",
         data: {
@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
 
     // Validate samples array exists and is non-empty
     if (!Array.isArray(samples) || samples.length === 0) {
-      return createError({
+      throw createError({
         statusCode: 400,
         statusMessage: "Bad Request",
         data: {
@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
     const maxSamples =
       Number(process.env.INGEST_MAX_SAMPLES ?? 1000);
     if (samples.length > maxSamples) {
-      return createError({
+      throw createError({
         statusCode: 413,
         statusMessage: "Payload Too Large",
         data: {
@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
 
     // Handle unknown client
     if (result === null) {
-      return createError({
+      throw createError({
         statusCode: 401,
         statusMessage: "Unauthorized",
         data: {
@@ -147,7 +147,7 @@ export default defineEventHandler(async (event) => {
       error: message,
     });
 
-    return createError({
+    throw createError({
       statusCode: 500,
       statusMessage: "Internal Server Error",
       data: {

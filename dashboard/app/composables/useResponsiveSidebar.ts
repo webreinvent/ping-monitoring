@@ -1,3 +1,5 @@
+import { onScopeDispose } from "vue";
+
 const MOBILE_BREAKPOINT = 980;
 
 export function useResponsiveSidebar() {
@@ -9,17 +11,22 @@ export function useResponsiveSidebar() {
   // Listen for resize events
   if (import.meta.client) {
     let rafId: number | null = null;
-    window.addEventListener(
-      "resize",
-      () => {
-        if (rafId !== null) return; // Throttle with rAF
-        rafId = requestAnimationFrame(() => {
-          isMobile.value = window.innerWidth <= MOBILE_BREAKPOINT;
-          rafId = null;
-        });
-      },
-      { passive: true },
-    );
+    const handleResize = () => {
+      if (rafId !== null) return; // Throttle with rAF
+      rafId = requestAnimationFrame(() => {
+        isMobile.value = window.innerWidth <= MOBILE_BREAKPOINT;
+        rafId = null;
+      });
+    };
+    window.addEventListener("resize", handleResize, { passive: true });
+
+    // Clean up on component unmount
+    onScopeDispose(() => {
+      window.removeEventListener("resize", handleResize);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    });
   }
 
   // Sidebar open state (mobile only; desktop always visible)

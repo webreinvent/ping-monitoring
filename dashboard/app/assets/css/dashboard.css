@@ -321,41 +321,6 @@ body {
   transform: rotate(-90deg);
 }
 
-/* Monitor row */
-.monitor-row {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  min-height: 54px;
-  align-items: center;
-  margin: 2px 0;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 8px 10px;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  gap: 8px;
-  color: var(--text);
-  background: transparent;
-  cursor: pointer;
-  transition: 140ms ease;
-  text-decoration: none;
-}
-
-.monitor-row:focus-visible {
-  outline: 2px solid rgba(69, 223, 194, 0.55);
-  outline-offset: -2px;
-}
-
-.monitor-row:hover {
-  border-color: var(--line);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.monitor-row.selected {
-  border-color: rgba(69, 223, 194, 0.18);
-  background: linear-gradient(90deg, rgba(69, 223, 194, 0.12), rgba(69, 223, 194, 0.025));
-}
-
 .target-copy {
   display: flex;
   min-width: 0;

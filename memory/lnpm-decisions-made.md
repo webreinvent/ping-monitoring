@@ -1,6 +1,6 @@
 ---
 name: lnpm-decisions-made
-description: Architectural and implementation decisions for LNPM Cloud Dashboard — M1-T1
+description: Architectural and implementation decisions for LNPM Cloud Dashboard — M1 and M2
 metadata:
   type: project
   agent: "12"
@@ -13,7 +13,7 @@ metadata:
 
 ### Nuxt 4 + Nitro v2 (ADR-001)
 - **Decision**: Use Nuxt 4 with Nitro v2 as the full-stack framework for the Cloud Dashboard.
-- **Rationale**: Unified SSR/SSG/serverless-capable framework with built-in API routing, WebSocket support, and file-based routing. Replaces the desktop app's Tauri backend with a web-native approach.
+- **Rationale**: Unified SSR/SSG/serverless-capable framework with built-in API routing, WebSocket support, and file-based routing.
 - **Version**: Nuxt ^4.1.0, Nitro (bundled with Nuxt 4).
 
 ### Persistent `node-server` Runtime
@@ -23,100 +23,129 @@ metadata:
 
 ### better-sqlite3 for Database
 - **Decision**: Use `better-sqlite3` (synchronous, C++ bindings) over `sqlite3` (async) or `libsql`.
-- **Rationale**: Synchronous API simplifies error handling in a persistent Node.js process. No need for connection pooling since it's a single-process SQLite. WAL mode enabled for concurrent reads.
+- **Rationale**: Synchronous API simplifies error handling. No need for connection pooling since it's single-process SQLite. WAL mode for concurrent reads.
 
 ### TypeScript ^5.7.0
 - **Decision**: TypeScript 5.7.x for Nuxt 4.5 compatibility.
-- **Rationale**: Nuxt 4 requires TypeScript 5.0+. 5.7 is the latest stable that's been tested with Nuxt 4.
+
+### uPlot for Charts (ADR-012, M2-T3)
+- **Decision**: Use uPlot (not Chart.js, D3, or Recharts) for latency time-series charts.
+- **Rationale**: High-performance canvas rendering for time-series data (thousands of points), minimal bundle size (~14KB gzipped), built-in zoom/pan, and native support for background bands (quality state visualization).
+- **Impact**: All chart components use uPlot. `app/assets/css/charts.css` provides chart-specific styling. `app/utils/quality-bands.ts` generates Qual plugin paths.
+
+### uPlot Qual Plugin for Quality Bands (M2-T3)
+- **Decision**: Use uPlot's `Qual` plugin (not custom canvas drawing) for quality state background bands.
+- **Rationale**: Clean separation of data (quality intervals) from rendering (SVG path strings). uPlot's native band rendering is performant and integrates with zoom/pan.
 
 ## Architecture Decisions
 
 ### Database via `globalThis`
 - **Decision**: Store DB instance on `globalThis.__db` for cross-module access.
-- **Rationale**: Nitro doesn't have a built-in DI container. `globalThis` is the simplest way to share state across Nitro plugins and API routes. Common pattern in the Nitro ecosystem.
-- **Known limitation**: Requires `as any` cast. Proper fix would be a module-level export, but Nitro's file-based architecture makes this tricky without a shared singleton module.
+- **Rationale**: Nitro doesn't have a built-in DI container. Common pattern in the Nitro ecosystem.
 
 ### No Auto-import for Shared Types
 - **Decision**: Do not use `imports.dirs` for shared types. Import types explicitly.
-- **Rationale**: Nuxt auto-import only picks up functions and constants — not type interfaces. The config was useless and was removed during code review (Agent 08).
+- **Rationale**: Nuxt auto-import only picks up functions and constants — not type interfaces.
 
 ### Migration Tracking Table Created at Runtime
 - **Decision**: The `migrations` tracking table is created by the database plugin (not a migration file).
-- **Rationale**: The tracking table must exist before any migration runs. Creating it in a migration file would create a chicken-and-egg problem. The plugin creates it with `CREATE TABLE IF NOT EXISTS` before iterating migrations.
+- **Rationale**: The tracking table must exist before any migration runs.
 
 ### WebSocket via Nuxt's `defineWebSocketHandler`
-- **Decision**: Use Nuxt's built-in WebSocket API (`defineWebSocketHandler`) instead of a raw WebSocket server.
-- **Rationale**: Integrated with Nitro's server lifecycle, shares the same port, and is experimentally supported in Nuxt 4 (`nitro.experimental.websocket: true`).
-- **Note**: `ws` package is still installed as a dependency for type definitions and potential manual peer management.
+- **Decision**: Use Nuxt's built-in WebSocket API instead of a raw WebSocket server.
+- **Rationale**: Integrated with Nitro's server lifecycle, shares the same port.
 
 ### Structured Logger Over Nitro's Built-in Logger
 - **Decision**: Custom structured logger (`server/utils/logger.ts`) instead of Nitro's `useLogger`.
-- **Rationale**: Need LOG_LEVEL control per environment, structured output format, and meta JSON support. Premature optimization but working.
-- **Known**: Reimplements functionality Nitro provides — could be revisited later.
+- **Rationale**: Need LOG_LEVEL control per environment, structured output format, and meta JSON support.
 
 ### Module-scope Caching for Health Endpoint
 - **Decision**: Cache `package.json` version at module scope using an IIFE.
-- **Rationale**: `package.json` doesn't change at runtime — reading it on every `/api/health` request wastes disk I/O. Discovered during code review (Agent 08).
+- **Rationale**: `package.json` doesn't change at runtime.
 
 ### Test Setup Silences Console by Default
 - **Decision**: Test setup replaces `console.*` methods with no-ops before all tests.
-- **Rationale**: Keeps test output clean. Tests can still spy on console methods when they need to assert output — `afterEach` restores originals.
 
 ## Design Decisions
 
 ### Empty Placeholder Schema
-- **Decision**: `schema/index.sql` is a placeholder; `001_initial_setup.sql` is also a placeholder.
-- **Rationale**: Feature-specific tables (F2-F9) will have their own migration files. The schema index will be assembled later. Keeps M1-T1 minimal and focused on infrastructure.
+- **Decision**: `schema/index.sql` is a placeholder; feature-specific tables have their own migration files.
 
-### Minimal App Shell
-- **Decision**: `app.vue` is a 7-line wrapper; `index.vue` shows a placeholder "monitors will appear here" message.
-- **Rationale**: M1-T1 is about backend foundation. UI work is deferred to Phase 9 of the implementation plan.
+### Minimal App Shell (M1-T1)
+- **Decision**: `app.vue` is a 7-line wrapper; `index.vue` shows a placeholder. UI work deferred to M2.
+
+### CSS Token System (M2-T1)
+- **Decision**: Use CSS custom properties (CSS variables) for design tokens, matching LNPM desktop app token system.
+- **Rationale**: Consistent styling across dashboard and desktop app. Tokens defined in `app/assets/css/dashboard.css`.
+- **Pattern**: Semantic tokens (e.g., `--color-surface`, `--color-text-primary`) rather than raw color values in components.
+
+### Chart Color Palette Strategy (M2-T3)
+- **Decision**: Use a fixed 12-color palette generated by `useDashboardPalette()` composable for multi-monitor charts.
+- **Rationale**: Deterministic color assignment (same monitor always gets same color). Distinct enough for 12 monitors on a single chart.
+- **Impact**: `QUALITY_COLORS` from `quality-states.ts` for quality bands; `useDashboardPalette()` for monitor series colors.
+
+### Composable Architecture for Charts (M2-T3)
+- **Decision**: Split chart logic into separate composables: `useMonitorHistory` (data fetching), `useChartSeries` (transforms), `useTimeWindow` (time ranges), `useDashboardPalette` (colors).
+- **Rationale**: Single-responsibility composables are testable in isolation and reusable across chart components.
+- **Impact**: 4 new composables, each with dedicated test files.
 
 ## Ping Ingest Decisions (M1-T6)
 
 ### Separate ping-types.ts (Not shared/types.ts)
-- **Decision**: Create `server/utils/ping-types.ts` for ping-specific types rather than adding to `shared/types.ts`.
-- **Rationale**: `shared/types.ts` is stale (has old ingest types that don't match F3 contract). Keeping ping types co-located with the implementation avoids polluting the shared types file and keeps domain boundaries clear. The `shared/` directory is for client-server shared types; ping ingest types are server-only.
+- **Decision**: Create `server/utils/ping-types.ts` for ping-specific types.
+- **Rationale**: Keeps types co-located with implementation. `shared/types.ts` is for client-server shared types.
 
 ### Client Auto-Registration on First Ingest (ADR-002)
-- **Decision**: The ingest endpoint auto-registers unknown clients when identity fields (`username`, `hostname`, `mac_address`) are provided.
-- **Rationale**: Eliminates a separate registration step — the first ping batch from a new client registers it automatically. Matches F4 spec (client sync service). Requires all 3 identity fields to be present; if incomplete, returns 401 as usual.
+- **Decision**: Auto-register unknown clients when identity fields are provided.
+- **Rationale**: Eliminates separate registration step.
 
 ### INSERT OR IGNORE for Dedup (ADR-003)
-- **Decision**: Use `INSERT OR IGNORE INTO ping_samples ... VALUES (...)` with a unique index on `(monitor_id, timestamp_ms, status)` rather than a two-phase "SELECT then INSERT" approach.
-- **Rationale**: Eliminates race conditions and is more performant. The unique index is guaranteed by the schema (migration 003). `stmt.run().changes` returns 0 for ignored rows, enabling accurate accepted vs duplicate counts.
+- **Decision**: Use `INSERT OR IGNORE` with unique index rather than SELECT-then-INSERT.
+- **Rationale**: Eliminates race conditions, more performant.
 
 ### Rejected Count Based on Unique Sample Indices (ADR-004)
-- **Decision**: A sample with 3 validation failures counts as 1 rejected sample (not 3). Rejected count uses `new Set(rejections.map(r => r.index)).size`.
-- **Rationale**: The F3 spec says "rejected" is the count of rejected samples, not rejection reasons. The `rejections` array contains all individual reasons for traceability.
+- **Decision**: A sample with 3 validation failures counts as 1 rejected sample.
 
 ### Status Code 200 for All-Rejected (ADR-005)
-- **Decision**: When all samples are rejected (accepted=0, duplicate=0), return 200 (not 207).
-- **Rationale**: 200 indicates "the request was processed successfully." The rejections are returned in the response body. 207 is reserved for mixed outcomes (some accepted + some not).
+- **Decision**: All-rejected returns 200 (not 207).
 
 ### sendResponse Helper Instead of Direct Return (ADR-006)
-- **Decision**: Use a `sendResponse(event, statusCode, body)` helper that calls `setResponseStatus(event, statusCode)` and returns the body.
-- **Rationale**: Nitro's `defineEventHandler` returns the body as JSON but doesn't let you easily set a custom status code in the same expression. The helper separates status code setting from body return.
+- **Decision**: Use `sendResponse(event, statusCode, body)` helper.
+- **Rationale**: Separates status code setting from body return.
 
 ## Quality Classifier Decisions (M1-T10)
 
 ### 7-State Classification with First-Match-Wins (ADR-007)
-- **Decision**: Use 7 quality states: `veryHigh`, `high`, `medium`, `low`, `unstable`, `disconnected`, `warmingUp`. Apply in deterministic priority order: disconnected → warmingUp → unstable → veryHigh → high → medium → low.
-- **Rationale**: Simple, fast, and easy to reason about. No complex scoring system — just ordered thresholds. The `unstable` check comes before `veryHigh` so high-variance connections aren't misclassified as excellent.
-- **Thresholds**: 5-minute window, 10 min samples, cv > 0.5 for unstable, packet_loss < 10% for unstable, 0% packet_loss + <50ms for veryHigh, 0% + <150ms for high, ≤10% + ≤300ms for medium, everything else is low.
+- **Decision**: 7 quality states: `veryHigh`, `high`, `medium`, `low`, `unstable`, `disconnected`, `warmingUp`.
+- **Order**: disconnected → warmingUp → unstable → veryHigh → high → medium → low.
 
 ### Disconnected Detection with Time Bounds (ADR-008)
-- **Decision**: Monitor is `disconnected` when there are no samples in the 5-min window AND last sample was 5–60 min ago. If last sample was >1 hour ago, it's `warmingUp` (old/inactive monitor).
-- **Rationale**: Without the 1-hour upper bound, monitors that stopped sending data weeks ago would show as `disconnected` instead of the more appropriate `warmingUp` (they haven't really "disconnected" — they were never active in the current session).
+- **Decision**: Disconnected = no samples in 5-min window AND last sample 5–60 min ago. >1 hour = `warmingUp`.
 
 ### Post-Ingest Classification After Transaction (ADR-009)
-- **Decision**: Classification runs AFTER the transaction commits (outside `db.transaction()`), so it sees newly inserted samples. Failure is logged but never causes ingest to fail.
-- **Rationale**: Classification is best-effory metadata. The ingest is the critical path — it must succeed even if classification has an issue. Running after the transaction ensures the classifier sees the new data.
+- **Decision**: Classification runs AFTER transaction commits. Failure never breaks ingest.
 
 ### Background Sweep Scope (ADR-010)
-- **Decision**: Background sweep only classifies monitors with samples in the last 10 minutes (2× the 5-min window), not all monitors.
-- **Rationale**: Monitors without recent samples have no data to re-classify — they'll stay in their current state. This avoids unnecessary database reads on inactive monitors.
+- **Decision**: Only classify monitors with samples in last 10 minutes.
 
 ### Quality State Migration Strategy (ADR-011)
-- **Decision**: Migration 006 maps legacy quality states (`warmingUp`→`disconnected`, `good`→`veryHigh`, `degraded`→`medium`, `poor`→`low`) to F12 equivalents.
-- **Rationale**: Existing monitors have quality states from the pre-F12 system. The migration ensures they display correctly rather than showing unknown/garbage values.
+- **Decision**: Migration 006 maps legacy states to F12 equivalents.
+
+## M2 UI Decisions
+
+### Sidebar Layout with Client Groups (M2-T1)
+- **Decision**: Sidebar organized by client groups (expandable), with monitors listed under each client.
+- **Rationale**: Matches the desktop app's organization model and scales to multiple clients.
+- **Responsive**: Sidebar collapses on narrow viewports (<768px), accessible via hamburger menu.
+
+### WebSocket Connection Indicator in Header (M2-T5)
+- **Decision**: Show connection status (connected/disconnected/reconnecting) in `DashboardHeader`.
+- **Rationale**: Users need to know if real-time data is flowing. Green dot for connected, red for disconnected, yellow for reconnecting.
+
+### Client Settings Page Separate from Overview (M2-T6)
+- **Decision**: Client overview (`/clients/[slug]`) and settings (`/clients/[slug]/settings`) are separate pages with navigation.
+- **Rationale**: Clear separation of read-only overview from editable settings. Follows established routing pattern.
+
+### Sync Settings Form with Validation (M2-T6)
+- **Decision**: Client settings form validates inputs before sending PUT request. Optimistic UI update with rollback on error.
+- **Rationale**: Provides immediate feedback and handles network errors gracefully.

@@ -3,7 +3,7 @@ taskId: M2-T3
 milestone: M2
 title: Implement all-monitors combined uPlot chart
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "4-6 hours"
 features:
   - F8
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M2 (Dashboard UI)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 4-6 hours
 
 ## Description

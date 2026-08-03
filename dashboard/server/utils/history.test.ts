@@ -91,7 +91,7 @@ describe("calculateBucketSize", () => {
   });
 
   it("returns 5-minute bucket when 1-minute exceeds maxPoints", () => {
-    // 1 hour range, 10 maxPoints → 60 minutes > 10, 12 five-min buckets > 10
+    // 1 hour range, 10 maxPoints → 60 minutes > 10, 12 five-min buckets > 10, 900000 → 4 ≤ 10
     // Actually: 60000 → 60 buckets > 10, 300000 → 12 buckets > 10, 900000 → 4 ≤ 10
     const result = calculateBucketSize(0, 3_600_000, 10);
     expect(result).toBe(900000);
@@ -290,9 +290,9 @@ describe("computeQualityIntervals", () => {
     expect(intervals).toEqual([]);
   });
 
-  it("single point with good latency → low (when cumulative >= 5 samples)", () => {
+  it("single point with very good latency → veryHigh (when cumulative >= 5 samples)", () => {
     // Add a preceding point to bypass warmingUp on first index
-    // First point is warmingUp (index 0), second transitions to low
+    // First point is warmingUp (index 0), second transitions to veryHigh
     const points: HistoryPoint[] = [
       {
         timestampMs: 940000,
@@ -312,9 +312,9 @@ describe("computeQualityIntervals", () => {
       },
     ];
     const intervals = computeQualityIntervals(points);
-    // Both points have >= 5 cumulative samples and good latency → both low → 1 interval
+    // Both points have >= 5 cumulative samples, 0% loss, avgLatency < 50ms → both veryHigh → 1 interval
     expect(intervals).toHaveLength(1);
-    expect(intervals[0].state).toBe("low");
+    expect(intervals[0].state).toBe("veryHigh");
   });
 
   it("points with high packet loss → unstable", () => {
@@ -388,11 +388,12 @@ describe("computeQualityIntervals", () => {
       },
     ];
     const intervals = computeQualityIntervals(points, 60000);
-    // low → disconnected → low (first two points merge into one interval since gap=120000 which is NOT > 2x60000)
+    // veryHigh → disconnected → veryHigh (first two points merge since gap=120000 which is NOT > 2*60000=120000)
+    // gap = 1000000+300000 - 1000000 = 300000 which IS > 2*60000=120000 → disconnected
     expect(intervals).toHaveLength(3);
-    expect(intervals[0].state).toBe("low");
+    expect(intervals[0].state).toBe("veryHigh");
     expect(intervals[1].state).toBe("disconnected");
-    expect(intervals[2].state).toBe("low");
+    expect(intervals[2].state).toBe("veryHigh");
   });
 
   it("mixed states produce multiple intervals", () => {
@@ -424,10 +425,11 @@ describe("computeQualityIntervals", () => {
       },
     ];
     const intervals = computeQualityIntervals(points, 60000);
-    // low → veryHigh (first two points merge since both are low, third is veryHigh)
+    // veryHigh → low (first two points merge since both are veryHigh: 0% loss, avgLatency=10 < 50ms)
+    // Third point: 0% loss, avgLatency=250 >= 200ms → low
     expect(intervals).toHaveLength(2);
-    expect(intervals[0].state).toBe("low");
-    expect(intervals[1].state).toBe("veryHigh");
+    expect(intervals[0].state).toBe("veryHigh");
+    expect(intervals[1].state).toBe("low");
   });
 });
 

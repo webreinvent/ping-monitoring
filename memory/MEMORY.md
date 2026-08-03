@@ -1,6 +1,7 @@
 - [No unconfirmed commits](no-unconfirmed-commits.md) — workflow
 - [LNPM Cloud Dashboard](lnpm-cloud-dashboard.md) — project
 - [LNPM Cloud Dashboard Requirements](lnpm-cloud-dashboard-requirements.md) — requirements manifest
+- [AI Agents Node.js Environment Setup](ai-agents/node-env-setup.md) — NVM vs Homebrew conflict, Node 22.19.0+ requirement, native module rebuild
 - [LNPM Milestones & Tasks Planner](lnpm-milestones-tasks-planner.md) — planner prompt generated
 - [LNPM Milestones Plan](lnpm-milestones-plan.md) — 2 milestones, 19 tasks, 14 features
 - [Agent Prompts Generated](agent-prompts-generated.md) — 16 agent pipeline files in ai-agents/
@@ -15,10 +16,11 @@
 - [Session Context M1-T1](session-context-m1-t1.md) — M1-T1 already complete by agents 07-10
 - [Agent 03 Code Analysis](agent-03-code-analysis.md) — code analysis results: patterns, reusable code, conventions
 - [Agent 04 UI/UX Plan](agent-04-ui-ux-plan.md) — UI/UX design plan: design system, components, state management, accessibility
-- [Patterns Established](lnpm-patterns-established.md) — M1-T1 patterns: DB plugin, migrations, logger, WebSocket, tests
-- [Decisions Made](lnpm-decisions-made.md) — M1-T1 decisions: Nuxt 4, node-server, better-sqlite3, globalThis DB
-- [Lessons Learned](lnpm-lessons-learned.md) — M1-T1 errors and fixes: 8 issues found by Agent 08
+- [Patterns Established](lnpm-patterns-established.md) — M1+M2 patterns: DB plugin, migrations, logger, WebSocket, uPlot charts, Vue composables, rate limiting, quality classifier
+- [Decisions Made](lnpm-decisions-made.md) — M1+M2 decisions: Nuxt 4, node-server, better-sqlite3, uPlot, globalThis DB, chart composables, sidebar layout
+- [Lessons Learned](lnpm-lessons-learned.md) — M1+M2 errors and fixes: WebSocket types, lifecycle hooks, deep watch on typed arrays, mock DB UPDATE binding, better-sqlite3 segfaults
 - [Task Complete M1-T1](lnpm-task-complete-m1-t1.md) — M1-T1 summary: agents 07-10, 115 tests, 38/38 UAT
+- [Task Complete M2 Full](lnpm-task-complete-m2-full.md) — M2 full summary: agents 00-10, 826 tests, all 7 M2 tasks complete (shell, charts, detail, WebSocket, client pages, settings)
 - [M1-T3 Session Context](M1-T3-session-context.md) — M1-T3 scope: 5 migration files exist (from M1-T2), F9 sync columns gap identified
 - [M1-T3 Code Analysis](M1-T3-code-analysis.md) — Code analysis: 5 existing migrations, F9 sync column gap, patterns to follow
 - [M1-T3 Implementation Plan](M1-T3-implementation-plan.md) — Implementation plan: verification sequence, file inventory, all schema verified

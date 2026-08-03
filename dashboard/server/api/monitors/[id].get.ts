@@ -1,7 +1,7 @@
 import { getDb } from "#server/utils/db";
 import { info, error as logError } from "#server/utils/logger";
 import type { HistoryResponse } from "#shared/types";
-import type { ClientRow } from "#server/utils/history";
+import type { MonitorRow } from "#server/utils/history";
 import {
   getMonitorHistoryPoints,
   computeQualityIntervals,
@@ -82,7 +82,7 @@ export default defineEventHandler((event) => {
     const db = getDb();
     const monitor = db
       .prepare("SELECT * FROM monitors WHERE id = ?")
-      .get(monitorId);
+      .get(monitorId) as MonitorRow | null;
 
     if (!monitor) {
       throw createError({
@@ -105,14 +105,7 @@ export default defineEventHandler((event) => {
     const summary = computeRangeSummary(points, intervals);
 
     // 9. Build target
-    const client = db
-      .prepare("SELECT * FROM clients WHERE id = ?")
-      .get((monitor as any).client_id) as ClientRow | null;
-
-    const target = buildTarget(
-      monitor as any,
-      client,
-    );
+    const target = buildTarget(monitor);
 
     // 10. Assemble response
     const response: HistoryResponse = {
