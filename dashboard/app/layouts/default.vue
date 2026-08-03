@@ -1,13 +1,16 @@
 <template>
   <div class="dashboard-shell">
-    <slot />
+    <DashboardHeader />
+    <div class="workspace">
+      <DashboardSidebar />
+      <div class="sidebar-resizer" v-if="!isMobile" />
+      <main class="main-content">
+        <slot />
+      </main>
+    </div>
   </div>
 </template>
 
-<style scoped>
-.dashboard-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-</style>
+<script setup lang="ts">
+const { isMobile } = useResponsiveSidebar();
+</script>
