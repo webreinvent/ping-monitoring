@@ -796,4 +796,63 @@ The quality classifier analyzes raw ping samples in a 5-minute sliding window an
 | ADR-031 | Coefficient of Variation for Jitter | CV = stddev/mean normalizes across latency ranges; threshold 0.5 catches unstable connections regardless of average |
 | ADR-032 | Quality State Persisted on Monitor Row | Single UPDATE per classification; `quality_state_updated_at` proves liveness even when state doesn't change |
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T10 quality classifier conventions appended)**
+*Last updated: 2026-08-03 (Agent 14 — M1-T12 rate limiting conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T12)
+
+### Rate Limiting Middleware (M1-T12 / F13)
+
+The rate limiting middleware protects all API endpoints from excessive requests using an in-memory sliding window with LRU eviction. Runs automatically via Nitro's file-based middleware in `server/middleware/`.
+
+#### Nitro Middleware Pattern
+- **File**: `server/middleware/rate-limit.ts`
+- **Pattern**: Files in `server/middleware/` automatically run before every server route handler — no registration needed
+- **Path filtering**: Only applies to `/api/` paths — skips static assets, WebSocket, and frontend routes
+- **IP resolution**: `getRequestIP(event, { xForwardedFor: true })` — proper IP behind reverse proxies (Nginx, Cloudflare)
+- **Graceful degradation**: If IP cannot be determined (no header, no socket), the request is allowed through (not blocked)
+- **Early return**: Returns a 429 response to short-circuit the request; returns nothing to let the request continue
+
+#### Sliding Window Rate Limiter Utility
+- **File**: `server/utils/rate-limiter.ts`
+- **Pattern**: Pure functions (`checkRateLimit`, `getRateLimitConfig`) with no HTTP context — testable in isolation
+- **Data structure**: `Map<string, RateLimitEntry>` keyed by IP address
+- **RateLimitEntry**: `{ timestamps: number[], lastAccess: number }` — timestamps within the window + LRU access time
+- **Sliding window**: Filters out timestamps older than `now - windowMs` on each check — not a fixed window
+- **LRU eviction**: When map exceeds `MAX_ENTRIES` (10,000), evicts entries with `lastAccess > 2× window` to bound memory
+- **Env var config**: `RATE_LIMIT_WINDOW_MS` (default: 60000ms) and `RATE_LIMIT_MAX_REQUESTS` (default: varies by endpoint)
+
+#### Rate Limit Tiers
+- **Ingest endpoint** (`/api/ping/ingest`): 100 requests/minute — high-frequency ping data from LNPM clients
+- **All other API endpoints**: 60 requests/minute — dashboard UI calls, lower frequency
+- **`getRateLimitConfig(isIngest)`**: Selects appropriate limit based on URL path prefix
+
+#### 429 Response Shape (F13 Spec)
+- **Body**: `{ error: "rate_limit_exceeded", retryAfter: N }` — machine-readable `error` string, not human-readable
+- **Header**: `Retry-After: N` (seconds) — standard RFC 6585 header
+- **Status**: 429 Too Many Requests
+- **Logging**: `warn()` with structured JSON (IP, path, retryAfter, limit) — signal-rich logs for observability
+- **No `code` field**: The F13 spec does not include a `code` field — only `error` and `retryAfter`
+
+#### Test Isolation
+- **`resetRateLimitState()`**: Exported function to clear the rate limit map between tests
+- **Pattern**: Call `resetRateLimitState()` in `beforeEach` — same as `delete globalThis.__db` for DB tests
+- **Mock dates**: Use `vi.useFakeTimers()` to control time in sliding window tests
+- **24 tests** across 2 files: `rate-limiter.test.ts` (utility) and `rate-limit.test.ts` (middleware)
+
+#### Middleware Test Patterns
+- **Mock h3 event**: Construct minimal event objects with `path` and simulated `socket.remoteAddress`
+- **`getRequestIP` mock**: `vi.mock("h3", ...)` to control IP resolution
+- **Verify response shape**: Assert `{ error: "rate_limit_exceeded", retryAfter: N }` — not human-readable strings
+- **Verify headers**: Check `Retry-After` header is set correctly
+- **Path filtering**: Verify middleware skips non-`/api/` paths (returns early without rate limiting)
+
+### ADRs — Rate Limiting (M1-T12)
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-033 | In-memory LRU Sliding Window (No Redis) | Single-instance deployment (SQLite backend) doesn't need distributed rate limiting; in-memory Map with LRU eviction bounds memory. Documented as known limitation for multi-process deployments |
+| ADR-034 | Separate Utility + Middleware Layers | Pure functions in `server/utils/rate-limiter.ts` for testability; HTTP integration in `server/middleware/rate-limit.ts`. Clean separation of concerns |
+| ADR-035 | Per-IP Tracking with xForwardedFor | `getRequestIP(event, { xForwardedFor: true })` for correct client IP behind reverse proxies. Graceful degradation — allows through if IP unknown |
+| ADR-036 | Different Limits for Ingest vs Other Endpoints | Ingest: 100 req/min (high-frequency ping data). Others: 60 req/min (dashboard UI). Selected by URL path prefix in `getRateLimitConfig()` |
+
+*Last updated: 2026-08-03 (Agent 14 — M1-T12 rate limiting conventions appended)*

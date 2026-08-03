@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting)
 
 ## Technology Stack Decisions
 
@@ -229,3 +229,40 @@
 ### Migration 006: Legacy State Mapping
 - **Decision:** Map `warmingUp`→`disconnected`, `good`→`veryHigh`, `degraded`→`medium`, `poor`→`low`
 - **Rationale:** Existing monitors have pre-F12 states; migration ensures correct display
+
+## Rate Limiting Decisions (M1-T12 / F13)
+
+### In-memory LRU sliding window (no Redis)
+- **Decision:** Use in-memory `Map<string, RateLimitEntry>` with LRU eviction, not Redis or any external store
+- **Rationale:** MVP doesn't require distributed rate limiting; the dashboard is single-instance (SQLite backend). Adding Redis would be over-engineering for the current scope.
+- **Impact:** Each process has independent rate limit state. Documented as a known limitation; Redis can be added later if multi-process deployment is needed.
+
+### Separate utility + middleware layers
+- **Decision:** Rate limiter logic in `server/utils/rate-limiter.ts` (pure functions), middleware in `server/middleware/rate-limit.ts` (HTTP integration)
+- **Rationale:** Clean separation of concerns — the utility is testable without HTTP context, middleware handles request/response only
+- **Impact:** `checkRateLimit()` and `getRateLimitConfig()` are pure; middleware composes them with `getRequestIP()`, `setHeader()`, `setResponseStatus()`.
+
+### Per-IP tracking with xForwardedFor support
+- **Decision:** Use `getRequestIP(event, { xForwardedFor: true })` for IP resolution
+- **Rationale:** The dashboard may sit behind a reverse proxy (Nginx, Cloudflare); `xForwardedFor` support ensures correct client IP in all deployment scenarios
+- **Impact:** Falls back to allowing the request through if IP cannot be determined (graceful degradation, not a hard block).
+
+### Different limits for ingest vs other endpoints
+- **Decision:** Ingest endpoint gets 100 req/min; all other API endpoints get 60 req/min
+- **Rationale:** The ingest endpoint handles high-frequency ping data from LNPM clients (up to 1 ping/minute per monitor); other endpoints are dashboard UI calls (lower frequency)
+- **Impact:** `getRateLimitConfig(isIngest)` selects the appropriate limit based on URL path prefix (`/api/ping/ingest`).
+
+### 429 response shape: `{ error: "rate_limit_exceeded", retryAfter: N }`
+- **Decision:** Use F13 spec exact response shape with `error` field (not `message`), `retryAfter` field, and `Retry-After` HTTP header
+- **Rationale:** Matches the API design document exactly; `Retry-After` header is standard (RFC 6585)
+- **Impact:** Code review (Agent 08) caught that the initial implementation had a human-readable error string; fixed to `"rate_limit_exceeded"` per spec.
+
+### LRU eviction at 10,000 entries
+- **Decision:** Cap the IP map at 10,000 entries with LRU eviction of stale entries (lastAccess > 2× window)
+- **Rationale:** Bounded memory growth; 10,000 IPs is far more than any single-instance deployment will see. Eviction threshold of 2× window (120s) ensures recently-active IPs aren't evicted.
+- **Impact:** Memory is bounded regardless of traffic volume; stale IPs are cleaned up automatically.
+
+### Env var configurability
+- **Decision:** `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS` env vars override defaults
+- **Rationale:** Allows easy tuning for testing and deployment without code changes
+- **Impact:** Defaults match F13 spec (60s window, 100/60 max); env vars allow operator override.

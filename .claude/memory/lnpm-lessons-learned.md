@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -256,3 +256,33 @@
 **Fix:** `Number.isFinite()` + `> 0` validation with early return. Agent 08 caught during code review.
 
 **Lesson:** Always validate env vars used as timer intervals — `setInterval(NaN)` = `setInterval(0)` = tight loop.
+
+## Lesson 27: M1-T12 rate limiter was already fully implemented
+
+**Error:** The rate limiting code (rate-limiter.ts, rate-limit.ts, tests) was already created as untracked files by Agents 03/04 during the M1-T12 session. Agent 07's role was to fix the 429 response shape to match F13 spec (changed error from human-readable string to `"rate_limit_exceeded"`, removed unused imports, removed non-spec `code` field).
+
+**Root cause:** Same pattern as M1-T8/M1-T9 — code was pre-built by earlier agents but the task tracking showed "Not Started". The implementation was correct but the response shape needed a small fix.
+
+**Key insight:** When rate limiting middleware is in `server/middleware/`, it runs automatically before all routes — no registration needed. The middleware pattern (Nitro file-based middleware) is simpler than the API route pattern.
+
+**Prevention:** Same as Lesson 19 — always check for existing implementation before writing new code. The middleware directory should be checked alongside `server/api/` and `server/utils/`.
+
+## Lesson 28: F13 spec compliance requires exact 429 response shape
+
+**Error:** Initial implementation used `error: "Rate limit exceeded. Try again in N seconds."` (human-readable) and included a `code` field. The F13 spec requires `error: "rate_limit_exceeded"` (machine-readable) and no `code` field.
+
+**Root cause:** The initial agent didn't cross-reference the F13 feature spec carefully enough — it used a reasonable default response shape rather than the spec-defined shape.
+
+**Fix:** Agent 07 fixed the response to match F13 spec exactly: `{ error: "rate_limit_exceeded", retryAfter: N }`. Agent 08 code review confirmed correctness.
+
+**Prevention:** Always cross-reference the feature spec (`requirements/features/feature-XXXXX-*.md`) for exact response shapes, not just the API design document. The feature spec is the source of truth for error response shapes.
+
+## Lesson 29: h3 getRequestIP is a transitive dependency (M1-T12)
+
+**Error:** Code review questioned whether `h3` was listed as a direct dependency in `package.json` — it's not (it's brought in transitively by Nitro). `getRequestIP` from `h3` is used directly in the middleware.
+
+**Root cause:** Nitro imports h3 transitively; the types are available through the Nitro types. The `h3` package is not listed in `dashboard/package.json`.
+
+**Fix:** No fix needed — `getRequestIP` is available through the Nitro/h3 chain and works correctly. The import works because Nitro re-exports h3 types.
+
+**Prevention:** When using Nitro/h3 utilities (like `getRequestIP`, `setHeader`, `setResponseStatus`), the imports work through the Nitro dependency chain. This is expected and documented behavior.
