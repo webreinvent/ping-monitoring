@@ -4,7 +4,7 @@ description: Errors encountered and lessons learned during M1-T1 implementation
 metadata:
   type: project
   agent: "12"
-  date: 2026-08-01
+  date: 2026-08-03
 ---
 
 # LNPM Cloud Dashboard — Lessons Learned
@@ -65,3 +65,29 @@ metadata:
 ### Nuxt 4 Compatibility
 - `compatibilityVersion` is not needed in Nuxt 4 (removed from config).
 - `nuxt typecheck` (not `nuxi typecheck`) is the correct command in Nuxt 4.
+
+## M1-T6 Lessons (Ping Ingest)
+
+### better-sqlite3 Segfault in Vitest Forked Workers
+- **Error**: Integration tests with `better-sqlite3` crash with segfaults in Vitest's forked worker pools. The native module doesn't play well with Vitest's forked process model.
+- **Root cause**: `better-sqlite3` uses C++ bindings that don't survive process forking cleanly. This happens in both `--pool=forks` (default) and `--pool=threads` modes.
+- **Fix**: Use `vi.mock("./db", () => ({ getDb: vi.fn() }))` for unit tests — mock the DB entirely. Integration tests are problematic and should use in-memory SQLite with careful process isolation if needed. The mock DB pattern (dispatching on SQL string) is the recommended approach.
+- **Lesson**: Always mock `getDb()` in tests that involve `better-sqlite3`. Don't try to use the real database in Vitest tests unless you control the process lifecycle.
+
+### vi.doMock Inside Test Files Causes Parse Errors
+- **Error**: `vi.doMock()` called inside a `describe`/`test` block causes "Failed to parse source code" errors in Vitest.
+- **Root cause**: `vi.doMock()` must be called before any `import` statements that use the mocked module. Inside a test file, all imports are already hoisted.
+- **Fix**: Use top-level `vi.mock()` (not `vi.doMock()`) at the file level before imports. Or use the mock pattern already established in the project (top-level `vi.mock("./module", () => ({ fn: vi.fn() }))`).
+
+### Playwright Test Files Fail Under Vitest
+- **Error**: `.spec.ts` files (Playwright tests) were being picked up by Vitest and failing with "Playwright Test did not expect test.describe()".
+- **Root cause**: The `vitest.config.ts` include pattern was too broad, matching `.spec.ts` files.
+- **Fix**: Ensure `vitest.config.ts` include is `**/*.test.ts` (not `**/*.spec.ts`). Playwright tests use `.spec.ts`, Vitest uses `.test.ts`. The two don't conflict when naming conventions are respected.
+
+### Environment Variable Config Reading at Runtime
+- **Lesson**: `INGEST_MAX_SAMPLES` and `INGEST_FUTURE_WINDOW_MS` are read at function call time (not module load time). This means tests can stub env vars with `vi.stubEnv()` and the module will pick up the new values — no need to re-import.
+- **Pattern**: Always read env vars inside functions (not at module scope) when they need to be testable.
+
+### Mock DB SQL Dispatching by String Matching
+- **Pattern**: When mocking `better-sqlite3`'s `prepare()`, dispatch on `sql.includes("INSERT INTO monitors")` etc. This is fragile but works for unit tests. The key is to match enough of the SQL string to uniquely identify each query path.
+- **Lesson**: This pattern requires the SQL strings to be stable. If a SQL string changes (e.g., adding a column), the mock needs to be updated. This is a tradeoff for avoiding real SQLite in tests.

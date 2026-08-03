@@ -4,7 +4,7 @@ description: Architectural and implementation decisions for LNPM Cloud Dashboard
 metadata:
   type: project
   agent: "12"
-  date: 2026-08-01
+  date: 2026-08-03
 ---
 
 # LNPM Cloud Dashboard — Decisions Made
@@ -71,3 +71,29 @@ metadata:
 ### Minimal App Shell
 - **Decision**: `app.vue` is a 7-line wrapper; `index.vue` shows a placeholder "monitors will appear here" message.
 - **Rationale**: M1-T1 is about backend foundation. UI work is deferred to Phase 9 of the implementation plan.
+
+## Ping Ingest Decisions (M1-T6)
+
+### Separate ping-types.ts (Not shared/types.ts)
+- **Decision**: Create `server/utils/ping-types.ts` for ping-specific types rather than adding to `shared/types.ts`.
+- **Rationale**: `shared/types.ts` is stale (has old ingest types that don't match F3 contract). Keeping ping types co-located with the implementation avoids polluting the shared types file and keeps domain boundaries clear. The `shared/` directory is for client-server shared types; ping ingest types are server-only.
+
+### Client Auto-Registration on First Ingest (ADR-002)
+- **Decision**: The ingest endpoint auto-registers unknown clients when identity fields (`username`, `hostname`, `mac_address`) are provided.
+- **Rationale**: Eliminates a separate registration step — the first ping batch from a new client registers it automatically. Matches F4 spec (client sync service). Requires all 3 identity fields to be present; if incomplete, returns 401 as usual.
+
+### INSERT OR IGNORE for Dedup (ADR-003)
+- **Decision**: Use `INSERT OR IGNORE INTO ping_samples ... VALUES (...)` with a unique index on `(monitor_id, timestamp_ms, status)` rather than a two-phase "SELECT then INSERT" approach.
+- **Rationale**: Eliminates race conditions and is more performant. The unique index is guaranteed by the schema (migration 003). `stmt.run().changes` returns 0 for ignored rows, enabling accurate accepted vs duplicate counts.
+
+### Rejected Count Based on Unique Sample Indices (ADR-004)
+- **Decision**: A sample with 3 validation failures counts as 1 rejected sample (not 3). Rejected count uses `new Set(rejections.map(r => r.index)).size`.
+- **Rationale**: The F3 spec says "rejected" is the count of rejected samples, not rejection reasons. The `rejections` array contains all individual reasons for traceability.
+
+### Status Code 200 for All-Rejected (ADR-005)
+- **Decision**: When all samples are rejected (accepted=0, duplicate=0), return 200 (not 207).
+- **Rationale**: 200 indicates "the request was processed successfully." The rejections are returned in the response body. 207 is reserved for mixed outcomes (some accepted + some not).
+
+### sendResponse Helper Instead of Direct Return (ADR-006)
+- **Decision**: Use a `sendResponse(event, statusCode, body)` helper that calls `setResponseStatus(event, statusCode)` and returns the body.
+- **Rationale**: Nitro's `defineEventHandler` returns the body as JSON but doesn't let you easily set a custom status code in the same expression. The helper separates status code setting from body return.

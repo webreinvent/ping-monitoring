@@ -9,9 +9,11 @@ import type {
   WsMessage,
   HealthResponse,
   HealthErrorResponse,
-  IngestRequest,
-  IngestResponse,
 } from "~/shared/types";
+import type {
+  IngestPayload,
+  IngestResponse as PingIngestResponse,
+} from "~/server/utils/ping-types";
 
 /** Create a valid PingSample with optional overrides. */
 export function createPingSample(
@@ -84,24 +86,25 @@ export function createWsMessage(
   };
 }
 
-/** Create a valid IngestRequest with optional overrides. */
-export function createIngestRequest(
-  overrides: Partial<IngestRequest> = {},
-): IngestRequest {
+/** Create a valid IngestPayload with optional overrides. */
+export function createIngestPayload(
+  overrides: Partial<IngestPayload> = {},
+): IngestPayload {
   return {
-    samples: [createPingSample()],
+    clientSlug: "test-client",
+    samples: [],
     ...overrides,
   };
 }
 
 /** Create a valid IngestResponse with optional overrides. */
 export function createIngestResponse(
-  overrides: Partial<IngestResponse> = {},
-): IngestResponse {
+  overrides: Partial<PingIngestResponse> = {},
+): PingIngestResponse {
   return {
     accepted: 1,
+    duplicate: 0,
     rejected: 0,
-    clientSlug: "test-client",
     ...overrides,
   };
 }

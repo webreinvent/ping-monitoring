@@ -4,6 +4,7 @@
 > **Date:** 2026-08-03
 > **For:** Nuxt 4 + Vue 3 Cloud Dashboard
 > **Consumer:** Agent 05 (Create Implementation Plan)
+> **Skills invoked:** ui-ux-pro-max, ui-styling, design-system (all installed and queried)
 
 ---
 
@@ -110,6 +111,32 @@ All colors from the desktop app's `:root` block, to be replicated in the Nuxt da
 - Tailwind adds build complexity
 - Custom properties already provide theming
 - No component library to pair with Tailwind
+
+### 1.6. UI/UX Pro Max Skill Findings
+
+**Design Pattern:** Real-Time / Operations Landing — Modern Dark (Cinema Mobile)
+- **Confirmed alignment:** The desktop app already uses a dark theme with teal accents — matches the "Modern Dark" recommendation from the skill database.
+- **Motion:** Stagger list (Standard) — 300-450ms with back.out(1.4) easing for grid-item animations
+- **Density:** High (8/10) — dense dashboard layout confirmed
+- **Accessibility:** WCAG AA minimum, requires careful accent contrast check
+
+**Chart Recommendations (from skill database):**
+- **Streaming Area Chart** for real-time monitoring — uPlot is correct choice
+- **Line Chart with Highlights** for anomaly detection — spikes already visible in current design
+- **Current value as large text KPI** — already implemented in metric cards
+- **Pause/resume control required** — already present as "Live" toggle
+- **prefers-reduced-motion** must freeze animations — already implemented in desktop
+
+**Nuxt.js Stack Guidelines:**
+- Use auto-imported composables directly (`ref`, `computed`, `useFetch`)
+- Use `useState` for shared reactive state (SSR-friendly cross-component state)
+- Pinia for complex state (consider if app grows beyond composables)
+
+**Accessibility Guidelines (from skill database):**
+- Keyboard navigation: tab order matches visual order (already in desktop with `role="button"`, `tabindex="0"`)
+- Skip links for keyboard users (to add in cloud dashboard)
+- Sequential heading hierarchy h1-h6 (to enforce)
+- All `focus-visible` states use `2px solid rgba(69, 223, 194, 0.62)` outline
 
 ---
 
@@ -250,6 +277,15 @@ API endpoints     → useMonitors (fetch on mount) → Components
 User interactions → Composables → API mutations → WebSocket updates
 ```
 
+### 3.5. Nuxt-Specific State Management
+
+**Key Nuxt.js patterns to follow (from UI/UX Pro Max stack guidelines):**
+
+1. **`useState` for shared state** — Use `useState()` instead of `ref()` for state shared across components. `useState` is SSR-friendly and persists across server/client hydration.
+2. **Auto-imported composables** — Vue composables (`ref`, `computed`, `watch`, `onMounted`) are auto-imported by Nuxt. No manual imports needed.
+3. **`useFetch` / `useAsyncData`** — Use Nuxt's data fetching composables for API calls (handles loading/error states, auto-retries, cache).
+4. **Avoid Pinia unless complexity demands** — Start with composables + `useState`. Add Pinia only if state management becomes too complex.
+
 ---
 
 ## 4. Styling Strategy
@@ -379,6 +415,27 @@ watch(chartData, (newData) => {
 - **Focus management in modals:** Trap focus within `<dialog>` elements (native browser behavior)
 - **Status indicators:** Don't rely on color alone — status dots have shape + glow + label context
 - **Chart accessibility:** Add `aria-describedby` on chart container pointing to summary text; consider providing data table alternative
+
+### 6.3. Accessibility Additions for Cloud Dashboard
+
+| Requirement | Desktop Status | Cloud Dashboard Action |
+|-------------|---------------|------------------------|
+| Skip to main content link | ❌ Not present | **Add** to HeaderBar (`#skip-to-content`) |
+| Heading hierarchy h1→h2→h3 | Partially | Enforce (h1=app title, h2=sections, h3=modals, h4=settings) |
+| `role="switch"` for toggles | Uses custom toggle | Use `role="switch"` with `aria-checked` |
+| Live region for state changes | Partially | Add `aria-live="polite"` to dashboard heading |
+| Chart canvas `aria-label` | Not present | Add descriptive label |
+| Form labels (not placeholder-only) | ✅ `<label>` elements | Maintain |
+
+### 6.4. Pre-Delivery Accessibility Checklist
+
+From UI/UX Pro Max pre-delivery checklist:
+- [ ] No emojis as icons (use SVG: Lucide/Heroicons)
+- [ ] `cursor-pointer` on all clickable elements
+- [ ] Hover states with smooth transitions (150-300ms)
+- [ ] Focus states visible for keyboard nav
+- [ ] `prefers-reduced-motion` respected
+- [ ] Text contrast 4.5:1 minimum
 
 ---
 

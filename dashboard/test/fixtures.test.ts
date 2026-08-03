@@ -5,7 +5,7 @@ import {
   createClientIdentity,
   createMonitor,
   createWsMessage,
-  createIngestRequest,
+  createIngestPayload,
   createIngestResponse,
   createHealthResponse,
   createHealthErrorResponse,
@@ -166,39 +166,41 @@ describe("test fixtures", () => {
     });
   });
 
-  describe("createIngestRequest", () => {
-    test("creates a valid IngestRequest with defaults", () => {
-      const req = createIngestRequest();
+  describe("createIngestPayload", () => {
+    test("creates a valid IngestPayload with defaults", () => {
+      const payload = createIngestPayload();
 
-      expect(req.samples).toHaveLength(1);
-      expect(req.samples[0].clientName).toBe("test-client");
+      expect(payload.clientSlug).toBe("test-client");
+      expect(payload.samples).toHaveLength(0);
     });
 
     test("allows samples override", () => {
-      const req = createIngestRequest({
+      const payload = createIngestPayload({
         samples: [
           {
-            timestamp: "2025-01-01T00:00:00.000Z",
-            clientName: "a",
-            rtt: 10,
-            target: "1.1.1.1",
+            targetHost: "1.1.1.1",
+            timestampMs: Date.now(),
+            latencyMs: 10,
+            status: "success",
+            resolvedAddress: "1.1.1.1",
           },
           {
-            timestamp: "2025-01-01T00:01:00.000Z",
-            clientName: "b",
-            rtt: 20,
-            target: "2.2.2.2",
+            targetHost: "2.2.2.2",
+            timestampMs: Date.now(),
+            latencyMs: 20,
+            status: "success",
+            resolvedAddress: "2.2.2.2",
           },
         ],
       });
 
-      expect(req.samples).toHaveLength(2);
+      expect(payload.samples).toHaveLength(2);
     });
 
     test("allows empty samples array", () => {
-      const req = createIngestRequest({ samples: [] });
+      const payload = createIngestPayload({ samples: [] });
 
-      expect(req.samples).toHaveLength(0);
+      expect(payload.samples).toHaveLength(0);
     });
   });
 
@@ -207,20 +209,20 @@ describe("test fixtures", () => {
       const resp = createIngestResponse();
 
       expect(resp.accepted).toBe(1);
+      expect(resp.duplicate).toBe(0);
       expect(resp.rejected).toBe(0);
-      expect(resp.clientSlug).toBe("test-client");
     });
 
     test("allows overrides", () => {
       const resp = createIngestResponse({
         accepted: 5,
-        rejected: 2,
-        clientSlug: "other",
+        duplicate: 2,
+        rejected: 1,
       });
 
       expect(resp.accepted).toBe(5);
-      expect(resp.rejected).toBe(2);
-      expect(resp.clientSlug).toBe("other");
+      expect(resp.duplicate).toBe(2);
+      expect(resp.rejected).toBe(1);
     });
   });
 

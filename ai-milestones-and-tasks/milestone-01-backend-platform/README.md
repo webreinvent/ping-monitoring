@@ -3,7 +3,7 @@ milestoneId: M1
 title: Backend Platform
 category: Backend
 priority: Critical
-status: "Not Started"
+status: "In Progress"
 estimatedEffort: "12-15 days"
 dependencies: []
 features:
@@ -24,7 +24,7 @@ features:
 
 > **Category:** Backend
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** In Progress
 > **Estimated Effort:** 12-15 days
 > **Dependencies:** None
 

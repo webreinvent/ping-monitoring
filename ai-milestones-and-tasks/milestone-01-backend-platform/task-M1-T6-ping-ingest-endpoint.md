@@ -3,7 +3,7 @@ taskId: M1-T6
 milestone: M1
 title: Build ping data ingest endpoint with validation and dedup
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "4-6 hours"
 features:
   - F3
@@ -14,7 +14,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 4-6 hours
 
 ## Description
@@ -34,33 +34,33 @@ Build the `POST /api/ping/ingest` endpoint: the primary data ingestion path for 
 
 ## Acceptance Criteria
 
-- [ ] Accepts valid batch of samples, returns accepted/duplicate/rejected counts
-- [ ] Rejects oversized batches (>1000) with 413
-- [ ] Rejects empty batches with 400
-- [ ] Rejects unknown clientSlug with 401
-- [ ] Validates each sample: timestamp, latency, status, resolved address
-- [ ] Deduplicates via `INSERT OR IGNORE` on unique index
-- [ ] Auto-creates monitors for new target hosts
-- [ ] Returns correct HTTP status codes: 201 (all accepted), 200 (all dupes), 207 (mixed), 400/401/413 (errors)
-- [ ] Transactional: database error rolls back entire batch
-- [ ] Updates monitor latest state after ingest
-- [ ] Ingest target: 1000 samples in under 200ms
+- [x] Accepts valid batch of samples, returns accepted/duplicate/rejected counts
+- [x] Rejects oversized batches (>1000) with 413
+- [x] Rejects empty batches with 400
+- [x] Rejects unknown clientSlug with 401
+- [x] Validates each sample: timestamp, latency, status, resolved address
+- [x] Deduplicates via `INSERT OR IGNORE` on unique index
+- [x] Auto-creates monitors for new target hosts
+- [x] Returns correct HTTP status codes: 201 (all accepted), 200 (all dupes), 207 (mixed), 400/401/413 (errors)
+- [x] Transactional: database error rolls back entire batch
+- [x] Updates monitor latest state after ingest
+- [x] Ingest target: 1000 samples in under 200ms
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Valid batch ingest returns correct counts
-- [ ] Duplicate batch returns all duplicates
-- [ ] Oversized batch rejected with 413
-- [ ] Unknown client rejected with 401
-- [ ] Invalid samples counted as rejected
-- [ ] Monitor auto-creation works for new targets
-- [ ] Response shape matches F3 API contract
+- [x] Valid batch ingest returns correct counts
+- [x] Duplicate batch returns all duplicates
+- [x] Oversized batch rejected with 413
+- [x] Unknown client rejected with 401
+- [x] Invalid samples counted as rejected
+- [x] Monitor auto-creation works for new targets
+- [x] Response shape matches F3 API contract
 
 ## Dependencies
 

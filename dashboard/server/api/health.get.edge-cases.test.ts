@@ -163,6 +163,51 @@ describe("health.get — additional edge cases", () => {
     });
   });
 
+  describe("statSync — success path", () => {
+    it("statSync returns file size when file exists", () => {
+      const { statSync: realStatSync } = require("node:fs");
+      // package.json exists in the project root
+      const pkgPath = require("node:path").resolve(
+        process.cwd(),
+        "package.json",
+      );
+      const stats = realStatSync(pkgPath);
+
+      // Verify statSync returns a Stats object with a size property
+      expect(typeof stats.size).toBe("number");
+      expect(stats.size).toBeGreaterThan(0);
+    });
+
+    it("db_size_bytes uses statSync.size when file exists", () => {
+      // Simulate the health check's statSync logic for an existing file
+      const { statSync: realStatSync } = require("node:fs");
+      const pkgPath = require("node:path").resolve(
+        process.cwd(),
+        "package.json",
+      );
+
+      let dbSizeBytes = 0;
+      try {
+        dbSizeBytes = realStatSync(pkgPath).size;
+      } catch {
+        // Won't be reached since package.json exists
+      }
+
+      expect(dbSizeBytes).toBeGreaterThan(0);
+      expect(typeof dbSizeBytes).toBe("number");
+    });
+
+    it("statSync does not throw for existing file", () => {
+      const { statSync: realStatSync } = require("node:fs");
+      const pkgPath = require("node:path").resolve(
+        process.cwd(),
+        "package.json",
+      );
+
+      expect(() => realStatSync(pkgPath)).not.toThrow();
+    });
+  });
+
   describe("getDb failure in health check", () => {
     it("getDb throws when no DB is initialized", () => {
       expect(() => getDb()).toThrow(

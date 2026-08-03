@@ -140,29 +140,86 @@ interface HealthErrorResponse {
 
 ### Ingest Types
 
-```typescript
-interface IngestRequest {
-  samples: PingSample[];
-}
+> **Note:** The ingest types (`PingSampleIngest`, `IngestPayload`, `Rejection`, `IngestResponse`, `ValidationResult`) are defined in `server/utils/ping-types.ts` rather than `shared/types.ts` because they are server-only types used by the ingest pipeline. The types below are the shared ones used across server and client code.
 
-interface IngestResponse {
-  accepted: number;
-  rejected: number;
-  clientSlug: string;
+## Server-Only Ingest Types
+
+The following types are defined in `server/utils/ping-types.ts` and used exclusively by the ingest pipeline:
+
+### `PingSampleIngest`
+
+```typescript
+interface PingSampleIngest {
+  targetHost: string;            // Target host or IP being pinged
+  timestampMs: number;           // Unix epoch milliseconds
+  latencyMs: number | null;     // Round-trip latency (required for "success")
+  status: "success" | "timeout" | "error";
+  resolvedAddress: string | null; // Resolved IP (required for "success")
+  error?: string | null;         // Optional error message
 }
 ```
 
-**Used by:** `POST /api/ping/ingest` endpoint (to be implemented in Phase 5).
+**Used by:** `POST /api/ping/ingest` endpoint, `validateSample()`, `ingestPingBatch()`.
 
-## Future Types (Planned)
+### `IngestPayload`
 
-The following types are planned for future phases (documented in the [implementation plan](../../memory/agent-05-implementation-plan.md)):
+```typescript
+interface IngestPayload {
+  clientSlug: string;
+  username?: string;      // Required on first ingest for auto-registration
+  hostname?: string;      // Required on first ingest
+  mac_address?: string;   // Required on first ingest
+  samples: PingSampleIngest[];
+}
+```
 
-- **Phase 3:** IngestPayload, PingSampleIngest, Rejection, MonitorListItem, ClientRecord, HistoryResponse, HistorySeries, HistoryPoint, RangeSummary, SubscribeMessage, SnapshotMessage, SampleMessage, ErrorMessage
-- **Phase 4:** QualityState, QualityReason, ValidationResult
+**Used by:** Request body parsing in `server/api/ping/ingest.post.ts`.
+
+### `Rejection`
+
+```typescript
+interface Rejection {
+  index: number;                      // Position in the original batch
+  reason: string;                     // Human-readable reason
+  code: string;                       // Machine-readable error code
+  sample: Partial<PingSampleIngest>; // The offending sample
+}
+```
+
+**Used by:** Ingest response — included when `rejected > 0`.
+
+### `IngestResponse`
+
+```typescript
+interface IngestResponse {
+  accepted: number;
+  duplicate: number;
+  rejected: number;
+  rejections?: Rejection[];
+}
+```
+
+**Used by:** `POST /api/ping/ingest` response, `ingestPingBatch()` return value.
+
+### `ValidationResult`
+
+```typescript
+interface ValidationResult {
+  valid: boolean;
+  rejections: { reason: string; code: string }[];
+}
+```
+
+**Used by:** `validateSample()` in `server/utils/ping-validation.ts`.
 
 ## Edge Cases
 
 - **Optional fields:** `PingSample.packetLoss` and `PingSample.jitter` are optional — not all clients send these metrics.
-- **Empty samples:** `IngestRequest.samples` may be empty — the ingest endpoint (Phase 5) will return a 400 for empty batches.
+- **Ingest sample nullability:** `PingSampleIngest.latencyMs` and `PingSampleIngest.resolvedAddress` are `null` for timeout/error status — the validation layer enforces they are present for `"success"` status.
 - **Type safety:** All types are exported as `interface` or `type` (not `class`) — they are used purely for type checking and cannot be instantiated at runtime.
+
+## Related
+
+- [Ping Ingest API](../api/ping-ingest.md) — `IngestPayload` request, `IngestResponse` response
+- [Ping Validation](../utils/ping-validation.md) — `ValidationResult` return type
+- [Ping Ingest Engine](../utils/ping-ingest.md) — `IngestResponse` return from `ingestPingBatch()`
