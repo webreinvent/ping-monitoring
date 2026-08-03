@@ -80,7 +80,9 @@ type QualityClass = "good" | "fair" | "poor" | "critical";
 
 ---
 
-### WebSocket Types
+### WebSocket Types (Legacy)
+
+> **Note:** These types are retained for backward compatibility. The F7 WebSocket live broadcast uses a newer set of types documented below.
 
 ```typescript
 type WsMessageType =
@@ -96,7 +98,83 @@ interface WsMessage {
 }
 ```
 
-**Used by:** WebSocket handler (`server/ws/ping.ts`), client WebSocket composables.
+**Used by:** Legacy WebSocket handler, client WebSocket composables.
+
+---
+
+### F7: WebSocket Live Broadcast Types
+
+These types define the message protocol for the F7 WebSocket live broadcast feature. They are used by both the server (`server/ws/ping.ts`) and client code.
+
+#### WsInboundType
+
+```typescript
+type WsInboundType = "subscribe" | "unsubscribe";
+```
+
+Client → server message types. Used by the WebSocket handler to dispatch inbound messages.
+
+**Used by:** `server/ws/ping.ts` message routing.
+
+#### WsOutboundType
+
+```typescript
+type WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample";
+```
+
+Server → client message types. Used by the WebSocket handler and broadcast function.
+
+**Used by:** `server/ws/ping.ts`, `broadcastSample()`.
+
+#### WsPingSample
+
+```typescript
+interface WsPingSample {
+  timestampMs: number;           // Epoch milliseconds of the ping
+  latencyMs: number | null;     // Round-trip latency (null on failure)
+  status: "success" | "timeout" | "error";
+  resolvedAddress: string | null; // Resolved IP (null on failure)
+}
+```
+
+A single ping sample in the WebSocket broadcast. Matches the shape of `PingSampleIngest` but without `targetHost` and `error` fields (those are determined by the `monitorId` context).
+
+**Used by:** `SampleMessage.data`, `SnapshotMessage.data.samples[]`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestampMs` | `number` | Epoch milliseconds of the ping |
+| `latencyMs` | `number \| null` | Round-trip latency; `null` for timeout/error |
+| `status` | `"success" \| "timeout" \| "error"` | Ping result |
+| `resolvedAddress` | `string \| null` | Resolved IP address; `null` on failure |
+
+#### WsMonitorState
+
+```typescript
+interface WsMonitorState {
+  id: number;
+  targetHost: string;
+  targetName: string;
+  status: "up" | "down" | null;
+  latencyMs: number | null;
+  qualityState: "good" | "degraded" | "poor" | "unknown";
+  lastSeenMs: number | null;
+}
+```
+
+Monitor state included in the `snapshot` message. Represents the monitor's current state at the time of subscription.
+
+**Used by:** `SnapshotMessage.data.monitor`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `number` | Monitor ID |
+| `targetHost` | `string` | Target hostname or IP |
+| `targetName` | `string` | Human-readable target name (falls back to `targetHost`) |
+| `status` | `"up" \| "down" \| null` | Current status (`null` = no samples) |
+| `latencyMs` | `number \| null` | Latest latency in ms |
+| `qualityState` | `"good" \| "degraded" \| "poor" \| "unknown"` | Quality classification |
+| `lastSeenMs` | `number \| null` | Epoch ms of latest sample |
 
 ---
 
@@ -417,3 +495,5 @@ interface ValidationResult {
 - [Ping Ingest Engine](../utils/ping-ingest.md) — `IngestResponse` return from `ingestPingBatch()`
 - [Monitors Utility](../utils/monitors.md) — `getAllMonitorsWithLatestState()` query logic
 - [History Aggregation](../utils/history.md) — `calculateBucketSize()`, `getMonitorHistoryPoints()`, `computeQualityIntervals()`, `computeRangeSummary()`, `buildTarget()`
+- [WebSocket Protocol](../websocket/protocol.md) — `WsInboundType`, `WsOutboundType`, `WsPingSample`, `WsMonitorState`
+- [WebSocket Broadcast](../websocket/broadcast.md) — `broadcastSample()` integration point

@@ -80,9 +80,13 @@ export type QualityClass = "good" | "fair" | "poor" | "critical";
 
 /**
  * WebSocket message types.
+ * Legacy types retained for backward compatibility.
  */
 export type WsMessageType =
-  "ping_update" | "monitor_status" | "client_online" | "client_offline";
+  | "ping_update"
+  | "monitor_status"
+  | "client_online"
+  | "client_offline";
 
 /**
  * WebSocket message payload.
@@ -91,6 +95,63 @@ export interface WsMessage {
   type: WsMessageType;
   data: Record<string, unknown>;
   timestamp: string;
+}
+
+// ============================================================================
+// F7: WebSocket Live Broadcast — Message Types
+// ============================================================================
+
+/**
+ * Inbound message types (client → server).
+ */
+export type WsInboundType = "subscribe" | "unsubscribe";
+
+/**
+ * Outbound message types (server → client).
+ */
+export type WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample";
+
+/**
+ * A single ping sample in the WebSocket broadcast.
+ */
+export interface WsPingSample {
+  /** Epoch milliseconds of the ping */
+  timestampMs: number;
+
+  /** Round-trip latency in ms (null on failure) */
+  latencyMs: number | null;
+
+  /** Ping result status */
+  status: "success" | "timeout" | "error";
+
+  /** Resolved IP address (null on failure) */
+  resolvedAddress: string | null;
+}
+
+/**
+ * Monitor state included in the snapshot message.
+ */
+export interface WsMonitorState {
+  /** Monitor ID */
+  id: number;
+
+  /** Target hostname or IP */
+  targetHost: string;
+
+  /** Human-readable target name */
+  targetName: string;
+
+  /** Current status */
+  status: "up" | "down" | null;
+
+  /** Latest latency */
+  latencyMs: number | null;
+
+  /** Quality classification */
+  qualityState: "good" | "degraded" | "poor" | "unknown";
+
+  /** Epoch ms of latest ping, or null */
+  lastSeenMs: number | null;
 }
 
 /**

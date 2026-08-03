@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -182,3 +182,53 @@
 **Fix:** The `[...currentReasons]` spread in the interval construction is sufficient — each interval gets its own copy of the reasons array. The test verifies this by pushing to `intervals[0].reasons` and checking that the original classifier state is unchanged.
 
 **Prevention:** When returning arrays of objects with mutable sub-arrays, always create defensive copies. The spread operator (`[...]`) for arrays and object spread (`{...obj}`) are the standard patterns.
+
+## Lesson 19: M1-T9 (WebSocket) was already fully implemented
+
+**Error:** The WebSocket live broadcast feature (M1-T9) was found to be already fully implemented by previous agents. Agent 07 verified all acceptance criteria were met and no new code was needed.
+
+**Root cause:** The WebSocket handler (`server/ws/ping.ts`) was created during M1-T1 initial setup and refined through subsequent tasks. The subscription map, message protocol, snapshot delivery, and broadcast integration were all complete.
+
+**Key insight:** Always check existing implementation before writing new code. The `git diff --stat` command and reading the existing file revealed the feature was complete. Agent 07's role was verification, not implementation.
+
+**Prevention:** Agent 02 (Understand Task Scope) should always check for existing implementation of the target feature. Agent 07 should verify before implementing. This saves time and avoids duplicate work.
+
+## Lesson 20: Mock getDb must set globalThis.__db directly
+
+**Error:** The Vitest mock for `getDb` must set `globalThis.__db` directly — not just mock the function return. The actual `getDb()` implementation reads from `globalThis.__db`.
+
+**Root cause:** The `getDb()` function checks `if (globalThis.__db)` and returns it; otherwise creates a new connection. Mocking only the return value without setting the global is inconsistent.
+
+**Fix:** Mock setup: `vi.mock("../utils/db", () => ({ getDb: vi.fn() }))` AND set `globalThis.__db = mockDb` in the test setup.
+
+**Prevention:** When mocking functions that read global state, the mock must match the real implementation's behavior — including reading from the same global variables.
+
+## Lesson 21: Logger info() takes string, not function
+
+**Error:** The `info()` logger function expects a plain `string` parameter. Wrapping in arrow functions `() => ...` causes type errors.
+
+**Root cause:** Template literals like `` info(`subscribing to ${monitorId}`) `` work fine, but wrapping in `() =>` is wrong.
+
+**Fix:** Always pass strings directly to logger functions.
+
+**Prevention:** Check the logger function signature before calling — `info(message: string)` takes a string, not a function.
+
+## Lesson 22: Worker exit errors are infrastructure, not code
+
+**Error:** 4 worker exit errors appear in every Vitest run (across 33 test files, 587 tests). These are infrastructure issues, not test failures.
+
+**Root cause:** Vitest worker process management issues — not related to test code or application code.
+
+**Fix:** No fix needed. These are known infrastructure issues that don't affect test results.
+
+**Prevention:** Don't chase worker exit errors in Vitest output — they are noise. Focus on actual test failures.
+
+## Lesson 23: WebSocket broadcast must iterate a copy of the subscriber set
+
+**Error:** Broadcasting to subscribers by iterating the Set directly could cause issues if the set changes during iteration (e.g., a client disconnects mid-broadcast).
+
+**Root cause:** The subscription map may change during broadcast if a client disconnects while iterating.
+
+**Fix:** Iterate `[...subSet]` (spread copy) in `broadcastSample()` to avoid iteration issues.
+
+**Prevention:** When iterating over sets that may change, always iterate a copy. This is a standard pattern for broadcast/pub-sub systems.

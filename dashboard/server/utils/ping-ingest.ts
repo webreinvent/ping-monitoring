@@ -7,6 +7,7 @@ import type {
   PingSampleIngest,
   IngestResponse,
   Rejection,
+  AcceptedSample,
 } from "./ping-types";
 import { validateSample } from "./ping-validation";
 
@@ -15,17 +16,6 @@ import { validateSample } from "./ping-validation";
  */
 function getMaxSamples(): number {
   return Number(process.env.INGEST_MAX_SAMPLES ?? 1000);
-}
-
-/**
- * Result of processing a single valid sample through the ingest pipeline.
- */
-interface SampleIngestResult {
-  /** The monitor_id this sample was (or would have been) inserted into */
-  monitorId: number;
-
-  /** Whether the sample was actually inserted (true) or was a duplicate (false) */
-  inserted: boolean;
 }
 
 /**
@@ -74,12 +64,17 @@ function ensureMonitor(
  *
  * @param clientId - The client's database ID
  * @param samples - Array of validated samples to ingest
- * @returns An object with counts of accepted/duplicate and the affected monitor IDs
+ * @returns An object with counts, affected monitor IDs, and accepted samples for broadcast
  */
 function ingestSamples(
   clientId: number,
   samples: PingSampleIngest[],
-): { accepted: number; duplicate: number; monitorIds: Set<number> } {
+): {
+  accepted: number;
+  duplicate: number;
+  monitorIds: Set<number>;
+  acceptedSamples: AcceptedSample[];
+} {
   const db = getDb();
   const now = Date.now();
 
@@ -105,6 +100,7 @@ function ingestSamples(
     let accepted = 0;
     let duplicate = 0;
     const affectedMonitorIds = new Set<number>();
+    const acceptedSamples: AcceptedSample[] = [];
 
     // better-sqlite3: stmt.run() returns an object with a `changes` property
     // indicating how many rows were actually modified.
@@ -122,6 +118,13 @@ function ingestSamples(
 
       if ((result as { changes: number }).changes > 0) {
         accepted++;
+        acceptedSamples.push({
+          monitorId,
+          timestampMs: sample.timestampMs,
+          latencyMs: sample.latencyMs ?? null,
+          status: sample.status as "success" | "timeout" | "error",
+          resolvedAddress: sample.resolvedAddress ?? null,
+        });
       } else {
         duplicate++;
       }
@@ -164,7 +167,7 @@ function ingestSamples(
       "UPDATE clients SET last_synced_at_ms = ?, updated_at = ? WHERE id = ?",
     ).run(now, now, clientId);
 
-    return { accepted, duplicate, monitorIds: affectedMonitorIds };
+    return { accepted, duplicate, monitorIds: affectedMonitorIds, acceptedSamples };
   });
 
   return transaction();
@@ -245,12 +248,14 @@ export function ingestPingBatch(
   // Phase 3: Ingest valid samples within a transaction
   let accepted = 0;
   let duplicate = 0;
+  const acceptedSamples: AcceptedSample[] = [];
 
   if (validSamples.length > 0) {
     try {
       const result = ingestSamples(client.id, validSamples);
       accepted = result.accepted;
       duplicate = result.duplicate;
+      acceptedSamples.push(...result.acceptedSamples);
 
       info(
         `Ingested batch for client ${clientSlug}`,
@@ -279,5 +284,6 @@ export function ingestPingBatch(
     duplicate,
     rejected: rejectedCount,
     rejections: rejections.length > 0 ? rejections : undefined,
+    acceptedSamples: acceptedSamples.length > 0 ? acceptedSamples : undefined,
   };
 }

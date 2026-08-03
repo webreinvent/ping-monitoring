@@ -3,7 +3,7 @@ taskId: M1-T9
 milestone: M1
 title: Create WebSocket live broadcast with subscription management
 priority: High
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "4-6 hours"
 features:
   - F7
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** High
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 4-6 hours
 
 ## Description
@@ -30,26 +30,26 @@ Build the WebSocket endpoint at `/ws/ping` for real-time ping data broadcast. Ma
 
 ## Acceptance Criteria
 
-- [ ] WebSocket connection accepted at `/ws/ping`
-- [ ] `subscribe` message sends `subscribed` ack + `snapshot` with last 100 samples
-- [ ] `unsubscribe` message sends `unsubscribed` ack and stops further messages
-- [ ] New samples from ingest are broadcast to subscribers within 100ms
-- [ ] Multiple subscribers per monitor all receive samples
-- [ ] Stale connections cleaned up on close/error
-- [ ] Message protocol matches F7 spec (subscribe, unsubscribe, subscribed, unsubscribed, snapshot, sample)
+- [x] WebSocket connection accepted at `/ws/ping`
+- [x] `subscribe` message sends `subscribed` ack + `snapshot` with last 100 samples
+- [x] `unsubscribe` message sends `unsubscribed` ack and stops further messages
+- [x] New samples from ingest are broadcast to subscribers within 100ms
+- [x] Multiple subscribers per monitor all receive samples
+- [x] Stale connections cleaned up on close/error
+- [x] Message protocol matches F7 spec (subscribe, unsubscribe, subscribed, unsubscribed, snapshot, sample)
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] WebSocket connection works
-- [ ] Subscribe/snapshot protocol
-- [ ] Unsubscribe stops messages
-- [ ] Live sample broadcast
+- [x] WebSocket connection works
+- [x] Subscribe/snapshot protocol
+- [x] Unsubscribe stops messages
+- [x] Live sample broadcast
 
 ## Dependencies
 

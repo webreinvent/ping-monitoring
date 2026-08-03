@@ -39,6 +39,35 @@ export interface PingSampleIngest {
 
 ---
 
+### `AcceptedSample`
+
+A single accepted sample ready for WebSocket broadcast. Produced by the ingest engine after successful insertion, containing the resolved `monitorId` and the broadcast-ready fields.
+
+```typescript
+export interface AcceptedSample {
+  /** Monitor ID this sample belongs to */
+  monitorId: number;
+
+  /** Epoch milliseconds of the ping */
+  timestampMs: number;
+
+  /** Round-trip latency in ms (null on failure) */
+  latencyMs: number | null;
+
+  /** Ping result status */
+  status: "success" | "timeout" | "error";
+
+  /** Resolved IP address (null on failure) */
+  resolvedAddress: string | null;
+}
+```
+
+**Used by:** `IngestResponse.acceptedSamples[]`, `broadcastSample()` in the ingest endpoint.
+
+**Note:** Differs from `PingSampleIngest` in that it includes `monitorId` (resolved during ingest) and omits `targetHost` and `error` (not needed for broadcast — the `monitorId` provides context).
+
+---
+
 ### `IngestPayload`
 
 Full ingest request payload. Client sends this to `POST /api/ping/ingest`.
@@ -92,7 +121,7 @@ export interface Rejection {
 
 ### `IngestResponse`
 
-Response returned to the client after processing the batch.
+Response returned to the client after processing the batch. Extended with F7: includes `acceptedSamples` for WebSocket broadcast.
 
 ```typescript
 export interface IngestResponse {
@@ -107,10 +136,13 @@ export interface IngestResponse {
 
   /** Detailed rejection info (only present when rejected > 0) */
   rejections?: Rejection[];
+
+  /** Accepted samples for WebSocket broadcast (F7) */
+  acceptedSamples?: AcceptedSample[];
 }
 ```
 
-**Used by:** API response, `ingestPingBatch()` return value.
+**Used by:** API response, `ingestPingBatch()` return value, `broadcastAcceptedSamples()` in the ingest endpoint.
 
 ---
 
@@ -135,10 +167,12 @@ export interface ValidationResult {
 - **`latencyMs` nullability:** For timeout/error status, `latencyMs` is `null`. The validation layer only requires it for `"success"` status.
 - **`resolvedAddress` nullability:** Same as `latencyMs` — only required for `"success"`.
 - **`error` optional:** The `error` field on `PingSampleIngest` is optional (`string | null`). It is used to store error messages for timeout/error status but is not validated.
+- **`acceptedSamples` optional:** The `acceptedSamples` field on `IngestResponse` is only populated when samples are actually accepted — it is `undefined` when `accepted === 0`.
 
 ## Related
 
 - [Ping Ingest API](../api/ping-ingest.md) — Uses `IngestPayload` (request) and `IngestResponse` (response)
 - [Ping Validation](../utils/ping-validation.md) — Returns `ValidationResult`
 - [Ping Ingest Engine](../utils/ping-ingest.md) — Returns `IngestResponse | null`
-- [Shared Types](../shared/types.md) — `PingSample` (distinct from `PingSampleIngest`)
+- [WebSocket Broadcast](../websocket/broadcast.md) — `broadcastSample()` uses `AcceptedSample`
+- [Shared Types](../shared/types.md) — `PingSample` (distinct from `PingSampleIngest`), `WsPingSample` (broadcast sample type)

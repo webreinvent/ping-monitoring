@@ -245,7 +245,7 @@ The following hooks are planned for future features:
 
 | Hook | Feature | Status |
 |------|---------|--------|
-| WebSocket broadcast | F7 | Not implemented — planned for Phase 6 |
+| WebSocket broadcast | F7 | **Implemented** — `broadcastSample()` called from ingest endpoint |
 | Quality classifier | F12 | Not implemented — `quality_state` initialized as `'warmingUp'` |
 
 ## Related
@@ -255,4 +255,6 @@ The following hooks are planned for future features:
 - [Client Utilities](../utils/client.md) — `getClientBySlug()`, `upsertClient()`
 - [DB Helper](../utils/db.md) — `getDb()` for database access
 - [Database Schema](../database/schema.md) — `ping_samples` table, `monitors` table
+- [WebSocket Broadcast](../websocket/broadcast.md) — `broadcastSample()` called after successful ingest
 - [Feature F3 Specification](../../requirements/features/feature-0003-ping-ingest.md) — Original requirements
+- [Feature F7 Specification](../../requirements/features/feature-0007-websocket-broadcast.md) — WebSocket live broadcast
