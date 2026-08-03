@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -228,3 +228,40 @@ ORDER BY bucket_ms ASC
 - `points` = `HistoryPoint[]` (bucket_ms, latencyMs, packetLoss, sampleCount, status, qualityState)
 - `intervals` = `QualityIntervalRecord[]` (merged quality state intervals)
 - `summary` = `RangeSummary` (aggregate statistics for the time range)
+
+## WebSocket Live Broadcast Pattern (M1-T9 / F7)
+
+**Pattern:** Nitro WebSocket handler with subscription map, snapshot delivery, and live sample broadcast.
+
+### WebSocket Handler Structure
+- Uses `defineWebSocketHandler()` with `open`, `message`, `close` lifecycle methods
+- Located at `server/ws/ping.ts` — auto-mapped to `/ws/ping` endpoint
+- JSON message protocol with `type` discriminator field
+- No authentication at WebSocket level (relies on HTTP-level auth via Nuxt proxy)
+
+### Subscription Map
+- `Map<number, Set<WebSocketType>>` — key is monitor_id, values are raw WebSocket objects
+- Raw WebSocket (`(peer as any).ws`) stored for external broadcast capability (from ingest endpoint)
+- `getSubscribers(monitorId)` — get or create subscriber set
+- `cleanupEmptyMonitor(monitorId)` — remove empty sets to prevent memory leaks
+
+### Message Protocol (F7 spec)
+- **Client → Server:** `subscribe` (monitorId), `unsubscribe` (monitorId)
+- **Server → Client:** `subscribed` (ack), `unsubscribed` (ack), `snapshot` (monitor + last 100 samples), `sample` (single new sample), `error` (error message)
+
+### Snapshot on Subscribe
+- Queries last 100 samples via `getSnapshotSamples()` (ORDER BY timestamp_ms DESC LIMIT 100)
+- Reverses to oldest-first order for chart consumption
+- Includes monitor state (targetHost, targetName, status, qualityState, lastSeenMs)
+- Map functions (`mapMonitorStatus`, `mapQualityState`) translate DB values to API contract
+
+### Broadcast from Ingest
+- `broadcastSample(monitorId, sample)` exported from `server/ws/ping.ts`
+- Called from `server/api/ping/ingest.post.ts` after successful DB insert
+- Iterates over `[...subSet]` (copy) to avoid iteration issues if set changes during broadcast
+- Checks `ws.readyState === 1` (OPEN) before sending; catches send errors
+
+### Cleanup on Disconnect
+- `close` handler iterates all monitor subscription sets removing the disconnected WebSocket
+- `error` events are handled by the same cleanup path (Nitro emits close on error)
+- Prevents memory leaks from stale connections

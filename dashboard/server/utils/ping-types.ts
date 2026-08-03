@@ -28,6 +28,26 @@ export interface PingSampleIngest {
 }
 
 /**
+ * A single accepted sample ready for WebSocket broadcast (F7).
+ */
+export interface AcceptedSample {
+  /** Monitor ID this sample belongs to */
+  monitorId: number;
+
+  /** Epoch milliseconds of the ping */
+  timestampMs: number;
+
+  /** Round-trip latency in ms (null on failure) */
+  latencyMs: number | null;
+
+  /** Ping result status */
+  status: "success" | "timeout" | "error";
+
+  /** Resolved IP address (null on failure) */
+  resolvedAddress: string | null;
+}
+
+/**
  * Full ingest request payload.
  * Client sends this to POST /api/ping/ingest.
  */
@@ -67,6 +87,7 @@ export interface Rejection {
 
 /**
  * Response returned to the client after processing the batch.
+ * Extended with F7: acceptedSamples for WebSocket broadcast.
  */
 export interface IngestResponse {
   /** Number of samples successfully inserted */
@@ -80,6 +101,9 @@ export interface IngestResponse {
 
   /** Detailed rejection info (only present when rejected > 0) */
   rejections?: Rejection[];
+
+  /** Accepted samples for WebSocket broadcast (F7) */
+  acceptedSamples?: AcceptedSample[];
 }
 
 /**

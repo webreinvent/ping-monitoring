@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast)
 
 ## Technology Stack Decisions
 
@@ -174,3 +174,35 @@
 - **Decision:** Use F6 API contract types (from `api-design.md`) for dashboard, not desktop app types from `src/types.ts`
 - **Rationale:** Dashboard has its own API contract; QualityReason and QualityState enums differ between desktop and dashboard
 - **Impact:** F6 types in `shared/types.ts` are dashboard-specific: `QualityReason` uses F6 contract values (`packetLoss`, `highLatency`, `highJitter`, `insufficientSamples`), not desktop values
+
+## WebSocket Live Broadcast Decisions (M1-T9 / F7)
+
+### Subscription-per-monitor model (not global broadcast)
+- **Decision:** Each WebSocket client subscribes to specific monitor_ids (not a global broadcast to all monitors)
+- **Rationale:** Scales better (only sends data clients actually want), respects client interest, and matches F7 spec
+- **Impact:** `Map<number, Set<WebSocketType>>` subscription map; clients must explicitly subscribe/unsubscribe per monitor
+
+### Snapshot on subscribe (last 100 samples)
+- **Decision:** Send last 100 samples immediately after subscription acknowledgment
+- **Rationale:** UI has historical context without needing a separate API call to the history endpoint; provides immediate chart data
+- **Impact:** Two queries on subscribe: one for monitor state, one for last 100 samples. SNAPSHOT_SIZE constant (100) is configurable.
+
+### Broadcast from ingest endpoint (not separate broadcast endpoint)
+- **Decision:** The ingest endpoint (`POST /api/ping/ingest`) triggers WebSocket broadcast after successful DB insert
+- **Rationale:** Tight coupling — the ingest endpoint already has the sample data; no need for a second code path or polling
+- **Impact:** `broadcastSample()` is exported from `server/ws/ping.ts` and imported by `server/api/ping/ingest.post.ts`
+
+### JSON message protocol with type discriminator
+- **Decision:** All WebSocket messages are JSON with a `type` field for routing
+- **Rationale:** Simple, human-readable, matches F7 spec exactly, and easy to extend with new message types
+- **Impact:** 7 message types: `subscribe`, `unsubscribe`, `subscribed`, `unsubscribed`, `snapshot`, `sample`, `error`
+
+### Monitor existence check before subscribe
+- **Decision:** Validate that the monitor exists before adding to subscription map
+- **Rationale:** Prevents subscribing to non-existent monitors; provides clear error feedback
+- **Impact:** `SELECT id FROM monitors WHERE id = ?` check before subscription; returns `error` message if not found
+
+### No WebSocket-level authentication
+- **Decision:** Current implementation assumes same-origin or token-based auth at HTTP level (Nuxt proxy handles this)
+- **Rationale:** MVP doesn't require WebSocket-specific auth; the HTTP connection is already authenticated
+- **Impact:** Future enhancement may add per-message auth or token exchange on connect

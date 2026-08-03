@@ -4,6 +4,7 @@ import type {
   IngestPayload,
   PingSampleIngest,
   IngestResponse,
+  AcceptedSample,
 } from "../../utils/ping-types";
 import type { H3Event } from "h3";
 
@@ -130,6 +131,11 @@ export default defineEventHandler(async (event) => {
       rejections: result.rejections,
     };
 
+    // F7: Broadcast new samples to WebSocket subscribers (fire-and-forget, non-blocking)
+    if (result.acceptedSamples && result.acceptedSamples.length > 0) {
+      broadcastAcceptedSamples(result.acceptedSamples);
+    }
+
     return sendResponse(event, statusCode, response);
   } catch (err) {
     // Database or unexpected error
@@ -160,4 +166,39 @@ function sendResponse(
 ): IngestResponse {
   setResponseStatus(event, statusCode);
   return body;
+}
+
+/**
+ * Broadcast accepted samples to WebSocket subscribers.
+ * Fire-and-forget — does not block the ingest response.
+ *
+ * Group samples by monitorId and broadcast each to its subscribers.
+ * The broadcast call is async and uses setImmediate-equivalent semantics.
+ */
+async function broadcastAcceptedSamples(samples: AcceptedSample[]): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { broadcastSample } = await import("#server/ws/ping");
+
+  // Group by monitorId for efficiency
+  const grouped = new Map<number, AcceptedSample[]>();
+  for (const sample of samples) {
+    const group = grouped.get(sample.monitorId);
+    if (group) {
+      group.push(sample);
+    } else {
+      grouped.set(sample.monitorId, [sample]);
+    }
+  }
+
+  // Broadcast each sample individually (broadcastSample handles the fan-out)
+  for (const [monitorId, monitorSamples] of grouped) {
+    for (const sample of monitorSamples) {
+      broadcastSample(monitorId, {
+        timestampMs: sample.timestampMs,
+        latencyMs: sample.latencyMs,
+        status: sample.status,
+        resolvedAddress: sample.resolvedAddress,
+      });
+    }
+  }
 }

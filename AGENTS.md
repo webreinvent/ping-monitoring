@@ -445,7 +445,7 @@ The `POST /api/ping/ingest` endpoint is the primary data ingestion path for all 
 ### Known Limitations (M1-T6)
 
 - **F12 hook (quality classifier)** — Not implemented yet (deferred to M1-T7)
-- **F7 hook (WebSocket broadcast)** — Not implemented yet (deferred to M1-T9)
+- **F7 hook (WebSocket broadcast)** — **Implemented** in M1-T9 via `broadcastSample()` export
 - **Integration tests with better-sqlite3** — Segfault in Vitest forked workers; unit tests mock the DB, integration tests are limited to in-memory SQLite
 
 ## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T7)
@@ -587,4 +587,104 @@ The `GET /api/monitors/:id` endpoint returns historical ping data as `HistoryRes
 | ADR-022 | p95 from Bucket Averages (Approximation) | Uses per-bucket averages as p95 proxy; acceptable for MVP, can be improved with individual-sample percentile queries |
 | ADR-023 | Default 1-Hour Time Window | fromMs defaults to 1 hour ago, toMs to now; balanced default for recent, meaningful data |
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T8 monitor history API conventions appended)*
+## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T9)
+
+### WebSocket Live Broadcast (M1-T9 / F7)
+
+The WebSocket endpoint at `/ws/ping` provides real-time ping data broadcast with subscription management. Implemented using Nitro's native `defineWebSocketHandler` with a per-monitor subscription map.
+
+#### Subscription Map Pattern
+- **File**: `server/ws/ping.ts`
+- **Structure**: `Map<number, Set<WebSocketType>>` — key is `monitorId`, values are raw WebSocket objects
+- **`getSubscribers(monitorId)`**: Get or create subscriber set (lazy initialization)
+- **`cleanupEmptyMonitor(monitorId)`**: Remove empty sets to prevent memory leaks
+- **Rationale**: Map + Set provides O(1) lookup and O(1) add/delete; raw WebSocket stored (not Nitro peer) for external broadcast capability
+
+#### Raw WebSocket Extraction Pattern
+- **Pattern**: `const ws: WebSocketType = (peer as any).ws` — extract raw WebSocket from Nitro peer
+- **Why**: Nitro's `peer` object is a `Peer<AdapterInternal>` wrapper; the underlying WebSocket is needed for:
+  - Broadcasting from outside the handler (ingest endpoint)
+  - Checking `readyState` before sending
+  - Direct `ws.send()` calls for broadcast (more efficient than peer.send)
+- **Storage**: Store the raw `ws` in the subscription Set, not the peer
+- **Caveat**: Use `as any` cast — Nitro doesn't expose a typed accessor for the underlying WebSocket
+
+#### Message Protocol (F7 Spec)
+- **Client → Server (inbound)**:
+  - `subscribe` — `{ type: "subscribe", monitorId: number }`
+  - `unsubscribe` — `{ type: "unsubscribe", monitorId: number }`
+- **Server → Client (outbound)**:
+  - `subscribed` — `{ type: "subscribed", monitorId }` — acknowledgment
+  - `unsubscribed` — `{ type: "unsubscribed", monitorId }` — acknowledgment
+  - `snapshot` — `{ type: "snapshot", monitorId, data: { monitor, samples[] } }` — last 100 samples
+  - `sample` — `{ type: "sample", monitorId, data: { timestampMs, latencyMs, status, resolvedAddress } }` — new sample
+  - `error` — `{ type: "error", message: string }` — error message
+- **All messages are JSON** with a `type` discriminator field
+- **Connected acknowledgment**: On `open`, send `{ type: "connected", timestamp: ISO string }` (backward compat)
+
+#### Snapshot on Subscribe
+- **`SNAPSHOT_SIZE`** constant: 100 (configurable)
+- **Two queries on subscribe**: (1) monitor state (`SELECT ... FROM monitors WHERE id = ?`), (2) last 100 samples (`SELECT ... FROM ping_samples WHERE monitor_id = ? ORDER BY timestamp_ms DESC LIMIT ?`)
+- **Reversed to oldest-first**: `rawSamples.reverse()` for chart consumption
+- **Monitor existence check**: `SELECT id FROM monitors WHERE id = ?` before subscribing — returns `error` if not found
+- **Mapping functions**: `mapMonitorStatus()` and `mapQualityState()` — same logic as monitors list API
+
+#### Broadcast from Ingest Integration
+- **`broadcastSample(monitorId, sample)`**: Exported function called from `server/api/ping/ingest.post.ts` after successful DB insert
+- **Non-blocking**: Broadcast doesn't affect ingest response time (fire-and-forget)
+- **Early return**: If no subscribers (`!subSet || subSet.size === 0`), return immediately
+- **Safe iteration**: `for (const ws of [...subSet])` — iterate a copy to avoid issues if set changes during broadcast
+- **ReadyState check**: `ws.readyState === 1` (OPEN) before sending; catch send errors per-peer
+- **Pattern**: Broadcast is a cross-cutting concern — exported from the WebSocket module, imported by the ingest endpoint
+
+#### Cleanup on Disconnect
+- **`close` handler**: Iterates over `[...subscriptions.keys()]` (copy of keys) to remove the disconnected WebSocket from all subscription sets
+- **Why copy**: The Map may change during iteration (deleting empty sets); iterating over a copy avoids `ConcurrentModification` issues
+- **Double cleanup**: After deleting from set, check `subSet.size === 0` and `subscriptions.delete(monitorId)` to remove the empty entry
+- **Error handling**: Nitro emits `close` on error — no separate error handler needed for cleanup
+- **Logging**: `info()` on connect and disconnect for observability
+
+#### SendJSON Helper Pattern
+- **Function**: `sendJSON(peer, message)` — wraps `peer.send(JSON.stringify(message))` in try/catch
+- **Error handling**: Catches send errors, logs with `warn()` including message type and error details
+- **Used for**: All peer-to-client sends (acknowledgments, errors) — NOT for broadcast (which uses `ws.send()` directly)
+
+#### WebSocket-Handler-Scoped Types
+- **Inbound types**: `SubscribeMessage`, `UnsubscribeMessage`, `InboundMessage` (union)
+- **Outbound types**: `SubscribedMessage`, `UnsubscribedMessage`, `SnapshotMessage`, `SampleMessage`, `ErrorMessage`, `OutboundMessage` (union)
+- **Location**: Defined locally in `server/ws/ping.ts` — not in `shared/types.ts` (WebSocket protocol is server-internal)
+- **Rationale**: These types are implementation details of the WebSocket handler; `shared/types.ts` defines the contract
+
+#### Shared Types — F7 WebSocket (shared/types.ts)
+- **`WsInboundType`**: `"subscribe" | "unsubscribe"` — client-to-server message types
+- **`WsOutboundType`**: `"subscribed" | "unsubscribed" | "snapshot" | "sample"` — server-to-client message types
+- **`WsPingSample`**: `timestampMs`, `latencyMs`, `status`, `resolvedAddress` — single sample in broadcast
+- **`WsMonitorState`**: `id`, `targetHost`, `targetName`, `status`, `latencyMs`, `qualityState`, `lastSeenMs` — monitor state in snapshot
+- **Pattern**: Shared types are minimal — the full message shapes are in the handler; `shared/types.ts` defines the contract
+
+#### WebSocket Test Patterns
+- **Mock `nitropack`**: `vi.mock("nitropack", () => ({ defineWebSocketHandler: (h) => h }), { virtual: true })` — virtual module mock
+- **Global `defineWebSocketHandler`**: Set on `globalThis` since Nitro auto-imports it (not explicitly imported)
+- **Dual import path mocking**: Mock both `../utils/db` and `#server/utils/db` since the file may use either path format
+- **Peer mock**: `{ send: vi.fn(), ws: { readyState: 1 } }` — minimal peer with send capability
+- **Message mock**: `{ text: () => JSON.stringify({ type, monitorId }) }` — simulates the message object from Nitro
+- **Dynamic import for isolation**: `await import("./ping")` inside each test to get a fresh module instance (subscription map resets)
+- **10 unit tests** covering: open (connected), message validation (invalid JSON, missing fields, unknown type), subscribe error (non-existent monitor), unsubscribe ack, close, and broadcastSample exports
+
+#### Ingest → WebSocket Broadcast Integration (server/api/ping/ingest.post.ts)
+- **Import**: `import { broadcastSample } from "~/server/ws/ping"`
+- **Placement**: Called after successful DB insert within the transaction, for each accepted sample
+- **Non-blocking**: Broadcast is fire-and-forget — failures are logged but don't affect ingest response
+- **Only accepted samples**: Duplicate and rejected samples are not broadcast
+- **Pattern**: Cross-module import for event-driven broadcast — the WebSocket handler exposes `broadcastSample`, the ingest endpoint consumes it
+
+### ADRs — WebSocket Live Broadcast (M1-T9)
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-024 | Subscription-per-Monitor Model | Each client subscribes to specific monitor IDs; no global broadcast. Scales with client interest, matches F7 spec |
+| ADR-025 | Snapshot on Subscribe (Last 100 Samples) | UI receives historical context immediately; eliminates separate API call for initial chart data. SNAPSHOT_SIZE=100 is configurable |
+| ADR-026 | Broadcast from Ingest Endpoint | Ingest triggers WebSocket broadcast after DB insert; tight coupling, no polling. Fire-and-forget — broadcast failures don't affect ingest |
+| ADR-027 | JSON Message Protocol with Type Discriminator | All WebSocket messages are JSON with `type` field; simple, extensible, human-readable. 7 message types (subscribe, unsubscribe, subscribed, unsubscribed, snapshot, sample, error) |
+
+*Last updated: 2026-08-03 (Agent 14 — M1-T9 WebSocket live broadcast conventions appended)**

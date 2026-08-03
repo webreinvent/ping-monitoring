@@ -246,8 +246,25 @@ Validation is **accumulative** — a single sample can have multiple rejection r
 - **Target:** 1000 samples in under 200ms
 - Transaction is a single `db.transaction()` call — atomic with rollback on any error
 - `INSERT OR IGNORE` uses the unique index on `(monitor_id, timestamp_ms, resolved_address)`
-- No WebSocket broadcast is triggered yet (planned for F7)
+- WebSocket broadcast (F7) is fire-and-forget and does not block the response
 - Quality classifier is not yet invoked (planned for F12)
+
+## WebSocket Broadcast Integration (F7)
+
+After a successful ingest, the endpoint broadcasts each newly accepted sample to WebSocket subscribers:
+
+1. The ingest engine returns `acceptedSamples` (array of `AcceptedSample` with `monitorId`, `timestampMs`, `latencyMs`, `status`, `resolvedAddress`)
+2. The endpoint calls `broadcastAcceptedSamples()` which dynamically imports `broadcastSample()` from `#server/ws/ping`
+3. Samples are grouped by `monitorId` for efficiency
+4. Each sample is pushed to all subscribers of the affected monitor
+
+**Key properties:**
+- **Non-blocking:** Broadcast uses `async` fire-and-forget semantics — it does not delay the HTTP response
+- **No retry:** Failed WebSocket sends are logged but not retried
+- **Dynamic import:** Uses `await import("#server/ws/ping")` to avoid circular dependencies
+- **Per-sample:** Each sample is broadcast individually (not batched per monitor)
+
+See [WebSocket Protocol](../websocket/protocol.md) and [Broadcast API](../websocket/broadcast.md) for details.
 
 ## Edge Cases
 
@@ -317,5 +334,8 @@ curl -s -X POST http://localhost:3000/api/ping/ingest \
 - [Shared Types](../shared/types.md) — `IngestPayload`, `PingSampleIngest`, `IngestResponse`, `Rejection`
 - [Database Schema](../database/schema.md) — `ping_samples` table, unique constraint, indexes
 - [Client Utilities](../utils/client.md) — `getClientBySlug()`, `upsertClient()`, `generateSlug()`
+- [WebSocket Protocol](../websocket/protocol.md) — Live broadcast message protocol
+- [WebSocket Broadcast API](../websocket/broadcast.md) — `broadcastSample()` integration point
 - [Feature F3 Specification](../../requirements/features/feature-0003-ping-ingest.md) — Original requirements
 - [Feature F4 Specification](../../requirements/features/feature-0004-client-sync.md) — Client auto-registration
+- [Feature F7 Specification](../../requirements/features/feature-0007-websocket-broadcast.md) — WebSocket live broadcast
