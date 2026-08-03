@@ -46,9 +46,11 @@ cp dashboard/.env.example dashboard/.env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RETENTION_DAYS` | `30` | How long to keep raw ping samples (days) |
-| `ROLLUP_RETENTION_DAYS` | `90` | How long to keep minute rollups (days) |
-| `MONITOR_INACTIVE_DAYS` | `30` | Days of inactivity before a monitor is considered inactive |
+| `RETENTION_ENABLED` | `true` | Enable/disable retention cleanup entirely |
+| `RETENTION_SAMPLE_DAYS` | `30` | How long to keep raw ping samples (days) |
+| `RETENTION_ROLLUP_DAYS` | `90` | How long to keep minute rollups (days) |
+| `RETENTION_INTERVAL_MIN` | `60` | How often the cleanup runs (minutes) |
+| `RETENTION_VACUUM_THRESHOLD` | `10000` | Minimum rows deleted before triggering a VACUUM |
 
 ### Cache
 
@@ -75,3 +77,4 @@ cp dashboard/.env.example dashboard/.env
 - [Database Documentation](../database/schema.md) — `DATABASE_PATH` usage
 - [Logger Documentation](../utils/logger.md) — `LOG_LEVEL` usage
 - [WebSocket Protocol](../websocket/protocol.md) — `WS_HEARTBEAT_INTERVAL_MS`, `WS_MAX_CLIENTS`
+- [Retention Cleanup](../utils/retention.md) — `RETENTION_*` variables usage
