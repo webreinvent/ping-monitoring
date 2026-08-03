@@ -232,13 +232,25 @@ describe("test fixtures", () => {
       expect(resp.timestamp).toBe("2025-01-01T00:00:00.000Z");
       expect(resp.uptime).toBe(100);
       expect(resp.version).toBe("0.1.0");
-      expect(resp.database).toBe("ok");
+      expect(resp.db_path).toBe("/tmp/test.db");
+      expect(resp.db_size_bytes).toBe(8192);
+      expect(resp.monitor_count).toBe(0);
+      expect(resp.sample_count).toBe(0);
+      expect(resp.last_ingest_time).toBeNull();
     });
 
-    test("allows database error status", () => {
-      const resp = createHealthResponse({ database: "error" });
+    test("allows overrides for all fields", () => {
+      const resp = createHealthResponse({
+        db_size_bytes: 102400,
+        monitor_count: 5,
+        sample_count: 500,
+        last_ingest_time: "2025-01-01T00:00:00.000Z",
+      });
 
-      expect(resp.database).toBe("error");
+      expect(resp.db_size_bytes).toBe(102400);
+      expect(resp.monitor_count).toBe(5);
+      expect(resp.sample_count).toBe(500);
+      expect(resp.last_ingest_time).toBe("2025-01-01T00:00:00.000Z");
     });
   });
 

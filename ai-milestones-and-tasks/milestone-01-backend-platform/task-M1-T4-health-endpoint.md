@@ -3,7 +3,7 @@ taskId: M1-T4
 milestone: M1
 title: Build health check endpoint with server metrics
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "1-2 hours"
 features:
   - F1
@@ -14,7 +14,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 1-2 hours
 
 ## Description
@@ -30,25 +30,25 @@ Create the `GET /api/health` endpoint that returns comprehensive server health m
 
 ## Acceptance Criteria
 
-- [ ] `GET /api/health` returns 200 OK with JSON
-- [ ] Response contains `status`, `timestamp`, `uptime`, `version`
-- [ ] Response contains `db_path`, `db_size_bytes`, `monitor_count`, `sample_count`, `last_ingest_time`
-- [ ] Works with no authentication
-- [ ] Returns 0 counts and null last_ingest_time when database is empty
-- [ ] Response time under 100ms
-- [ ] Response shape matches F14 API contract exactly
+- [x] `GET /api/health` returns 200 OK with JSON
+- [x] Response contains `status`, `timestamp`, `uptime`, `version`
+- [x] Response contains `db_path`, `db_size_bytes`, `monitor_count`, `sample_count`, `last_ingest_time`
+- [x] Works with no authentication
+- [x] Returns 0 counts and null last_ingest_time when database is empty
+- [x] Response time under 100ms
+- [x] Response shape matches F14 API contract exactly
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors and health endpoint returns 200
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors and health endpoint returns 200
 
 ## Testing Checklist
 
-- [ ] Health endpoint returns 200 with correct shape
-- [ ] Empty database returns 0 counts and null
-- [ ] Response time under 100ms
+- [x] Health endpoint returns 200 with correct shape
+- [x] Empty database returns 0 counts and null
+- [x] Response time under 100ms
 
 ## Dependencies
 

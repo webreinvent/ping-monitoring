@@ -1,8 +1,13 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 describe("getDb", () => {
   beforeEach(() => {
     // Clear the global database reference before each test
+    globalThis.__db = undefined;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
     globalThis.__db = undefined;
   });
 
@@ -70,8 +75,52 @@ describe("getDb", () => {
     }
   });
 
+  test("throws when globalThis.__db is undefined", async () => {
+    globalThis.__db = undefined;
+
+    const { getDb } = await import("./db");
+
+    expect(() => getDb()).toThrow();
+  });
+
   test("throws when globalThis.__db is null", async () => {
     globalThis.__db = undefined;
+
+    const { getDb } = await import("./db");
+
+    expect(() => getDb()).toThrow();
+  });
+
+  test("error message includes exact phrasing 'Database not initialized'", async () => {
+    const { getDb } = await import("./db");
+
+    try {
+      getDb();
+    } catch (err) {
+      expect((err as Error).message).toBe(
+        "Database not initialized. Ensure database plugin is loaded.",
+      );
+    }
+  });
+
+  test("getDb returns truthy value when mock is set", async () => {
+    const mockDb = {
+      prepare: vi.fn().mockReturnThis(),
+      exec: vi.fn(),
+      pragma: vi.fn(),
+    };
+
+    globalThis.__db = mockDb;
+
+    const { getDb } = await import("./db");
+
+    const db = getDb();
+    expect(Boolean(db)).toBe(true);
+  });
+
+  test("getDb throws when mock is set to falsy value", async () => {
+    // @ts-expect-error — test falsy __db
+    globalThis.__db = null;
 
     const { getDb } = await import("./db");
 
