@@ -107,7 +107,8 @@ The broadcast produces a `SampleMessage` with this shape:
     "latencyMs": 13.1,
     "status": "success",
     "resolvedAddress": "8.8.8.8"
-  }
+  },
+  "qualityState": "veryHigh"
 }
 ```
 
@@ -145,5 +146,7 @@ Map<monitorId: number, Set<WebSocket>>
 - [WebSocket Protocol](protocol.md) — Full message protocol documentation
 - [Ping Ingest API](../api/ping-ingest.md) — The ingest endpoint that calls `broadcastSample`
 - [Ping Ingest Engine](../utils/ping-ingest.md) — Core ingest pipeline
-- [Shared Types](../shared/types.md) — `WsPingSample` type definition
+- [Quality Classifier](../utils/quality-classifier.md) — `quality_state` included in broadcast messages
+- [Shared Types](../shared/types.md) — `WsPingSample`, `QualityState` type definitions
 - [Feature F7 Specification](../../requirements/features/feature-0007-websocket-broadcast.md) — Original requirements
+- [Feature F12 Specification](../../requirements/features/feature-00012-quality-classifier.md) — Quality classifier

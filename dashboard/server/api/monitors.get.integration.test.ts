@@ -36,6 +36,7 @@ function createMockDb(
     last_latency_ms: number | null;
     last_seen_ms: number | null;
     quality_state: string;
+    quality_state_updated_at?: number | null;
     created_at: number;
   }>,
 ): Database {
@@ -120,8 +121,9 @@ describe("GET /api/monitors — full endpoint response", () => {
       targetName: "Google DNS",
       status: "up",
       latencyMs: 14.2,
-      qualityState: "good",
+      qualityState: "warmingUp",
       lastSeenMs: now,
+      qualityStateUpdatedAtMs: null,
       createdAt: "2023-11-14T22:13:20.000Z",
     });
 
@@ -223,7 +225,7 @@ describe("GET /api/monitors — sort order end-to-end", () => {
     expect(monitors[3].status).toBeNull();
     expect(monitors[3].latencyMs).toBeNull();
     expect(monitors[3].lastSeenMs).toBeNull();
-    expect(monitors[3].qualityState).toBe("unknown");
+    expect(monitors[3].qualityState).toBe("warmingUp");
   });
 });
 
@@ -308,9 +310,9 @@ describe("GET /api/monitors — mixed quality states", () => {
 
     const monitors = getAllMonitorsWithLatestState();
 
-    expect(monitors[0].qualityState).toBe("good");
-    expect(monitors[1].qualityState).toBe("degraded");
-    expect(monitors[2].qualityState).toBe("poor");
-    expect(monitors[3].qualityState).toBe("unknown");
+    expect(monitors[0].qualityState).toBe("warmingUp"); // legacy 'good' → warmingUp
+    expect(monitors[1].qualityState).toBe("warmingUp"); // legacy 'degraded' → warmingUp
+    expect(monitors[2].qualityState).toBe("warmingUp"); // legacy 'poor' → warmingUp
+    expect(monitors[3].qualityState).toBe("warmingUp");
   });
 });

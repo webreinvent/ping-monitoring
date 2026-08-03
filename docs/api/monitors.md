@@ -32,7 +32,8 @@ Returns all monitors with their latest state (current up/down status, quality st
       "targetName": "Google DNS",
       "status": "up",
       "latencyMs": 14.2,
-      "qualityState": "good",
+      "qualityState": "veryHigh",
+      "qualityStateUpdatedAtMs": 1725200400500,
       "lastSeenMs": 1725200400000,
       "createdAt": "2023-11-14T22:13:20.000Z"
     },
@@ -44,7 +45,8 @@ Returns all monitors with their latest state (current up/down status, quality st
       "targetName": "Cloudflare",
       "status": "down",
       "latencyMs": null,
-      "qualityState": "degraded",
+      "qualityState": "disconnected",
+      "qualityStateUpdatedAtMs": 1725200399500,
       "lastSeenMs": 1725200399000,
       "createdAt": "2023-11-14T22:10:00.000Z"
     }
@@ -61,7 +63,8 @@ Returns all monitors with their latest state (current up/down status, quality st
 | `targetName` | `string` | Human-readable target label (falls back to `targetHost` if not set) |
 | `status` | `"up" \| "down" \| null` | Latest ping status — `"up"` (success), `"down"` (timeout/error), `null` (no samples yet) |
 | `latencyMs` | `number \| null` | Latency of the most recent ping sample in ms, or `null` if no samples |
-| `qualityState` | `"good" \| "degraded" \| "poor" \| "unknown"` | Computed quality state from monitor row (`"unknown"` for monitors still warming up) |
+| `qualityState` | `QualityState` | F12 quality classification (see [Quality States](#quality-state-mapping)) |
+| `qualityStateUpdatedAtMs` | `number \| null` | Epoch ms when quality state was last computed, or `null` if never classified |
 | `lastSeenMs` | `number \| null` | Epoch milliseconds timestamp of the most recent sample, or `null` |
 | `createdAt` | `string` | ISO 8601 timestamp when the monitor was first created |
 
@@ -90,7 +93,8 @@ A monitor exists but has not received any ping samples yet (e.g., just auto-crea
       "targetName": "New Target",
       "status": null,
       "latencyMs": null,
-      "qualityState": "unknown",
+      "qualityState": "warmingUp",
+      "qualityStateUpdatedAtMs": null,
       "lastSeenMs": null,
       "createdAt": "2023-11-14T22:13:20.000Z"
     }
@@ -131,15 +135,23 @@ The `status` field is derived from the ping sample status using these rules:
 
 ## Quality State Mapping
 
-The `qualityState` field maps from the monitor row's `quality_state` column:
+The `qualityState` field maps from the monitor row's `quality_state` column using `mapQualityState()` from `server/utils/quality-states.ts`:
 
-| DB `quality_state` | API `qualityState` |
-|--------------------|-------------------|
-| `"good"` | `"good"` |
-| `"degraded"` | `"degraded"` |
-| `"poor"` | `"poor"` |
-| `"warmingUp"` | `"unknown"` |
-| (any other) | `"unknown"` |
+| DB `quality_state` | API `qualityState` | Notes |
+|--------------------|-------------------|-------|
+| `"veryHigh"` | `"veryHigh"` | F12 value |
+| `"high"` | `"high"` | F12 value |
+| `"medium"` | `"medium"` | F12 value |
+| `"low"` | `"low"` | F12 value |
+| `"unstable"` | `"unstable"` | F12 value |
+| `"disconnected"` | `"disconnected"` | F12 value |
+| `"warmingUp"` | `"warmingUp"` | F12 value |
+| `"good"` | `"warmingUp"` | Legacy fallback |
+| `"degraded"` | `"warmingUp"` | Legacy fallback |
+| `"poor"` | `"warmingUp"` | Legacy fallback |
+| (any other) | `"warmingUp"` | Unknown fallback |
+
+The F12 quality classifier computes these states based on a 5-minute sliding window of ping samples. See [Quality Classifier](../utils/quality-classifier.md) for the algorithm.
 
 ## Performance
 
@@ -181,7 +193,10 @@ for (const monitor of data.monitors) {
 ## Related
 
 - [Monitors Utility](../utils/monitors.md) — `getAllMonitorsWithLatestState()` query logic
-- [Shared Types](../shared/types.md) — `MonitorListItem`, `MonitorsListResponse`
+- [Shared Types](../shared/types.md) — `MonitorListItem`, `MonitorsListResponse`, `QualityState`
 - [Database Schema](../database/schema.md) — `monitors`, `ping_samples`, `clients` tables
+- [Quality Classifier](../utils/quality-classifier.md) — `classifyMonitor()`, `classifyMonitorsBatch()`
+- [Quality States Constants](../utils/quality-states.md) — `mapQualityState()`, threshold values
 - [Ping Ingest API](ping-ingest.md) — `POST /api/ping/ingest` (populates the data this endpoint reads)
 - [Feature F5 Specification](../../requirements/features/feature-0005-monitors-list.md) — Original requirements
+- [Feature F12 Specification](../../requirements/features/feature-00012-quality-classifier.md) — Quality classifier

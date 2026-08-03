@@ -1,11 +1,13 @@
 import { ingestPingBatch } from "../../utils/ping-ingest";
 import { error as logError } from "../../utils/logger";
+import { mapQualityState } from "../../utils/quality-states";
 import type {
   IngestPayload,
   PingSampleIngest,
   IngestResponse,
   AcceptedSample,
 } from "../../utils/ping-types";
+import type { QualityState } from "#shared/types";
 import type { H3Event } from "h3";
 
 /**
@@ -132,6 +134,7 @@ export default defineEventHandler(async (event) => {
     };
 
     // F7: Broadcast new samples to WebSocket subscribers (fire-and-forget, non-blocking)
+    // F12: Quality state is already updated by post-ingest classification in ping-ingest.ts
     if (result.acceptedSamples && result.acceptedSamples.length > 0) {
       broadcastAcceptedSamples(result.acceptedSamples);
     }
@@ -171,6 +174,7 @@ function sendResponse(
 /**
  * Broadcast accepted samples to WebSocket subscribers.
  * Fire-and-forget — does not block the ingest response.
+ * F12: Includes current quality state in each broadcast message.
  *
  * Group samples by monitorId and broadcast each to its subscribers.
  * The broadcast call is async and uses setImmediate-equivalent semantics.
@@ -178,6 +182,7 @@ function sendResponse(
 async function broadcastAcceptedSamples(samples: AcceptedSample[]): Promise<void> {
   // Dynamic import to avoid circular dependency
   const { broadcastSample } = await import("#server/ws/ping");
+  const { getDb } = await import("#server/utils/db");
 
   // Group by monitorId for efficiency
   const grouped = new Map<number, AcceptedSample[]>();
@@ -190,15 +195,28 @@ async function broadcastAcceptedSamples(samples: AcceptedSample[]): Promise<void
     }
   }
 
+  // Fetch quality state for each monitor (post-classification)
+  const db = getDb();
+  const qualityStateMap = new Map<number, QualityState>();
+  for (const monitorId of grouped.keys()) {
+    const row = db
+      .prepare("SELECT quality_state FROM monitors WHERE id = ?")
+      .get(monitorId) as { quality_state: string } | undefined;
+    if (row) {
+      qualityStateMap.set(monitorId, mapQualityState(row.quality_state));
+    }
+  }
+
   // Broadcast each sample individually (broadcastSample handles the fan-out)
   for (const [monitorId, monitorSamples] of grouped) {
+    const qualityState = qualityStateMap.get(monitorId);
     for (const sample of monitorSamples) {
       broadcastSample(monitorId, {
         timestampMs: sample.timestampMs,
         latencyMs: sample.latencyMs,
         status: sample.status,
         resolvedAddress: sample.resolvedAddress,
-      });
+      }, qualityState);
     }
   }
 }

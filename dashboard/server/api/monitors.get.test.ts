@@ -37,6 +37,7 @@ function createMockDb(
     last_latency_ms: number | null;
     last_seen_ms: number | null;
     quality_state: string;
+    quality_state_updated_at?: number | null;
     created_at: number;
   }>,
 ): Database {
@@ -112,8 +113,9 @@ describe("getAllMonitorsWithLatestState — single monitor with samples", () => 
       targetName: "Google DNS",
       status: "up",
       latencyMs: 14.2,
-      qualityState: "good",
+      qualityState: "warmingUp",
       lastSeenMs: now,
+      qualityStateUpdatedAtMs: null,
       createdAt: new Date(1700000000000).toISOString(),
     });
   });
@@ -139,7 +141,7 @@ describe("getAllMonitorsWithLatestState — single monitor with samples", () => 
 
     expect(result[0].status).toBe("down");
     expect(result[0].latencyMs).toBeNull();
-    expect(result[0].qualityState).toBe("poor");
+    expect(result[0].qualityState).toBe("warmingUp"); // legacy 'poor' → warmingUp
   });
 
   it("maps error status to 'down'", () => {
@@ -194,7 +196,7 @@ describe("getAllMonitorsWithLatestState — monitor with no samples", () => {
     expect(result[0].status).toBeNull();
     expect(result[0].latencyMs).toBeNull();
     expect(result[0].lastSeenMs).toBeNull();
-    expect(result[0].qualityState).toBe("unknown"); // warmingUp → unknown
+    expect(result[0].qualityState).toBe("warmingUp");
   });
 });
 
@@ -342,32 +344,10 @@ describe("getAllMonitorsWithLatestState — targetName fallback", () => {
 /* ------------------------------------------------------------------ */
 
 describe("getAllMonitorsWithLatestState — quality_state mapping", () => {
-  it("maps warmingUp to unknown", () => {
-    const mockDb = createMockDb([
-      {
-        id: 1,
-        client_slug: "test",
-        client_name: "Test",
-        target_host: "test.com",
-        target_name: null,
-        last_status: null,
-        last_latency_ms: null,
-        last_seen_ms: null,
-        quality_state: "warmingUp",
-        created_at: 1700000000000,
-      },
-    ]);
-    mockGetDb.mockReturnValue(mockDb);
+  it("passes through F12 quality states", () => {
+    const f12States = ["veryHigh", "high", "medium", "low", "unstable", "disconnected", "warmingUp"];
 
-    const result = getAllMonitorsWithLatestState();
-
-    expect(result[0].qualityState).toBe("unknown");
-  });
-
-  it("passes through good, degraded, poor", () => {
-    const qualityStates = ["good", "degraded", "poor"];
-
-    for (const qs of qualityStates) {
+    for (const qs of f12States) {
       const mockDb = createMockDb([
         {
           id: 1,
@@ -386,6 +366,31 @@ describe("getAllMonitorsWithLatestState — quality_state mapping", () => {
 
       const result = getAllMonitorsWithLatestState();
       expect(result[0].qualityState).toBe(qs);
+    }
+  });
+
+  it("maps legacy quality states to warmingUp", () => {
+    const legacyStates = ["good", "degraded", "poor", ""];
+
+    for (const qs of legacyStates) {
+      const mockDb = createMockDb([
+        {
+          id: 1,
+          client_slug: "test",
+          client_name: "Test",
+          target_host: "test.com",
+          target_name: null,
+          last_status: "success",
+          last_latency_ms: 10,
+          last_seen_ms: Date.now(),
+          quality_state: qs,
+          created_at: 1700000000000,
+        },
+      ]);
+      mockGetDb.mockReturnValue(mockDb);
+
+      const result = getAllMonitorsWithLatestState();
+      expect(result[0].qualityState).toBe("warmingUp");
     }
   });
 });
@@ -423,12 +428,14 @@ describe("getAllMonitorsWithLatestState — response shape", () => {
     expect(typeof item.targetName).toBe("string");
     expect(item.status).toBe("up");
     expect(typeof item.latencyMs).toBe("number");
-    expect(item.qualityState).toBe("good");
+    expect(item.qualityState).toBe("warmingUp"); // legacy 'good' → warmingUp
     expect(typeof item.lastSeenMs).toBe("number");
     expect(typeof item.createdAt).toBe("string");
     // Verify ISO 8601 format
     expect(item.createdAt).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(item.createdAt).toMatch(/Z$/);
+    // Verify qualityStateUpdatedAtMs is present (F12)
+    expect("qualityStateUpdatedAtMs" in item).toBe(true);
   });
 
   it("createdAt is ISO 8601 from epoch ms", () => {

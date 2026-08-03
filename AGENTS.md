@@ -687,4 +687,113 @@ The WebSocket endpoint at `/ws/ping` provides real-time ping data broadcast with
 | ADR-026 | Broadcast from Ingest Endpoint | Ingest triggers WebSocket broadcast after DB insert; tight coupling, no polling. Fire-and-forget — broadcast failures don't affect ingest |
 | ADR-027 | JSON Message Protocol with Type Discriminator | All WebSocket messages are JSON with `type` field; simple, extensible, human-readable. 7 message types (subscribe, unsubscribe, subscribed, unsubscribed, snapshot, sample, error) |
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T9 WebSocket live broadcast conventions appended)**
+*Last updated: 2026-08-03 (Agent 14 — M1-T10 quality classifier conventions appended)**
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T10)
+
+### Quality Classifier (M1-T10 / F12)
+
+The quality classifier analyzes raw ping samples in a 5-minute sliding window and computes a quality state (`veryHigh`, `high`, `medium`, `low`, `unstable`, `disconnected`, `warmingUp`) for each monitor. Runs post-ingest and as a background sweep every 60 seconds.
+
+#### Constants-Only Module Pattern (`quality-states.ts`)
+- **File**: `server/utils/quality-states.ts`
+- **Pattern**: Dedicated module exporting ONLY configuration constants — no runtime logic
+- **Exports**: `QUALITY_WINDOW_MS`, `QUALITY_MIN_SAMPLES`, `QUALITY_VERY_HIGH_MAX_LATENCY`, `QUALITY_HIGH_MAX_LATENCY`, `QUALITY_MEDIUM_MAX_LATENCY`, `QUALITY_MEDIUM_MAX_PACKET_LOSS`, `QUALITY_UNSTABLE_CV`, `QUALITY_UNSTABLE_MAX_PACKET_LOSS`, `QUALITY_DISCONNECTED_NO_SAMPLES_WINDOW_MS`, `QUALITY_DISCONNECTED_RECENT_MS`, `QUALITY_COLORS`, `mapQualityState`
+- **Rationale**: Centralizes thresholds in one place; classifier, tests, and UI all import from the same source. Changing a threshold requires editing exactly one file.
+- **`mapQualityState(state: string): QualityState`**: Handles both F12 values (pass-through) and legacy values (`good` → `veryHigh`, `degraded` → `medium`, `poor` → `low`) with fallback to `warmingUp`. Extracted from monitors.ts and ping.ts to eliminate duplicates.
+- **`QUALITY_COLORS`**: Record mapping `QualityState` → CSS color string (Tailwind-compatible hex values). Used by frontend for chart coloring and UI indicators.
+
+#### Classification Algorithm — Ordered Priority (First Match Wins)
+- **File**: `server/utils/quality-classifier.ts` → `classifyMonitor(monitorId)`
+- **Algorithm** (evaluated in priority order — first match wins):
+  1. **Disconnected**: No samples in window AND (no samples ever OR last sample > 5 min ago). BUT if last sample > 1 hour ago → `warmingUp`.
+  2. **WarmingUp**: Fewer than 10 samples in window (insufficient data).
+  3. **Unstable**: Coefficient of variation (CV) > 0.5 AND packet_loss < 10% — catches high-jitter connections before other rules.
+  4. **VeryHigh**: packet_loss == 0% AND avg_latency < 50ms.
+  5. **High**: packet_loss == 0% AND avg_latency < 150ms.
+  6. **Medium**: packet_loss <= 10% AND avg_latency <= 300ms.
+  7. **Low**: Everything else (catch-all fallback).
+- **Key insight**: Unstable is checked before VeryHigh/High/Medium — a connection with zero packet loss but wild jitter (CV > 0.5) is `unstable`, not `veryHigh`. This is a **priority-based** algorithm, not a threshold ranking.
+
+#### Single-Query Aggregation Pattern
+- **Query**: LEFT JOIN `monitors` + `ping_samples` with aggregated stats (COUNT, SUM latency, SUM latency², COUNT success) in a single query
+- **CV computation**: `sqrt(E[X²] - E[X]²)` / mean — computed client-side from aggregated sums. No need to fetch individual samples.
+- **Two queries total**: (1) aggregated stats + current state, (2) `MAX(timestamp_ms)` for disconnected detection
+- **Efficiency**: O(1) queries per monitor regardless of sample count; window is time-bounded (5 min), not row-count bounded
+
+#### Batch Classification Pattern
+- **`classifyMonitorsBatch(monitorIds[])`**: Iterates over monitor IDs, calling `classifyMonitor()` for each
+- **Returns**: `Map<monitorId, QualityState>` — only monitors whose state **changed** are included
+- **Per-monitor error isolation**: Each classification is wrapped in try/catch; one failure doesn't stop the batch
+- **Logging**: `info()` for state changes (with full metrics), `debug()` for unchanged states — keeps logs signal-rich
+
+#### Persist Quality State
+- **`persistQualityState(db, monitorId, qualityState, now)`**: Updates `quality_state`, `quality_state_updated_at`, and `updated_at` in a single UPDATE
+- **Always writes**: Even if state didn't change, `quality_state_updated_at` is refreshed (proves liveness)
+- **Atomic**: Single UPDATE statement — no transaction needed (single row, single table)
+
+#### Post-Ingest Classification Trigger
+- **File**: `server/utils/ping-ingest.ts` → called after successful sample insertion
+- **Pattern**: After `ingestSamples()` completes, extract affected `monitorId` values and call `classifyMonitorsBatch()` for each
+- **Non-blocking**: Classification runs synchronously within the ingest flow — latency budget is acceptable (single query per monitor)
+- **Only affected monitors**: Post-ingest only reclassifies monitors that received new samples, not all monitors
+
+#### Background Sweep Plugin (`quality-sweep.ts`)
+- **File**: `server/plugins/quality-sweep.ts`
+- **Pattern**: Nitro plugin with `setInterval` — re-evaluates all active monitors every 60 seconds
+- **Active monitor filter**: `SELECT DISTINCT monitor_id FROM ping_samples WHERE timestamp_ms >= ?` (last 10 minutes) — skips dormant monitors
+- **Configurable interval**: `QUALITY_SWEEP_INTERVAL_MS` env var (default 60000ms), validated at startup
+- **Env var validation**: `Number.isFinite(sweepIntervalMs) && sweepIntervalMs > 0` — prevents `NaN` from causing tight-loop CPU exhaustion
+- **Graceful shutdown**: Returns cleanup function from `defineNitroPlugin` to clear interval on server stop
+- **Logging**: `info()` on startup with interval, `info()` on sweep completion with change count, `error()` on failures
+
+#### Migration 006 — Data Migration Pattern
+- **File**: `schema/migrations/006_add_quality_state_updated_at.sql`
+- **ALTER TABLE**: `ADD COLUMN quality_state_updated_at INTEGER` — nullable, no default
+- **Data migration**: `UPDATE monitors SET quality_state = 'X' WHERE quality_state = 'legacy_Y'` — migrates existing legacy values to F12 equivalents
+- **Legacy mapping**: `warmingUp` → `disconnected`, `good` → `veryHigh`, `degraded` → `medium`, `poor` → `low`
+- **Pattern**: When changing enum values, migration must both alter schema AND transform existing data
+- **Feature ID annotation**: `-- M1-T10: Backend quality classifier — F12` in migration header
+
+#### ClassifyResult Shared Type (shared/types.ts)
+- **`ClassifyResult`**: `{ qualityState, qualityStateUpdatedAtMs, sampleCount, packetLoss, avgLatency, cv }` — returned by `classifyMonitor()`
+- **Used by**: Classifier module, tests, and potentially API responses
+- **Internal extension**: `ClassifyResultWithDiff` extends with `previousState` and `stateChanged` — internal to classifier module, not exported to shared types
+
+#### Quality State in API Responses
+- **`MonitorListItem.qualityState`**: F12 value (`veryHigh`, `high`, `medium`, `low`, `unstable`, `disconnected`, `warmingUp`) — no longer maps to `unknown`
+- **`WsMonitorState.qualityState`**: Same F12 values — WebSocket broadcast includes quality state
+- **`Target.thresholds`**: Updated with `qualityState` field for chart configuration
+- **`mapQualityState()` consolidation**: Previously duplicated in `monitors.ts` and `ping.ts`; now extracted to `quality-states.ts` with a single source of truth
+
+#### Coefficient of Variation (CV) for Jitter Detection
+- **Formula**: `cv = stddev / mean` where `stddev = sqrt(E[X²] - E[X]²)`
+- **Threshold**: `QUALITY_UNSTABLE_CV = 0.5` — if CV exceeds this, the connection is "unstable" regardless of average latency
+- **Why CV, not raw stddev**: Normalizes across different latency ranges. A stddev of 50ms is normal for a 500ms connection but catastrophic for a 10ms connection.
+- **Computation**: Uses `sum_latency_sq` (sum of squares) from the aggregate query — avoids fetching individual samples
+- **Defensive**: `Math.max(0, variance)` prevents NaN from floating-point rounding errors
+
+#### Quality Classifier Test Patterns
+- **Metrics computation tests**: Verify packet loss, CV, and avg latency math independently of the DB
+- **Decision logic tests**: Pure function tests with a `classify(packetLoss, avgLatency, cv, sampleCount, lastSampleMs, now)` helper — no DB dependency
+- **Boundary tests**: Verify edge cases at exact threshold values (50ms, 150ms, 300ms, CV=0.5, 10% packet loss)
+- **Priority tests**: Verify that unstable takes precedence over veryHigh (zero loss + low avg but high CV → unstable, not veryHigh)
+- **Disconnected edge cases**: No samples ever, last sample > 1 hour ago, between-ping gap scenarios
+
+#### Env Var Validation Pattern (for Plugins)
+- **Pattern**: Validate env var at startup; return early with no-op cleanup if invalid
+- **Implementation**: `Number.isFinite(value) && value > 0` — catches NaN, Infinity, negative, and zero
+- **Fallback**: Default value used when env var is missing/empty (`process.env.X ?? String(DEFAULT)`)
+- **Rationale**: `setInterval(NaN)` fires immediately in a tight loop; `setInterval(0)` fires on every tick. Validation prevents CPU exhaustion from misconfiguration.
+
+### ADRs — Quality Classifier (M1-T10)
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-028 | Quality State Classification via Ordered Priority | First-match-wins algorithm with 7 states; unstable checked before latency-based states to catch high-jitter connections |
+| ADR-029 | Single-Query Aggregation for Classification | SQL aggregates (COUNT, SUM, SUM²) + client-side CV computation; O(1) queries per monitor, no sample fetch |
+| ADR-030 | Post-Ingest + Background Sweep Hybrid | Immediate classification after ingest for freshness; 60s sweep catches state drift (e.g., monitor goes silent between ingests) |
+| ADR-031 | Coefficient of Variation for Jitter | CV = stddev/mean normalizes across latency ranges; threshold 0.5 catches unstable connections regardless of average |
+| ADR-032 | Quality State Persisted on Monitor Row | Single UPDATE per classification; `quality_state_updated_at` proves liveness even when state doesn't change |
+
+*Last updated: 2026-08-03 (Agent 14 — M1-T10 quality classifier conventions appended)**

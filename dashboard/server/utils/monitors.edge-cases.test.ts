@@ -24,6 +24,7 @@ function createMockDb(
     last_latency_ms: number | null;
     last_seen_ms: number | null;
     quality_state: string;
+    quality_state_updated_at?: number | null;
     created_at: number;
   }>,
 ): Database {
@@ -206,7 +207,7 @@ describe("getAllMonitorsWithLatestState — database errors", () => {
 /* ------------------------------------------------------------------ */
 
 describe("getAllMonitorsWithLatestState — quality_state edge values", () => {
-  it("maps unknown DB quality state to 'unknown'", () => {
+  it("maps unknown DB quality state to 'warmingUp'", () => {
     const mockDb = createMockDb([
       {
         id: 1,
@@ -224,10 +225,10 @@ describe("getAllMonitorsWithLatestState — quality_state edge values", () => {
     mockGetDb.mockReturnValue(mockDb);
 
     const result = getAllMonitorsWithLatestState();
-    expect(result[0].qualityState).toBe("unknown");
+    expect(result[0].qualityState).toBe("warmingUp");
   });
 
-  it("maps empty string quality state to 'unknown'", () => {
+  it("maps empty string quality state to 'warmingUp'", () => {
     const mockDb = createMockDb([
       {
         id: 1,
@@ -245,7 +246,7 @@ describe("getAllMonitorsWithLatestState — quality_state edge values", () => {
     mockGetDb.mockReturnValue(mockDb);
 
     const result = getAllMonitorsWithLatestState();
-    expect(result[0].qualityState).toBe("unknown");
+    expect(result[0].qualityState).toBe("warmingUp");
   });
 });
 

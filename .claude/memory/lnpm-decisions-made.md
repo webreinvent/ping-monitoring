@@ -206,3 +206,26 @@
 - **Decision:** Current implementation assumes same-origin or token-based auth at HTTP level (Nuxt proxy handles this)
 - **Rationale:** MVP doesn't require WebSocket-specific auth; the HTTP connection is already authenticated
 - **Impact:** Future enhancement may add per-message auth or token exchange on connect
+
+## Quality Classifier Decisions (M1-T10)
+
+### 7-State Classification with First-Match-Wins
+- **Decision:** 7 quality states: `veryHigh`, `high`, `medium`, `low`, `unstable`, `disconnected`, `warmingUp`
+- **Rationale:** Simple ordered-if chain, easy to reason about. `unstable` checked before `veryHigh` so high-variance connections aren't misclassified as excellent
+- **Thresholds:** 5-min window, 10 min samples, CV > 0.5 for unstable, 0% packet_loss + <50ms for veryHigh, 0% + <150ms for high, ≤10% + ≤300ms for medium
+
+### Disconnected Detection with Time Bounds
+- **Decision:** Disconnected = no samples in 5-min window AND last sample 5-60 min ago. If last sample >1 hour ago → `warmingUp`
+- **Rationale:** Without the 1-hour cap, old inactive monitors would show as `disconnected` instead of `warmingUp`
+
+### Post-Ingest After Transaction (Best-Effort)
+- **Decision:** Classification runs after transaction commits. Failure is logged but never breaks ingest
+- **Rationale:** Ingest is critical path; classification is metadata. Running after commit ensures classifier sees new data
+
+### Background Sweep: Recent Monitors Only
+- **Decision:** Only classify monitors with samples in last 10 minutes (2× the 5-min window)
+- **Rationale:** Avoids unnecessary reads on inactive monitors
+
+### Migration 006: Legacy State Mapping
+- **Decision:** Map `warmingUp`→`disconnected`, `good`→`veryHigh`, `degraded`→`medium`, `poor`→`low`
+- **Rationale:** Existing monitors have pre-F12 states; migration ensures correct display

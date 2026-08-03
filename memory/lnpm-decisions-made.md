@@ -97,3 +97,26 @@ metadata:
 ### sendResponse Helper Instead of Direct Return (ADR-006)
 - **Decision**: Use a `sendResponse(event, statusCode, body)` helper that calls `setResponseStatus(event, statusCode)` and returns the body.
 - **Rationale**: Nitro's `defineEventHandler` returns the body as JSON but doesn't let you easily set a custom status code in the same expression. The helper separates status code setting from body return.
+
+## Quality Classifier Decisions (M1-T10)
+
+### 7-State Classification with First-Match-Wins (ADR-007)
+- **Decision**: Use 7 quality states: `veryHigh`, `high`, `medium`, `low`, `unstable`, `disconnected`, `warmingUp`. Apply in deterministic priority order: disconnected → warmingUp → unstable → veryHigh → high → medium → low.
+- **Rationale**: Simple, fast, and easy to reason about. No complex scoring system — just ordered thresholds. The `unstable` check comes before `veryHigh` so high-variance connections aren't misclassified as excellent.
+- **Thresholds**: 5-minute window, 10 min samples, cv > 0.5 for unstable, packet_loss < 10% for unstable, 0% packet_loss + <50ms for veryHigh, 0% + <150ms for high, ≤10% + ≤300ms for medium, everything else is low.
+
+### Disconnected Detection with Time Bounds (ADR-008)
+- **Decision**: Monitor is `disconnected` when there are no samples in the 5-min window AND last sample was 5–60 min ago. If last sample was >1 hour ago, it's `warmingUp` (old/inactive monitor).
+- **Rationale**: Without the 1-hour upper bound, monitors that stopped sending data weeks ago would show as `disconnected` instead of the more appropriate `warmingUp` (they haven't really "disconnected" — they were never active in the current session).
+
+### Post-Ingest Classification After Transaction (ADR-009)
+- **Decision**: Classification runs AFTER the transaction commits (outside `db.transaction()`), so it sees newly inserted samples. Failure is logged but never causes ingest to fail.
+- **Rationale**: Classification is best-effory metadata. The ingest is the critical path — it must succeed even if classification has an issue. Running after the transaction ensures the classifier sees the new data.
+
+### Background Sweep Scope (ADR-010)
+- **Decision**: Background sweep only classifies monitors with samples in the last 10 minutes (2× the 5-min window), not all monitors.
+- **Rationale**: Monitors without recent samples have no data to re-classify — they'll stay in their current state. This avoids unnecessary database reads on inactive monitors.
+
+### Quality State Migration Strategy (ADR-011)
+- **Decision**: Migration 006 maps legacy quality states (`warmingUp`→`disconnected`, `good`→`veryHigh`, `degraded`→`medium`, `poor`→`low`) to F12 equivalents.
+- **Rationale**: Existing monitors have quality states from the pre-F12 system. The migration ensures they display correctly rather than showing unknown/garbage values.

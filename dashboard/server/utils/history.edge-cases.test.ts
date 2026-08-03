@@ -68,7 +68,7 @@ describe("calculateBucketSize — edge cases", () => {
 // ============================================================================
 
 describe("computeQualityIntervals — state transitions", () => {
-  it("transitions from warmingUp to low when cumulative samples >= 5", () => {
+  it("transitions from warmingUp to veryHigh when cumulative samples >= 5", () => {
     const points: HistoryPoint[] = [
       {
         timestampMs: 1000000,
@@ -90,10 +90,37 @@ describe("computeQualityIntervals — state transitions", () => {
     const intervals = computeQualityIntervals(points, 60000);
     expect(intervals).toHaveLength(2);
     expect(intervals[0].state).toBe("warmingUp");
+    // 0% loss + 12ms avg → veryHigh (loss < 1% AND avg < 50ms)
+    expect(intervals[1].state).toBe("veryHigh");
+  });
+
+  it("transitions from warmingUp to low when latency is high", () => {
+    const points: HistoryPoint[] = [
+      {
+        timestampMs: 1000000,
+        averageLatencyMs: 10,
+        minimumLatencyMs: 8,
+        maximumLatencyMs: 12,
+        sampleCount: 3,
+        failureCount: 0,
+      },
+      {
+        timestampMs: 1060000,
+        averageLatencyMs: 250,
+        minimumLatencyMs: 200,
+        maximumLatencyMs: 300,
+        sampleCount: 5,
+        failureCount: 0,
+      },
+    ];
+    const intervals = computeQualityIntervals(points, 60000);
+    expect(intervals).toHaveLength(2);
+    expect(intervals[0].state).toBe("warmingUp");
+    // 0% loss + 250ms avg → low (loss < 10% AND avg >= 200ms)
     expect(intervals[1].state).toBe("low");
   });
 
-  it("transitions from low to unstable on packet loss spike", () => {
+  it("transitions from veryHigh to unstable on packet loss spike", () => {
     const points: HistoryPoint[] = [
       {
         timestampMs: 1000000,
@@ -114,11 +141,12 @@ describe("computeQualityIntervals — state transitions", () => {
     ];
     const intervals = computeQualityIntervals(points, 60000);
     expect(intervals).toHaveLength(2);
-    expect(intervals[0].state).toBe("low");
+    // 0% loss + 14ms avg → veryHigh (loss < 1% AND avg < 50ms)
+    expect(intervals[0].state).toBe("veryHigh");
     expect(intervals[1].state).toBe("unstable");
   });
 
-  it("transitions from unstable back to low", () => {
+  it("transitions from unstable back to veryHigh", () => {
     const points: HistoryPoint[] = [
       {
         timestampMs: 1000000,
@@ -140,25 +168,31 @@ describe("computeQualityIntervals — state transitions", () => {
     const intervals = computeQualityIntervals(points, 60000);
     expect(intervals).toHaveLength(2);
     expect(intervals[0].state).toBe("unstable");
-    expect(intervals[1].state).toBe("low");
+    // 0% loss + 14ms avg → veryHigh
+    expect(intervals[1].state).toBe("veryHigh");
   });
 
   it("transitions through multiple states in sequence", () => {
     const points: HistoryPoint[] = [
+      // veryHigh: 0% loss, 10ms avg (loss < 1%, avg < 50ms)
       { timestampMs: 1000000, averageLatencyMs: 10, minimumLatencyMs: 8, maximumLatencyMs: 12, sampleCount: 10, failureCount: 0 },
+      // high: 3% loss, 75ms avg (loss < 5%, avg < 100ms)
       { timestampMs: 1060000, averageLatencyMs: 75, minimumLatencyMs: 50, maximumLatencyMs: 100, sampleCount: 100, failureCount: 3 },
+      // medium: 5% loss, 150ms avg (loss < 10%, avg < 200ms)
       { timestampMs: 1120000, averageLatencyMs: 150, minimumLatencyMs: 100, maximumLatencyMs: 200, sampleCount: 100, failureCount: 5 },
+      // low: 3% loss, 250ms avg (loss < 10%, avg >= 200ms)
       { timestampMs: 1180000, averageLatencyMs: 250, minimumLatencyMs: 200, maximumLatencyMs: 300, sampleCount: 100, failureCount: 3 },
+      // unstable: 50% loss (packetLoss >= 10%)
       { timestampMs: 1240000, averageLatencyMs: 50, minimumLatencyMs: 40, maximumLatencyMs: 60, sampleCount: 10, failureCount: 5 },
     ];
     const intervals = computeQualityIntervals(points, 60000);
 
-    // low -> medium -> high -> veryHigh -> unstable
+    // veryHigh -> high -> medium -> low -> unstable
     expect(intervals).toHaveLength(5);
-    expect(intervals[0].state).toBe("low");
-    expect(intervals[1].state).toBe("medium");
-    expect(intervals[2].state).toBe("high");
-    expect(intervals[3].state).toBe("veryHigh");
+    expect(intervals[0].state).toBe("veryHigh");
+    expect(intervals[1].state).toBe("high");
+    expect(intervals[2].state).toBe("medium");
+    expect(intervals[3].state).toBe("low");
     expect(intervals[4].state).toBe("unstable");
   });
 
@@ -170,7 +204,8 @@ describe("computeQualityIntervals — state transitions", () => {
     ];
     const intervals = computeQualityIntervals(points, 60000);
     expect(intervals).toHaveLength(1);
-    expect(intervals[0].state).toBe("low");
+    // 0% loss + ~11ms avg → veryHigh (loss < 1% AND avg < 50ms)
+    expect(intervals[0].state).toBe("veryHigh");
   });
 });
 
@@ -232,7 +267,7 @@ describe("computeQualityIntervals — reason collection", () => {
         minimumLatencyMs: 200,
         maximumLatencyMs: 300,
         sampleCount: 100,
-        failureCount: 3, // 3% loss — veryHigh (loss < 10%, latency >= 200)
+        failureCount: 3, // 3% loss — low (loss < 10%, latency >= 200)
       },
       {
         timestampMs: 1060000,
@@ -240,12 +275,12 @@ describe("computeQualityIntervals — reason collection", () => {
         minimumLatencyMs: 200,
         maximumLatencyMs: 300,
         sampleCount: 100,
-        failureCount: 3, // 3% loss — same state: veryHigh
+        failureCount: 3, // 3% loss — same state: low
       },
     ];
     const intervals = computeQualityIntervals(points, 60000);
     expect(intervals).toHaveLength(1);
-    expect(intervals[0].state).toBe("veryHigh");
+    expect(intervals[0].state).toBe("low");
     // highLatency should appear
     expect(intervals[0].reasons).toContain("highLatency");
   });
@@ -331,7 +366,8 @@ describe("computeQualityIntervals — gaps and disconnected", () => {
     const intervals = computeQualityIntervals(points, 60000);
     // Gap = 60000ms, threshold = 2 * 60000 = 120000ms → not disconnected
     expect(intervals).toHaveLength(1);
-    expect(intervals[0].state).toBe("low");
+    // 0% loss + ~12.5ms avg → veryHigh (loss < 1% AND avg < 50ms)
+    expect(intervals[0].state).toBe("veryHigh");
   });
 
   it("exact 2x bucket gap does NOT create disconnected interval", () => {
@@ -379,9 +415,10 @@ describe("computeQualityIntervals — gaps and disconnected", () => {
     ];
     const intervals = computeQualityIntervals(points, 60000);
     expect(intervals).toHaveLength(3);
-    expect(intervals[0].state).toBe("low");
+    // 0% loss + 10ms avg → veryHigh
+    expect(intervals[0].state).toBe("veryHigh");
     expect(intervals[1].state).toBe("disconnected");
-    expect(intervals[2].state).toBe("low");
+    expect(intervals[2].state).toBe("veryHigh");
   });
 
   it("multiple disconnected gaps produce multiple disconnected intervals", () => {

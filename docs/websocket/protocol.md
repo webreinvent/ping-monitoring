@@ -163,7 +163,7 @@ Sent after a valid `unsubscribe` message. No further `sample` messages will be s
       "targetName": "Google DNS",
       "status": "up",
       "latencyMs": 12.5,
-      "qualityState": "good",
+      "qualityState": "veryHigh",
       "lastSeenMs": 1725200400000
     },
     "samples": [
@@ -198,7 +198,7 @@ Sent immediately after `subscribed`. Contains:
 | `data.monitor.targetName` | `string` | Human-readable target name (falls back to targetHost) |
 | `data.monitor.status` | `"up" \| "down" \| null` | Current status (`null` = no samples yet) |
 | `data.monitor.latencyMs` | `number \| null` | Latest latency in ms |
-| `data.monitor.qualityState` | `"good" \| "degraded" \| "poor" \| "unknown"` | Quality classification |
+| `data.monitor.qualityState` | `QualityState` | F12 quality classification (e.g., `"veryHigh"`, `"high"`, `"medium"`, `"low"`, `"unstable"`, `"disconnected"`, `"warmingUp"`) |
 | `data.monitor.lastSeenMs` | `number \| null` | Epoch ms of latest sample |
 
 **Sample details (within snapshot and `sample` messages):**
@@ -316,6 +316,8 @@ Upon reconnection, the client should re-subscribe to all active monitors. The se
 ## Related
 
 - [Broadcast API](broadcast.md) — `broadcastSample()` function documentation
-- [Shared Types](../shared/types.md) — `WsPingSample`, `WsMonitorState`, `WsInboundType`, `WsOutboundType`
+- [Shared Types](../shared/types.md) — `WsPingSample`, `WsMonitorState`, `WsInboundType`, `WsOutboundType`, `QualityState`
+- [Quality Classifier](../utils/quality-classifier.md) — `quality_state` included in WebSocket messages
 - [Ping Ingest API](../api/ping-ingest.md) — Integration point for WebSocket broadcast
 - [Feature F7 Specification](../../requirements/features/feature-0007-websocket-broadcast.md) — Original requirements
+- [Feature F12 Specification](../../requirements/features/feature-00012-quality-classifier.md) — Quality classifier

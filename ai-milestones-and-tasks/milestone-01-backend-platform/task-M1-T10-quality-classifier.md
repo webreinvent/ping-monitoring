@@ -3,7 +3,7 @@ taskId: M1-T10
 milestone: M1
 title: Implement backend quality classifier with post-ingest trigger
 priority: High
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "3-4 hours"
 features:
   - F12
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** High
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 3-4 hours
 
 ## Description
@@ -30,27 +30,27 @@ Build the backend quality classifier that analyzes raw ping samples in a 5-minut
 
 ## Acceptance Criteria
 
-- [ ] `classifyMonitor()` computes correct quality state from 5-minute window
-- [ ] States applied in correct priority order: disconnected -> unstable -> veryHigh -> high -> medium -> low
-- [ ] Post-ingest classification runs for each affected monitor
-- [ ] Background sweep runs every 60 seconds
-- [ ] Quality state persisted on monitor row
-- [ ] `GET /api/monitors` includes quality_state field
-- [ ] `GET /api/monitors/:id` includes quality_state in monitor metadata
-- [ ] WebSocket sample messages include quality_state
+- [x] `classifyMonitor()` computes correct quality state from 5-minute window
+- [x] States applied in correct priority order: disconnected -> unstable -> veryHigh -> high -> medium -> low
+- [x] Post-ingest classification runs for each affected monitor
+- [x] Background sweep runs every 60 seconds
+- [x] Quality state persisted on monitor row
+- [x] `GET /api/monitors` includes quality_state field
+- [x] `GET /api/monitors/:id` includes quality_state in monitor metadata
+- [x] WebSocket sample messages include quality_state
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Classification algorithm correct for each state
-- [ ] Post-ingest trigger works
-- [ ] Background sweep runs on schedule
-- [ ] State persisted in database
+- [x] Classification algorithm correct for each state
+- [x] Post-ingest trigger works
+- [x] Background sweep runs on schedule
+- [x] State persisted in database
 
 ## Dependencies
 
