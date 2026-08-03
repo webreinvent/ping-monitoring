@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API)
 
 ## Technology Stack Decisions
 
@@ -137,3 +137,40 @@
 - **Decision:** When `target_name` is NULL in the DB, fall back to `target_host` for the `targetName` field
 - **Rationale:** Ensures the API always returns a meaningful display name; monitors created before a name was set should still show something useful
 - **Impact:** `targetName: row.target_name ?? row.target_host` in the mapping layer
+
+## Monitor History API Decisions (M1-T8 / F6)
+
+### Approach A: Raw Aggregation (No Materialized Rollups)
+- **Decision:** Aggregate directly from `ping_samples` table using SQL `GROUP BY` on truncated timestamps, rather than maintaining a separate `minute_rollups` table
+- **Rationale:** Simpler (no new migration, no background sync job), sufficient for MVP load. Composite index (`idx_ping_monitor_time`) makes queries efficient for typical time windows (1h-24h)
+- **Impact:** All history queries are real-time aggregation; no pre-computed data to keep in sync. Deferred optimization: materialized rollups in F12/M2
+
+### Quality Classifier: Server-side Threshold-based Classification
+- **Decision:** Classify quality state (warmingUp, low, medium, high, veryHigh, unstable, disconnected) server-side in the history utility, using F6 spec thresholds
+- **Rationale:** Frontend chart needs quality state per bucket for coloring; computing server-side avoids sending raw data just for classification
+- **Impact:** `classifyPoint()` is a pure function; `computeQualityIntervals()` merges consecutive same-state buckets into intervals
+
+### Down-sampling: Bucket Size Adjustment (Not Post-hoc)
+- **Decision:** Down-sample by increasing SQL bucket size (not by post-hoc sampling of results), using `calculateBucketSize()` to find optimal bucket
+- **Rationale:** Cleaner — the SQL query itself returns the right number of buckets. Post-hoc sampling would require re-aggregating arbitrary subsets
+- **Impact:** `calculateBucketSize(fromMs, toMs, maxPoints)` tries bucket sizes [1m, 5m, 15m, 30m, 1h] until point count ≤ maxPoints
+
+### Default Time Window: Last 1 Hour
+- **Decision:** When no `fromMs`/`toMs` params provided, default to last 1 hour (`toMs = now`, `fromMs = now - 3600000`)
+- **Rationale:** Balanced default — recent enough to be relevant, wide enough to show meaningful patterns
+- **Impact:** Route handler computes defaults: `const toMs = Date.now(); const fromMs = toMs - 3600000;`
+
+### 404/400 Error Handling for History Endpoint
+- **Decision:** Return 404 for non-existent monitor (before querying samples), 400 for invalid params (fromMs > toMs)
+- **Rationale:** Fail fast with clear error codes; 404 before expensive query prevents wasted computation
+- **Impact:** Monitor existence check via `db.prepare("SELECT id FROM monitors WHERE id = ?").get()` before history aggregation
+
+### p95 Approximation via Bucket Averages
+- **Decision:** Compute p95 from per-bucket average latencies (not individual samples), documented as approximation
+- **Rationale:** Acceptable for MVP — querying all individual samples would be expensive; bucket averages are a reasonable proxy
+- **Impact:** p95 may differ slightly from true p95 of all samples, but is consistent and performant. Can be improved in future with percentile queries.
+
+### F6 Types: Separate from Desktop App Types
+- **Decision:** Use F6 API contract types (from `api-design.md`) for dashboard, not desktop app types from `src/types.ts`
+- **Rationale:** Dashboard has its own API contract; QualityReason and QualityState enums differ between desktop and dashboard
+- **Impact:** F6 types in `shared/types.ts` are dashboard-specific: `QualityReason` uses F6 contract values (`packetLoss`, `highLatency`, `highJitter`, `insufficientSamples`), not desktop values

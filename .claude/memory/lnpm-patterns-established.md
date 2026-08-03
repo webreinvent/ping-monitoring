@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -183,3 +183,48 @@ function createMockDb(rows: Array<{ ... }>): Database {
 - Avoids better-sqlite3 segfault on Node 20 by never importing the real DB
 - Tests the full query + mapping pipeline without a real database
 - Follows the same pattern established by `ping-ingest.integration.test.ts`
+
+## History Aggregation Pattern (M1-T8 / F6)
+
+**Pattern:** SQL `GROUP BY` on timestamp-truncated buckets for time-series aggregation, with application-side quality classification and down-sampling.
+
+### SQL Bucket Aggregation
+```sql
+SELECT
+  strftime('%s', datetime(timestamp_ms / 1000, 'unixepoch'), 'unixepoch', '+' || :bucketMs || ' milliseconds') * 1000 AS bucket_ms,
+  COUNT(*) AS sample_count,
+  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
+  AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END) AS avg_latency_ms
+FROM ping_samples
+WHERE monitor_id = ? AND timestamp_ms > ? AND timestamp_ms <= ?
+GROUP BY bucket_ms
+ORDER BY bucket_ms ASC
+```
+
+- **Single query, single pass** — no subqueries or window functions needed for aggregation
+- **Bucket alignment:** Uses `strftime` with offset to align buckets to clean boundaries
+- **Composite index** (`idx_ping_monitor_time`) makes the WHERE + GROUP BY efficient
+- **Null-safe aggregation:** `AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END)` excludes failures from latency stats
+
+### Quality Interval Computation
+- Linear scan over aggregated points, classifying each bucket as: `warmingUp`, `low`, `medium`, `high`, `veryHigh`, `unstable`, `disconnected`
+- Consecutive same-state buckets are merged into intervals (startMs, endMs, state, reasons)
+- Reasons array is a defensive copy — mutation of returned array doesn't affect internals
+- Thresholds from F6 spec: packet loss %, latency p50/p95, jitter, consecutive failures
+
+### Down-sampling via Bucket Size Adjustment
+- `calculateBucketSize(fromMs, toMs, maxPoints)` computes optimal bucket size
+- Starts at 1-minute buckets; increases through clean sizes (1m, 5m, 15m, 30m, 1h) until point count ≤ maxPoints
+- Clean bucket sizes align with frontend chart rendering (no fractional buckets)
+
+### Range Summary Computation
+- Aggregate statistics over all points: packetLossPercent, p50Latency, p95Latency, avgLatency, minLatency, maxLatency, stablePercent, unstablePercent
+- p95 uses per-bucket averages as proxy (acceptable approximation for MVP; documented)
+- Stable/unstable computed from quality state distribution
+
+### HistoryResponse Shape
+- `HistoryResponse = { target, series, points, intervals, summary }` — complete response for uPlot chart
+- `series` array: `[{ label: "latency", unit: "ms" }]` — uPlot column descriptors
+- `points` = `HistoryPoint[]` (bucket_ms, latencyMs, packetLoss, sampleCount, status, qualityState)
+- `intervals` = `QualityIntervalRecord[]` (merged quality state intervals)
+- `summary` = `RangeSummary` (aggregate statistics for the time range)

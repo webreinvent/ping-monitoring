@@ -3,7 +3,7 @@ taskId: M1-T8
 milestone: M1
 title: Build monitor history API with aggregation and time windows
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "4-6 hours"
 features:
   - F6
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 4-6 hours
 
 ## Description
@@ -31,28 +31,28 @@ Build `GET /api/monitors/:id` endpoint that returns historical ping data formatt
 
 ## Acceptance Criteria
 
-- [ ] Returns `HistoryResponse` with series, points, intervals, and summary
-- [ ] Time window defaults to last 1 hour when no params provided
-- [ ] `maxPoints` enforced: server down-samples by increasing bucket size
-- [ ] 404 for non-existent monitor
-- [ ] 400 for invalid query params (fromMs > toMs)
-- [ ] Empty points array when no data in range (still returns 200)
-- [ ] Response shape matches F6 `HistoryResponse` type exactly
-- [ ] Quality intervals computed correctly from aggregated data
+- [x] Returns `HistoryResponse` with series, points, intervals, and summary
+- [x] Time window defaults to last 1 hour when no params provided
+- [x] `maxPoints` enforced: server down-samples by increasing bucket size
+- [x] 404 for non-existent monitor
+- [x] 400 for invalid query params (fromMs > toMs)
+- [x] Empty points array when no data in range (still returns 200)
+- [x] Response shape matches F6 `HistoryResponse` type exactly
+- [x] Quality intervals computed correctly from aggregated data
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] History endpoint returns correct shape
-- [ ] Time window params work
-- [ ] maxPoints cap enforced
-- [ ] 404 for unknown monitor
-- [ ] Empty data returns empty points
+- [x] History endpoint returns correct shape
+- [x] Time window params work
+- [x] maxPoints cap enforced
+- [x] 404 for unknown monitor
+- [x] Empty data returns empty points
 
 ## Dependencies
 

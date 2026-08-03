@@ -182,6 +182,152 @@ interface MonitorsListResponse {
 
 ---
 
+### F6: Monitor History Types
+
+The following types are used by the `GET /api/monitors/:id` endpoint (F6 — Monitor History API) and define the chart contract consumed by uPlot.
+
+#### QualityState
+
+```typescript
+type QualityState =
+  | "warmingUp"
+  | "low"
+  | "medium"
+  | "high"
+  | "veryHigh"
+  | "unstable"
+  | "disconnected";
+```
+
+**Used by:** `QualityIntervalRecord`, quality classification logic.
+
+#### QualityReason
+
+```typescript
+type QualityReason =
+  | "packetLoss"
+  | "highLatency"
+  | "highJitter"
+  | "insufficientSamples";
+```
+
+**Used by:** `QualityIntervalRecord.reasons` array.
+
+#### HistoryPoint
+
+```typescript
+interface HistoryPoint {
+  timestampMs: number;              // Epoch ms of bucket start
+  averageLatencyMs: number | null;  // Average latency across success samples
+  minimumLatencyMs: number | null;  // Min latency across all samples
+  maximumLatencyMs: number | null;  // Max latency across all samples
+  sampleCount: number;              // Total samples in bucket
+  failureCount: number;             // Failed samples in bucket
+}
+```
+
+**Used by:** `HistorySeries.points`, chart rendering.
+
+#### QualityIntervalRecord
+
+```typescript
+interface QualityIntervalRecord {
+  startMs: number;                 // Epoch ms of interval start
+  endMs: number | null;            // Epoch ms of end, or null (open-ended)
+  state: QualityState;             // Quality classification
+  reasons: QualityReason[];        // Reasons for classification
+}
+```
+
+**Used by:** `HistorySeries.intervals`, chart region coloring.
+
+#### RangeSummary
+
+```typescript
+interface RangeSummary {
+  sampleCount: number;
+  successCount: number;
+  failureCount: number;
+  packetLossPercent: number;
+  averageLatencyMs: number | null;
+  minimumLatencyMs: number | null;
+  maximumLatencyMs: number | null;
+  p95LatencyMs: number | null;
+  stableMs: number;
+  unstableMs: number;
+  disconnectedMs: number;
+  stablePercent: number;
+  unstablePercent: number;
+  disconnectedPercent: number;
+}
+```
+
+**Used by:** `HistorySeries.summary`, dashboard metrics display.
+
+#### Target
+
+```typescript
+interface Target {
+  id: string;                          // Monitor ID (string format for chart contract)
+  name: string;                        // Human-readable target name
+  host: string;                        // Target host (IP or hostname)
+  enabled: boolean;                    // Whether target is enabled
+  addressFamily: "ipv4" | "ipv6";      // Address family
+  intervalMs: number;                  // Ping interval in ms
+  timeoutMs: number;                   // Ping timeout in ms
+  thresholds: {                         // Quality threshold configuration
+    windowSeconds: number;
+    minimumSamples: number;
+    packetLossPercent: number;
+    jitterMs: number;
+    p95LatencyMs: number;
+    unstableForSeconds: number;
+    stableForSeconds: number;
+    outageFailures: number;
+    recoverySuccesses: number;
+  };
+  createdAtMs: number;                 // Epoch ms when target was created
+  archivedAtMs: number | null;        // Epoch ms when archived, or null
+}
+```
+
+**Used by:** `HistorySeries.target`, chart metadata display.
+
+#### HistorySeries
+
+```typescript
+interface HistorySeries {
+  target: Target;                        // Target metadata
+  points: HistoryPoint[];                // Aggregated data points
+  intervals: QualityIntervalRecord[];   // Quality classification intervals
+  summary: RangeSummary;                 // Aggregate statistics
+}
+```
+
+**Used by:** `HistoryResponse.series` array.
+
+#### HistoryResponse
+
+```typescript
+interface HistoryResponse {
+  fromMs: number;                         // Start of time range (epoch ms)
+  toMs: number;                           // End of time range (epoch ms)
+  bucketMs: number;                       // Bucket size used for aggregation
+  series: HistorySeries[];                // Array of history series
+}
+```
+
+**Used by:** `GET /api/monitors/:id` endpoint (F6) response envelope.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fromMs` | `number` | Start of time range in epoch ms (exclusive) |
+| `toMs` | `number` | End of time range in epoch ms (inclusive) |
+| `bucketMs` | `number` | Bucket size in ms used for aggregation |
+| `series` | `HistorySeries[]` | Single-element array for single-monitor view |
+
+---
+
 ### Ingest Types
 
 > **Note:** The ingest types (`PingSampleIngest`, `IngestPayload`, `Rejection`, `IngestResponse`, `ValidationResult`) are defined in `server/utils/ping-types.ts` rather than `shared/types.ts` because they are server-only types used by the ingest pipeline. The types below are the shared ones used across server and client code.
@@ -265,7 +411,9 @@ interface ValidationResult {
 ## Related
 
 - [Monitors List API](../api/monitors.md) — `MonitorListItem`, `MonitorsListResponse`
+- [Monitor History API](../api/monitors-history.md) — `HistoryResponse`, `HistorySeries`, `HistoryPoint`, `QualityIntervalRecord`, `RangeSummary`, `Target`, `QualityState`, `QualityReason`
 - [Ping Ingest API](../api/ping-ingest.md) — `IngestPayload` request, `IngestResponse` response
 - [Ping Validation](../utils/ping-validation.md) — `ValidationResult` return type
 - [Ping Ingest Engine](../utils/ping-ingest.md) — `IngestResponse` return from `ingestPingBatch()`
 - [Monitors Utility](../utils/monitors.md) — `getAllMonitorsWithLatestState()` query logic
+- [History Aggregation](../utils/history.md) — `calculateBucketSize()`, `getMonitorHistoryPoints()`, `computeQualityIntervals()`, `computeRangeSummary()`, `buildTarget()`

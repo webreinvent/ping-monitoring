@@ -5,7 +5,7 @@ import {
   computeRangeSummary,
   buildTarget,
 } from "./history";
-import type { HistoryPoint, MonitorRow, ClientRow } from "./history";
+import type { HistoryPoint, MonitorRow } from "./history";
 
 // ============================================================================
 // calculateBucketSize — edge cases
