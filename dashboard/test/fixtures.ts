@@ -11,6 +11,12 @@ import type {
   HealthErrorResponse,
   MonitorListItem,
   MonitorsListResponse,
+  HistoryResponse,
+  HistorySeries,
+  HistoryPoint,
+  QualityIntervalRecord,
+  RangeSummary,
+  Target,
 } from "~/shared/types";
 import type {
   IngestPayload,
@@ -166,6 +172,129 @@ export function createMonitorsListResponse(
 ): MonitorsListResponse {
   return {
     monitors: [],
+    ...overrides,
+  };
+}
+
+// ============================================================================
+// F6: Monitor History API fixtures
+// ============================================================================
+
+/** Create a valid HistoryPoint with optional overrides. */
+export function createHistoryPoint(
+  overrides: Partial<HistoryPoint> = {},
+): HistoryPoint {
+  return {
+    timestampMs: 1753852860000,
+    averageLatencyMs: 14.2,
+    minimumLatencyMs: 12.1,
+    maximumLatencyMs: 18.5,
+    sampleCount: 60,
+    failureCount: 0,
+    ...overrides,
+  };
+}
+
+/** Create a batch of HistoryPoints with sequential timestamps. */
+export function createHistoryPoints(
+  count: number,
+  overrides: Partial<HistoryPoint> = {},
+): HistoryPoint[] {
+  return Array.from({ length: count }, (_, i) =>
+    createHistoryPoint({
+      ...overrides,
+      timestampMs: 1753852800000 + i * 60000,
+    }),
+  );
+}
+
+/** Create a valid QualityIntervalRecord with optional overrides. */
+export function createQualityInterval(
+  overrides: Partial<QualityIntervalRecord> = {},
+): QualityIntervalRecord {
+  return {
+    startMs: 1753852800000,
+    endMs: 1753856400000,
+    state: "low",
+    reasons: [],
+    ...overrides,
+  };
+}
+
+/** Create a valid RangeSummary with optional overrides. */
+export function createRangeSummary(
+  overrides: Partial<RangeSummary> = {},
+): RangeSummary {
+  return {
+    sampleCount: 3600,
+    successCount: 3598,
+    failureCount: 2,
+    packetLossPercent: 0.056,
+    averageLatencyMs: 14.5,
+    minimumLatencyMs: 11.2,
+    maximumLatencyMs: 45.3,
+    p95LatencyMs: 22.1,
+    stableMs: 3540000,
+    unstableMs: 60000,
+    disconnectedMs: 0,
+    stablePercent: 98.33,
+    unstablePercent: 1.67,
+    disconnectedPercent: 0,
+    ...overrides,
+  };
+}
+
+/** Create a valid Target with optional overrides. */
+export function createTarget(
+  overrides: Partial<Target> = {},
+): Target {
+  return {
+    id: "42",
+    name: "Google DNS",
+    host: "8.8.8.8",
+    enabled: true,
+    addressFamily: "ipv4",
+    intervalMs: 1000,
+    timeoutMs: 5000,
+    thresholds: {
+      windowSeconds: 300,
+      minimumSamples: 10,
+      packetLossPercent: 1,
+      jitterMs: 20,
+      p95LatencyMs: 100,
+      unstableForSeconds: 60,
+      stableForSeconds: 30,
+      outageFailures: 5,
+      recoverySuccesses: 3,
+    },
+    createdAtMs: 1753000000000,
+    archivedAtMs: null,
+    ...overrides,
+  };
+}
+
+/** Create a valid HistorySeries with optional overrides. */
+export function createHistorySeries(
+  overrides: Partial<HistorySeries> = {},
+): HistorySeries {
+  return {
+    target: createTarget(),
+    points: [],
+    intervals: [],
+    summary: createRangeSummary(),
+    ...overrides,
+  };
+}
+
+/** Create a valid HistoryResponse with optional overrides. */
+export function createHistoryResponse(
+  overrides: Partial<HistoryResponse> = {},
+): HistoryResponse {
+  return {
+    fromMs: 1753852800000,
+    toMs: 1753939200000,
+    bucketMs: 60000,
+    series: [createHistorySeries()],
     ...overrides,
   };
 }
