@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API)
 
 ## Technology Stack Decisions
 
@@ -105,3 +105,35 @@
 - **Decision:** Store timestamps as epoch milliseconds in DB (better-sqlite3 stores as numbers), convert to ISO 8601 strings in API responses
 - **Rationale:** Epoch-ms is efficient for storage and comparison; ISO 8601 is human-readable and matches API contract
 - **Impact:** `toClientResponse()` handles the conversion transparently
+
+## Monitors List Decisions (M1-T7 / F5)
+
+### Single SQL Query with CTE (No N+1)
+- **Decision:** Use a single SQL query with CTE + `ROW_NUMBER()` to fetch monitors with latest state, rather than a separate query per monitor
+- **Rationale:** Eliminates N+1 query problem; single round-trip to SQLite is efficient and simple
+- **Impact:** `getAllMonitorsWithLatestState()` returns complete data in one call
+
+### LEFT JOIN for monitors with no samples
+- **Decision:** Use LEFT JOIN (not INNER JOIN) to latest_samples so monitors with zero ping samples still appear in results
+- **Rationale:** New monitors should appear in the list immediately after creation, not only after receiving their first ping
+- **Impact:** Monitors with no samples have null `status`, `latencyMs`, and `lastSeenMs`
+
+### COALESCE for sort ordering of null timestamps
+- **Decision:** Use `COALESCE(ls.timestamp_ms, 0) DESC` so monitors with no samples sort to the end
+- **Rationale:** Null timestamps would sort unpredictably in DESC order; using 0 as fallback consistently pushes them last
+- **Impact:** Deterministic, intuitive sort order
+
+### Status mapping: success→up, timeout/error→down
+- **Decision:** Map DB-level status values (`success`, `timeout`, `error`) to API-level status (`up`, `down`, `null`)
+- **Rationale:** API consumers expect simple status values; `success`→`up` is intuitive, grouping `timeout` and `error` as `down` is semantically correct
+- **Impact:** Private `mapSampleStatus()` function encapsulates the mapping logic
+
+### Quality state: warmingUp→unknown, pass-through for others
+- **Decision:** Map `warmingUp` to `unknown` and pass through `good`, `degraded`, `poor` as-is
+- **Rationale:** `warmingUp` is an internal DB state; the API contract uses `unknown` for monitors without enough data to classify
+- **Impact:** Private `mapQualityState()` function; no leak of internal state names
+
+### targetName fallback to targetHost
+- **Decision:** When `target_name` is NULL in the DB, fall back to `target_host` for the `targetName` field
+- **Rationale:** Ensures the API always returns a meaningful display name; monitors created before a name was set should still show something useful
+- **Impact:** `targetName: row.target_name ?? row.target_host` in the mapping layer

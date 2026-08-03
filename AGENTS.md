@@ -292,7 +292,7 @@ const pkgVersion = (() => {
 
 ---
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T6 ping ingest conventions appended)*
+*Last updated: 2026-08-03 (Agent 14 — M1-T7 monitors list conventions appended)*
 
 ## Client Identity Pattern (M1-T5 / F2)
 
@@ -447,3 +447,61 @@ The `POST /api/ping/ingest` endpoint is the primary data ingestion path for all 
 - **F12 hook (quality classifier)** — Not implemented yet (deferred to M1-T7)
 - **F7 hook (WebSocket broadcast)** — Not implemented yet (deferred to M1-T9)
 - **Integration tests with better-sqlite3** — Segfault in Vitest forked workers; unit tests mock the DB, integration tests are limited to in-memory SQLite
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T7)
+
+### Monitors List API (M1-T7 / F5)
+
+The `GET /api/monitors` endpoint returns all monitors with their latest state, joined with client information. Primary data source for the dashboard sidebar and all-monitors view.
+
+#### CTE + ROW_NUMBER() Latest-State Query Pattern
+- **File**: `server/utils/monitors.ts` → `getAllMonitorsWithLatestState()`
+- **Pattern**: Single SQL query using a CTE with `ROW_NUMBER() OVER (PARTITION BY monitor_id ORDER BY timestamp_ms DESC)` to fetch the latest ping sample per monitor, then LEFT JOIN to monitors and clients
+- **No N+1**: All data fetched in one SQL call — eliminates N+1 query problem
+- **LEFT JOIN**: Monitors with no samples still appear (null latest state fields)
+- **COALESCE sort**: `COALESCE(ls.timestamp_ms, 0) DESC` — monitors with no samples sort to the end
+- **Stable tiebreaker**: `m.id ASC` ensures deterministic order when timestamps match
+- **Returns**: `MonitorListItem[]` with camelCase fields matching API contract
+
+#### Status Mapping Convention
+- **`mapSampleStatus()`** (private helper): Maps DB-level status to API-level status
+  - `"success"` → `"up"`
+  - `"timeout"` | `"error"` → `"down"`
+  - `null` → `null` (monitor has no samples)
+- **`mapQualityState()`** (private helper): Maps DB-level quality state to API quality state
+  - `"warmingUp"` → `"unknown"`
+  - `"good"` | `"degraded"` | `"poor"` → pass-through as-is
+- **Rationale**: API consumers expect simple, human-readable status values; internal DB state names are not leaked
+
+#### Field Mapping Convention
+- **snake_case → camelCase**: DB rows (snake_case) mapped to API fields (camelCase) in `.map()` after query
+- **targetName fallback**: `row.target_name ?? row.target_host` — ensures display name always has a value
+- **createdAt conversion**: `new Date(row.created_at).toISOString()` — epoch ms to ISO 8601 string
+- **Pattern**: The mapping `.map()` is the sole transformation layer — keeps SQL clean and API contract in one place
+
+#### Monitors API Route Handler Pattern
+- **File**: `server/api/monitors.get.ts`
+- **Pattern**: Import utility → call in try/catch → log info with count → return `{ monitors }` on success → logError + throw 500 on failure
+- **No authentication**: Public endpoint, no auth required
+- **Response shape**: `{ monitors: MonitorListItem[] }` — array wrapped in object key
+- **Empty result**: Returns `{ monitors: [] }` with 200 status when no monitors exist (not 404)
+
+#### Shared Types — Monitors List
+- **`MonitorListItem`**: Individual monitor entry with `id`, `clientSlug`, `clientName`, `targetHost`, `targetName`, `status` (`"up"` | `"down"` | `null`), `latencyMs`, `qualityState`, `lastSeenMs`, `createdAt` (ISO 8601 string)
+- **`MonitorsListResponse`**: Response envelope `{ monitors: MonitorListItem[] }`
+- **Location**: `shared/types.ts`, imported explicitly (Nuxt auto-import does NOT work for type-only exports)
+
+#### Monitors List Test Patterns
+- **Unit tests** (`monitors.get.test.ts`): Test route handler error handling (utility throws → 500 response), info logging, and response shape
+- **Integration tests** (`monitors.get.integration.test.ts`): Mock DB with `vi.mock()` to test full pipeline: mock DB → query → mapping → API response shape
+- **Mock DB for mapping validation**: Tests validate the mapping layer — given rows from the DB, does the code produce correct API response? SQL syntax is verified by typecheck and runtime
+- **Test the mapping, not the SQL**: Mock DB approach validates field transformation (snake→camel, status mapping, null handling) without executing real SQL
+
+### ADRs — Monitors List (M1-T7)
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-015 | CTE + ROW_NUMBER for Latest State | Single query with CTE eliminates N+1; ROW_NUMBER() OVER (PARTITION BY) fetches latest sample per monitor efficiently |
+| ADR-016 | LEFT JOIN for Monitors Without Samples | Monitors appear immediately after creation; null state fields for monitors with zero ping samples |
+| ADR-017 | COALESCE Sort for Null Timestamps | Monitors with no samples sort to the end using COALESCE(timestamp_ms, 0) DESC |
+| ADR-018 | Status Mapping Layer | Private helper functions map DB status to API status; prevents internal state names leaking to API |

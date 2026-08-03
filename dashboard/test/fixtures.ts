@@ -9,6 +9,8 @@ import type {
   WsMessage,
   HealthResponse,
   HealthErrorResponse,
+  MonitorListItem,
+  MonitorsListResponse,
 } from "~/shared/types";
 import type {
   IngestPayload,
@@ -135,6 +137,35 @@ export function createHealthErrorResponse(
     status: "error",
     timestamp: "2025-01-01T00:00:00.000Z",
     message: "Something went wrong",
+    ...overrides,
+  };
+}
+
+/** Create a valid MonitorListItem with optional overrides. */
+export function createMonitorListItem(
+  overrides: Partial<MonitorListItem> = {},
+): MonitorListItem {
+  return {
+    id: 1,
+    clientSlug: "test-client",
+    clientName: "Test Client",
+    targetHost: "8.8.8.8",
+    targetName: "Google DNS",
+    status: "up",
+    latencyMs: 42,
+    qualityState: "unknown",
+    lastSeenMs: Date.now(),
+    createdAt: "2025-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/** Create a valid MonitorsListResponse with optional overrides. */
+export function createMonitorsListResponse(
+  overrides: Partial<MonitorsListResponse> = {},
+): MonitorsListResponse {
+  return {
+    monitors: [],
     ...overrides,
   };
 }

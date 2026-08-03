@@ -3,7 +3,7 @@ taskId: M1-T7
 milestone: M1
 title: Implement monitors list API with client join and latest state
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "2-3 hours"
 features:
   - F5
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 2-3 hours
 
 ## Description
@@ -30,24 +30,24 @@ Build `GET /api/monitors` endpoint that returns all monitors with their latest s
 
 ## Acceptance Criteria
 
-- [ ] Returns array of monitors with client slug, client name, and latest state
-- [ ] Results sorted by lastSeenMs DESC, id ASC
-- [ ] Empty database returns empty array with 200 status
-- [ ] Monitors with no samples have null latest state fields
-- [ ] Response shape matches F5 API contract exactly
-- [ ] Single SQL query (no N+1)
+- [x] Returns array of monitors with client slug, client name, and latest state
+- [x] Results sorted by lastSeenMs DESC, id ASC
+- [x] Empty database returns empty array with 200 status
+- [x] Monitors with no samples have null latest state fields
+- [x] Response shape matches F5 API contract exactly
+- [x] Single SQL query (no N+1)
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] API endpoint returns correct shape
-- [ ] Sort order is correct
-- [ ] Empty DB returns empty array
+- [x] API endpoint returns correct shape
+- [x] Sort order is correct
+- [x] Empty DB returns empty array
 
 ## Dependencies
 

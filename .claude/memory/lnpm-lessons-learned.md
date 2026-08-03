@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -102,3 +102,33 @@
 **Fix:** Used Explore agent to search for files matching patterns like `**/task*{M1,T5}*` rather than trying to construct the exact path.
 
 **Prevention:** When looking for task files, search for patterns rather than constructing exact paths. The Explore agent is well-suited for this.
+
+## Lesson 11: Mock DB tests for SQL query mapping logic
+
+**Error:** No lesson — this is a positive pattern confirmed during M1-T7.
+
+**Finding:** The mock DB approach (`vi.mock("../utils/db")`) works well for testing SQL query result mapping. The test doesn't verify the SQL query itself but verifies the mapping layer: given rows from the DB, does the code produce the correct API response?
+
+**Key insight:** This is a trade-off, not a weakness. The SQL query is tested indirectly through the mapping layer. The integration test file (`monitors.get.integration.test.ts`) tests the full pipeline: mock DB → query → mapping → API response shape.
+
+**Prevention:** Accept that mock DB tests validate the mapping layer, not the SQL syntax. For SQL correctness, rely on typecheck (`npx nuxi typecheck`) and the fact that better-sqlite3 will throw at runtime if the query is invalid.
+
+## Lesson 12: M1-T6 (ping ingest) creates the monitors that M1-T7 reads
+
+**Error:** No error — this is a dependency awareness lesson.
+
+**Finding:** M1-T7 depends on M1-T6 completing first because M1-T6's ingest endpoint (`POST /api/ping/ingest`) is what creates monitors and ping samples. The monitors list API has no way to produce data without the ingest endpoint having run.
+
+**Key insight:** Task dependency ordering is critical. M1-T7's tests use mock DB data because the real monitors table is empty without M1-T6 running. The mock approach is correct and appropriate for this dependency.
+
+**Prevention:** When implementing endpoints that read data created by other endpoints, use mock data in tests rather than trying to call the creating endpoint. This keeps tests isolated and fast.
+
+## Lesson 13: `unknown[]` type in test mocks is acceptable but not ideal
+
+**Error:** The `as unknown as Database` cast in mock DB creation is a TypeScript escape hatch. Code review identified it as a minor concern.
+
+**Root cause:** better-sqlite3's `Database` type is complex; creating a mock that satisfies the full interface requires implementing many methods.
+
+**Fix:** The `as unknown as Database` cast is acceptable for test mocks. The mock only needs to satisfy the methods actually called by the code under test (`prepare().all()`). TypeScript's structural typing means the mock only needs the methods that are actually invoked.
+
+**Prevention:** Use `as unknown as Database` sparingly — only in test code, not in production. The mock should implement only the methods used by the code under test, keeping tests focused on behavior, not type satisfaction.

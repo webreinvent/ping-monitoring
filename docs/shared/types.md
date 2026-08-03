@@ -138,6 +138,50 @@ interface HealthErrorResponse {
 
 ---
 
+### MonitorListItem
+
+```typescript
+interface MonitorListItem {
+  id: number;                    // Unique monitor ID
+  clientSlug: string;            // Immutable client identifier
+  clientName: string;            // Client human-readable name
+  targetHost: string;            // Monitored host (IP or hostname)
+  targetName: string;            // Human-readable target label (falls back to targetHost)
+  status: "up" | "down" | null; // Latest ping status (null = no samples yet)
+  latencyMs: number | null;     // Latest latency in ms (null = no samples)
+  qualityState: "good" | "degraded" | "poor" | "unknown";
+  lastSeenMs: number | null;    // Epoch ms of latest sample (null = no samples)
+  createdAt: string;            // ISO 8601 creation timestamp
+}
+```
+
+**Used by:** `GET /api/monitors` endpoint (F5 — monitors list).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `number` | Monitor primary key |
+| `clientSlug` | `string` | Immutable client identifier (derived from username + hostname + MAC) |
+| `clientName` | `string` | Human-readable client display name |
+| `targetHost` | `string` | The monitored host (IP or hostname) |
+| `targetName` | `string` | Human-readable target label; falls back to `targetHost` if `target_name` is null in DB |
+| `status` | `"up" \| "down" \| null` | `"up"` = success, `"down"` = timeout/error, `null` = no samples yet |
+| `latencyMs` | `number \| null` | Latency of the most recent sample in ms |
+| `qualityState` | `"good" \| "degraded" \| "poor" \| "unknown"` | Computed quality state; `"unknown"` for monitors still warming up |
+| `lastSeenMs` | `number \| null` | Epoch milliseconds of the most recent sample |
+| `createdAt` | `string` | ISO 8601 timestamp when the monitor was created |
+
+### MonitorsListResponse
+
+```typescript
+interface MonitorsListResponse {
+  monitors: MonitorListItem[];
+}
+```
+
+**Used by:** `GET /api/monitors` response envelope. Contains an array of `MonitorListItem` objects sorted by `lastSeenMs DESC, id ASC`.
+
+---
+
 ### Ingest Types
 
 > **Note:** The ingest types (`PingSampleIngest`, `IngestPayload`, `Rejection`, `IngestResponse`, `ValidationResult`) are defined in `server/utils/ping-types.ts` rather than `shared/types.ts` because they are server-only types used by the ingest pipeline. The types below are the shared ones used across server and client code.
@@ -220,6 +264,8 @@ interface ValidationResult {
 
 ## Related
 
+- [Monitors List API](../api/monitors.md) — `MonitorListItem`, `MonitorsListResponse`
 - [Ping Ingest API](../api/ping-ingest.md) — `IngestPayload` request, `IngestResponse` response
 - [Ping Validation](../utils/ping-validation.md) — `ValidationResult` return type
 - [Ping Ingest Engine](../utils/ping-ingest.md) — `IngestResponse` return from `ingestPingBatch()`
+- [Monitors Utility](../utils/monitors.md) — `getAllMonitorsWithLatestState()` query logic
