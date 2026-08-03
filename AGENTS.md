@@ -26,8 +26,8 @@ dashboard/
 │   └── pages/              # File-based routes (index.vue)
 ├── server/                 # Nitro backend
 │   ├── api/                # File-based API routes (health.get.ts, etc.)
-│   ├── plugins/            # Nitro plugins (database.ts)
-│   ├── utils/              # Server utilities (db.ts, logger.ts)
+│   ├── plugins/            # Nitro plugins (database.ts, quality-sweep.ts, retention.ts)
+│   ├── utils/              # Server utilities (db.ts, logger.ts, retention.ts, etc.)
 │   └── ws/                 # WebSocket handlers (ping.ts)
 ├── shared/                 # TypeScript types shared between server and client
 │   └── types.ts            # Interfaces: PingSample, Monitor, WsMessage, etc.
@@ -116,9 +116,10 @@ dashboard/
 - Use `nuxt typecheck` (not `nuxi typecheck`) in Nuxt 4
 
 ### Environment Variables
-- Template in `dashboard/.env.example` — 14 variables across 8 categories
+- Template in `dashboard/.env.example` — 19 variables across 9 categories
 - Always validate env vars before using as numbers (`parseInt` silently produces `NaN`)
 - Key variables: `DATABASE_PATH`, `LOG_LEVEL`, `PORT`, `WS_HEARTBEAT_INTERVAL_MS`, `INGEST_MAX_SAMPLES`
+- Retention config: `RETENTION_ENABLED`, `RETENTION_SAMPLE_DAYS`, `RETENTION_ROLLUP_DAYS`, `RETENTION_INTERVAL_MIN`, `RETENTION_VACUUM_THRESHOLD`
 
 ## Nuxt 4 / Nitro Specifics
 
@@ -226,6 +227,11 @@ The `schema/index.sql` file is a hand-assembled reference of the complete schema
 | ADR-007 | uPlot Charts | Canvas-based, fast rendering, already used in desktop |
 | ADR-008 | Single-Node Deployment | One process, one SQLite file, PM2 or systemd |
 | ADR-009 | Raw Samples with Backend Computed Metrics | Backend owns quality computation, `minute_rollups` for efficient queries |
+| ADR-033 | Plugin + Utility Separation for Background Tasks | Business logic in `server/utils/`, Nitro plugin in `server/plugins/`; matches quality-sweep pattern |
+| ADR-034 | Single Transaction for Retention Deletion | `db.transaction()` wraps both DELETE operations; `.changes` property provides counts |
+| ADR-035 | VACUUM Outside Transaction with Threshold | SQLite restriction; configurable threshold prevents expensive VACUUM on every cycle |
+| ADR-036 | Lazy Env Var Reading (No Cache) | `getRetentionConfig()` reads env vars fresh each call; no in-memory caching |
+| ADR-037 | RETENTION_ENABLED Boolean Flag | Single env var for complete enable/disable; truthy by default |
 
 ## Quick Reference
 
@@ -243,8 +249,11 @@ pnpm run typecheck    # TypeScript type checking
 ### Key Files
 - `dashboard/nuxt.config.ts` — Nuxt configuration
 - `dashboard/server/plugins/database.ts` — SQLite init + migration runner
+- `dashboard/server/plugins/quality-sweep.ts` — Quality classifier background sweep
+- `dashboard/server/plugins/retention.ts` — Data retention cleanup background task
 - `dashboard/server/utils/db.ts` — Typed DB accessor (`getDb()`)
 - `dashboard/server/utils/logger.ts` — Structured logger
+- `dashboard/server/utils/retention.ts` — Retention config + cleanup logic
 - `dashboard/shared/types.ts` — Shared TypeScript interfaces
 - `dashboard/schema/migrations/` — Numbered SQL migration files
 

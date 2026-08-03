@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 09 - Automated UAT & Bug Fixes
+description: Verify every acceptance criterion through browser automation; fix all defects before proceeding
+version: 2.0
 ---
 
 # Automated UAT & Bug Fixes
@@ -7,6 +9,14 @@ title: LNPM - Agent 09 - Automated UAT & Bug Fixes
 ## Purpose
 
 GATE — DO NOT SKIP. Verify every acceptance criterion through browser automation for the LNPM Cloud Dashboard. Fix all defects before proceeding. Errors are not a reason to skip — they are the work.
+
+## Instructions
+
+- Use the Playwright MCP server for all browser interactions — never rely on visual inspection alone.
+- Use the Read tool for file reads, NOT `cat`, `head`, or `tail`.
+- Parallelize infrastructure checks; UAT flows are sequential by nature.
+- Invoke MCP servers before executing any workflow step that requires them.
+- Write down key findings inline — file paths, patterns, constraints. This survives context compaction.
 
 ## Scope Boundaries
 
@@ -30,6 +40,24 @@ GATE — DO NOT SKIP. Verify every acceptance criterion through browser automati
 - **`{{DASHBOARD_DIR}}`** _(static)_ — `dashboard/`
 - **`{{DASHBOARD_URL}}`** _(static)_ — `http://localhost:3000`
 
+## Codebase Structure
+
+```
+ping-monitoring/
+├── dashboard/
+│   ├── app/                    # Frontend (pages, components, composables)
+│   │   ├── components/         # Vue UI components
+│   │   ├── composables/        # Shared composition functions
+│   │   └── pages/              # File-based routing pages
+│   ├── server/                 # Nitro server (API, middleware, plugins, utils)
+│   │   ├── api/                # API route handlers
+│   │   ├── middleware/         # Rate limiting, auth middleware
+│   │   ├── plugins/            # Database plugin
+│   │   ├── utils/              # Business logic utilities
+│   │   └── ws/                 # WebSocket handlers
+│   └── shared/                 # Shared types between client and server
+```
+
 ## MCP Servers
 
 | Server | Purpose | Install / Configure | When to Use |
@@ -50,11 +78,11 @@ GATE — DO NOT SKIP. Verify every acceptance criterion through browser automati
 
 ## Workflow
 
-**Step 1: Install Skills**
+### Step 1: Install Skills
 
 Check and install each skill if needed.
 
-**Step 2: Infrastructure Readiness**
+### Step 2: Infrastructure Readiness
 
 1. Start the Nuxt dev server: `cd dashboard && pnpm dev` (or `pnpm nuxt dev`)
 2. Free blocked ports if needed (default: 3000)
@@ -62,7 +90,9 @@ Check and install each skill if needed.
 4. Verify server: `curl http://localhost:3000` should return 200
 5. Verify API: `curl http://localhost:3000/api/health` should return health metrics
 
-**Step 3: UAT Sweep**
+**Gate:** Server must be running and healthy (200 on root and /api/health) before starting UAT sweep.
+
+### Step 3: UAT Sweep
 
 For each acceptance criterion from the task:
 1. Navigate to URL via Playwright MCP
@@ -82,7 +112,7 @@ Cover:
 - **API endpoints** — test each API endpoint with correct request/response shapes
 - **Edge cases** — empty state, error state, loading state
 
-**Step 4: Bug Fix Loop**
+### Step 4: Bug Fix Loop
 
 WHILE any criterion unverified OR errors detected:
 1. Document the bug — expected vs actual, reproduction steps
@@ -92,13 +122,17 @@ WHILE any criterion unverified OR errors detected:
 5. Cascade check — IF shared code touched, re-run ALL flows
 
 **Error recovery:**
-- IF fix introduces new error → revert and re-diagnose. Never layer fixes.
-- IF unable to find root cause after 3 attempts → escalate to user.
+- IF fix introduces new error, revert and re-diagnose. Never layer fixes.
+- IF unable to find root cause after 3 attempts, escalate to user.
 
-## Output
+**Gate:** Every acceptance criterion verified, zero console errors, zero network errors, all screenshots captured, no open bugs.
+
+## Report
+
+After completing the workflow, output this summary:
 
 ```
-UAT
+Automated UAT — LNPM Cloud Dashboard
   Acceptance criteria: [N total]
   Verified: [N passed]
   Failed: [N failed — list]
@@ -107,15 +141,6 @@ UAT
   Screenshots: [list of paths]
   Console errors: [zero / list]
   Network errors: [zero / list]
+  Status: Complete | Partial | Blocked
   Next agent: Agent 10 (Write Unit Tests)
 ```
-
-## Gate
-
-- [ ] Every acceptance criterion verified
-- [ ] Zero console errors on every tested page
-- [ ] Zero network errors on every tested page
-- [ ] Screenshots taken for every flow
-- [ ] Bug fix loop complete (no open bugs)
-
-**DO NOT proceed until ALL conditions are true.**

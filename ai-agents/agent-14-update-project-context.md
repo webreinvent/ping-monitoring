@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 14 - Update Project Context
+description: Update project-level AI context files with new conventions, patterns, and decisions established during the LNPM Cloud Dashboard task.
+version: 2.0
 ---
 
 # Update Project Context
@@ -7,6 +9,13 @@ title: LNPM - Agent 14 - Update Project Context
 ## Purpose
 
 MANDATORY — DO NOT SKIP. Update project-level AI context files (AGENTS.md, CLAUDE.md, or equivalent) with any new conventions, patterns, or architectural decisions established during this LNPM Cloud Dashboard task.
+
+## Instructions
+
+- **Tool-first approach:** Use `memory` MCP server to load session knowledge, `filesystem` MCP server to read and update context files, and `git` MCP server to review changes.
+- **Parallel reads:** There are no parallel steps — this agent has a sequential read-identify-write workflow.
+- **Sequential reads:** Step 1 (Read Context File) must complete before Step 2 (Identify New Conventions), which must complete before Step 3 (Update Context File).
+- **Compaction survival:** If the context window is nearing capacity, prioritize Step 3 (Update Context File) — the actual file update is the critical deliverable.
 
 ## Scope Boundaries
 
@@ -19,6 +28,24 @@ MANDATORY — DO NOT SKIP. Update project-level AI context files (AGENTS.md, CLA
 - Modify application source code
 - Overwrite existing context content
 - Commit changes
+
+## Codebase Structure
+
+```
+ping-monitoring/
+  AGENTS.md                   # Project-level AI context (primary target)
+  CLAUDE.md                   # Alternative context file
+  CONTEXT.md                  # Alternative context file
+  .cursorrules                # Alternative context file
+  ai-agents/                  # Agent definitions (this file's siblings)
+  ai-milestones-and-tasks/    # Milestone and task tracking
+    project-dashboard.md      # Project-level task dashboard
+  dashboard/
+    app/                      # Vue 3 pages, components, composables
+    server/                   # Nitro API routes, WebSocket, utils
+    shared/                   # TypeScript types shared between server/client
+    schema/                   # SQLite migrations and schema
+```
 
 ## Variables
 
@@ -41,11 +68,13 @@ No skills required for this agent.
 
 ## Workflow
 
-**Step 1: Read Context File**
+### Step 1: Read Context File
 
 Read the project's AI context file. Check for `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `AI.md`, or `.cursorrules` at the project root. IF none exist, create `AGENTS.md`.
 
-**Step 2: Identify New Conventions**
+**Gate:** Context file located and read before proceeding.
+
+### Step 2: Identify New Conventions
 
 Review what was established during this task:
 - Coding patterns (Nuxt 4 + Nitro file-based routing, Vue 3 composables)
@@ -55,7 +84,9 @@ Review what was established during this task:
 - Tooling (pnpm workspace, TypeScript strict mode)
 - API patterns (Nitro file-based routing, WebSocket via `server/ws/`)
 
-**Step 3: Update Context File**
+**Gate:** New conventions identified and differentiated from existing context before proceeding.
+
+### Step 3: Update Context File
 
 **Invoke `filesystem` MCP server** to append new conventions. Only add new information — do not overwrite existing content. Structure the update as:
 
@@ -80,18 +111,21 @@ Review what was established during this task:
 - [Add any new conventions established]
 ```
 
-## Output
+**Gate:** Context file updated with append-only changes, existing content preserved.
+
+## Report
+
+Provide a concise report of the context update:
 
 ```
 Project Context Updated — LNPM Cloud Dashboard
-  Context file: [file path]
-  New conventions added: [list]
+  Context file: [file path, e.g., AGENTS.md]
+  New conventions added: [list, or "none"]
   Existing conventions preserved: [yes]
+  Status: [Complete | Partial | Blocked]
   Next agent: Agent 15 (Finalize & Commit)
 ```
 
-## Gate
-
-- [ ] Context file read
-- [ ] New conventions identified
-- [ ] Context file updated
+- **Complete:** Context file read, new conventions identified, and file updated successfully.
+- **Partial:** Context file updated but some conventions could not be identified (with reason).
+- **Blocked:** Cannot read or write context file (e.g., filesystem unavailable).

@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 05 - Create Implementation Plan
+description: Synthesize all prior analysis into a concrete, ordered implementation plan for the LNPM Cloud Dashboard.
+version: 2.0
 ---
 
 # Create Implementation Plan
@@ -7,6 +9,13 @@ title: LNPM - Agent 05 - Create Implementation Plan
 ## Purpose
 
 MANDATORY — DO NOT SKIP. Synthesize all prior analysis into a concrete, ordered implementation plan for the LNPM Cloud Dashboard. Every file and function must be named. Invoke planning skills before writing the plan.
+
+## Instructions
+
+- **Tool-first approach:** Use MCP servers and skills before any manual exploration. Only read files directly when a tool cannot answer the question.
+- **Parallel reads:** Steps that load independent files (e.g., reviewing Agent 02, 03, and 04 outputs) should be executed concurrently: `PARALLEL: Read agent-02-output, Read agent-03-output, Read agent-04-output`.
+- **Sequential reads:** Steps with dependencies must be sequential: `SEQUENTIAL: Review inputs -> Create sequence -> File inventory`.
+- **Compaction survival:** All critical decisions and the final plan must be saved to memory so they survive context window compaction.
 
 ## Scope Boundaries
 
@@ -52,21 +61,25 @@ MANDATORY — DO NOT SKIP. Synthesize all prior analysis into a concrete, ordere
 
 ## Workflow
 
-**Step 1: Install & Invoke Planning Skills**
+### Step 1: Install & Invoke Planning Skills
 
 1. Check and install each skill if needed
 2. Invoke `brainstorming` — explore at least 2 approaches, document rationale
 3. Invoke `sequential-thinking` — decompose into ordered steps
 4. Invoke `nuxt` skill — reference Nuxt 4 + Nitro v2 patterns
 
-**Step 2: Review Inputs**
+**Gate:** Planning skills installed and invoked before proceeding.
 
-Review outputs from prior agents:
+### Step 2: Review Inputs
+
+PARALLEL: Review outputs from prior agents concurrently:
 - Agent 02 — Task scope and acceptance criteria
 - Agent 03 — Related code analysis and reusable patterns (src/types.ts, chart patterns, i18n)
 - Agent 04 — UI/UX design plan
 
-**Step 3: Create Implementation Sequence**
+**Gate:** All prior agent outputs reviewed and understood.
+
+### Step 3: Create Implementation Sequence
 
 Produce a numbered, ordered list following layer-order:
 1. **Project Setup** — Nuxt 4 config, Nitro persistent runtime, package.json, tsconfig
@@ -79,7 +92,7 @@ Produce a numbered, ordered list following layer-order:
 8. **Frontend Components** — Layout, Sidebar, Chart, Metrics, Modals
 9. **Tests** — write as you go, not all at the end
 
-**Step 4: File Inventory**
+### Step 4: File Inventory
 
 List every file to create and modify, grouped by layer. Reference the directory structure in `requirements/architecture.md`:
 ```
@@ -101,38 +114,43 @@ dashboard/
     └── types.ts
 ```
 
-**Step 5: Dependency Graph & Risk Assessment**
+### Step 5: Dependency Graph & Risk Assessment
 
 Document dependency chain, parallelizable work, and risks with mitigation.
 
-**Step 6: Save to Memory**
+**Gate:** Dependencies mapped, risks assessed, plan complete and ordered.
+
+### Step 6: Save to Memory
 
 **Invoke `memory` MCP server:** Save as `"LNPM Cloud Dashboard — Implementation Plan"`.
 
-## Output
+**Gate:** Plan saved to memory. Verify it can be retrieved.
 
-```
-Implementation Plan
+## Report
 
-Sequence:
-  1. [Step — file path — description]
-  2. [Step — file path — description]
-  ...
+Status: [Complete | Partial | Blocked]
 
+Sequence: [N steps, ordered by layer]
 Files: Create [N] | Modify [N]
 Dependencies: [chain with parallelizable items]
 Risks: [identified risks and mitigation]
 Complexity: [Low/Medium/High]
-Plan saved to memory: ✅
+Plan saved to memory: [yes/no]
 Next agent: Agent 06 (Audit & Present Plan)
+
+If Blocked, state the reason and what is needed to unblock.
+
+## Codebase Structure
+
 ```
-
-## Gate
-
-- [ ] Planning skills installed and invoked
-- [ ] Prior agent outputs reviewed
-- [ ] Implementation sequence complete and ordered
-- [ ] File inventory documented
-- [ ] Dependencies mapped
-- [ ] Risks assessed
-- [ ] Plan saved to memory
+ping-monitoring/
+├── dashboard/          # Cloud Dashboard (this task's target)
+│   ├── server/         # Nitro server routes, plugins, utils
+│   ├── app/            # Nuxt 4 frontend (pages, components, composables)
+│   ├── schema/         # SQLite schema and migrations
+│   └── shared/         # Shared TypeScript types
+├── src/                # Desktop app source (do not modify unless required)
+├── src-tauri/          # Tauri backend (do not modify unless required)
+├── requirements/       # Architecture, ADRs, specifications
+└── ai-agents/          # Agent definitions (this directory)
+```

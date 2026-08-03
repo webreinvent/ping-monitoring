@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 11 - Write E2E Tests
+description: Write deterministic Playwright E2E tests for all acceptance criteria with the LNPM Cloud Dashboard frontend UI.
+version: 2.0
 ---
 
 # Write E2E Tests
@@ -7,6 +9,13 @@ title: LNPM - Agent 11 - Write E2E Tests
 ## Purpose
 
 Write deterministic Playwright E2E tests for all acceptance criteria with the LNPM Cloud Dashboard frontend UI. IF Playwright test infrastructure is not configured, this agent configures it first. There is no skip path.
+
+## Instructions
+
+- **Tool-first approach:** Use MCP servers (playwright, git, memory, filesystem, sequential-thinking) before any CLI commands or manual steps.
+- **Parallel reads:** Steps 1 (Install Skills) and 2 (Check & Configure Playwright Infrastructure) can be read in parallel. Steps 3 (Write Tests), 4 (Run Tests), and 5 (Regression Check) must be sequential.
+- **Sequential reads:** Step 3 depends on Step 2 (Playwright must be configured before writing tests). Step 4 depends on Step 3 (tests must be written before running). Step 5 depends on Step 4 (regression check runs after E2E tests pass).
+- **Compaction survival:** If the context window is nearing capacity, prioritize Steps 3 (Write E2E Tests) and 4 (Run Tests) — all E2E tests must pass twice before this agent completes.
 
 ## Scope Boundaries
 
@@ -25,6 +34,28 @@ Write deterministic Playwright E2E tests for all acceptance criteria with the LN
 - Use CSS or XPath selectors
 - Mask flakes with skip/fixme
 - Commit changes
+
+## Codebase Structure
+
+```
+ping-monitoring/
+  dashboard/
+    app/                    # Vue 3 pages, components, composables
+      pages/
+        index.vue           # Dashboard home page
+        settings.vue        # Settings page
+      components/           # Layout, Sidebar, Chart, Metrics, Modals
+      composables/          # useMonitors, useWebSocket, useChart
+    server/
+      api/                  # Nitro API routes (health, ping, monitors, clients)
+      ws/                   # WebSocket endpoints (ws/ping)
+      middleware/           # Rate limiting middleware
+      utils/                # Business logic (ping-validation, ping-ingest, etc.)
+    tests/
+      e2e/                  # Playwright E2E test files (.spec.ts)
+    playwright.config.ts    # Playwright configuration
+    nuxt.config.ts          # Nuxt 4 configuration
+```
 
 ## Variables
 
@@ -52,11 +83,13 @@ Write deterministic Playwright E2E tests for all acceptance criteria with the LN
 
 ## Workflow
 
-**Step 1: Install Skills**
+### Step 1: Install Skills
 
 Check and install each skill if needed.
 
-**Step 2: Check & Configure Playwright Infrastructure**
+**Gate:** All required skills installed and confirmed before proceeding.
+
+### Step 2: Check & Configure Playwright Infrastructure
 
 **IF Playwright test infrastructure does not exist in the dashboard directory:**
 1. Install Playwright test runner (`@playwright/test`)
@@ -66,7 +99,9 @@ Check and install each skill if needed.
 
 **IF Playwright infrastructure exists**, verify it runs.
 
-**Step 3: Write E2E Tests**
+**Gate:** Playwright infrastructure verified (existing or newly configured) before proceeding.
+
+### Step 3: Write E2E Tests
 
 For each acceptance criterion with frontend UI:
 - Create or extend a `.spec.ts` file in `dashboard/tests/e2e/`
@@ -83,30 +118,35 @@ E2E test scenarios:
 - **API health test** — verify `/api/health` returns 200 with expected shape
 - **WebSocket connection test** — verify WS connection is established at `/ws/ping`
 
-**Step 4: Run Tests**
+### Step 4: Run Tests
 
 Run E2E tests. Run twice to confirm determinism. Fix flakes.
 
-**Step 5: Regression Check**
+**Gate:** All E2E tests pass twice (deterministic) before proceeding.
+
+### Step 5: Regression Check
 
 Run all tests from Agent 10 — confirm they still pass.
 
-## Output
+**Gate:** Agent 10 regression tests still pass.
+
+## Report
+
+Provide a concise report covering E2E test results:
 
 ```
-E2E Tests
+E2E Tests — LNPM Cloud Dashboard
   Playwright infrastructure: [existing / configured]
-  Test files: [list with paths]
-  Tests: [N]
+  Test files created or updated: [list with paths]
+  Total tests: [N]
   Pass: [N]
   Fail: [N]
-  Deterministic: [yes — ran twice]
-  Regression: [Agent 10 tests still pass]
+  Deterministic: [yes — ran twice with same results]
+  Regression: [Agent 10 tests still pass / Agent 10 tests failed — details]
+  Status: [Complete | Partial | Blocked]
   Next agent: Agent 12 (Update AI Memory)
 ```
 
-## Gate
-
-- [ ] Playwright infrastructure configured (or verified existing)
-- [ ] All E2E tests pass twice (deterministic)
-- [ ] Agent 10 tests still pass (regression)
+- **Complete:** All E2E tests pass twice, regression passes.
+- **Partial:** Some tests pass, others blocked by infrastructure or runtime issues.
+- **Blocked:** Cannot run tests (e.g., dashboard not running, Playwright install failed).

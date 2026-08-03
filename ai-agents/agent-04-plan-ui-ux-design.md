@@ -1,5 +1,7 @@
 ---
 title: LNPM - Agent 04 - Plan UI/UX Design
+description: Plan UI/UX design by invoking design skills, analyzing current design, and producing a UI implementation plan
+version: 2.0
 ---
 
 # Plan UI/UX Design
@@ -7,6 +9,14 @@ title: LNPM - Agent 04 - Plan UI/UX Design
 ## Purpose
 
 MANDATORY — DO NOT SKIP. Plan the UI/UX design before writing any UI code for the LNPM Cloud Dashboard. Install and invoke all design skills. This agent is a PLANNING step — it produces a UI/UX plan that Agent 05 consumes when creating the implementation plan.
+
+## Instructions
+
+- This agent is a **planning-only** step — no writes to project source files, no implementation code, no CSS or styling code.
+- Invoke ALL design skills listed in the Skills section. Do not skip any.
+- Write down key design decisions inline — component hierarchy, state management approach, styling strategy. This survives context compaction.
+- IF any skill fails to install or invoke, note the failure and proceed — do not block.
+- Use the `filesystem` MCP server to read existing UI files, NOT Bash.
 
 ## Scope Boundaries
 
@@ -27,6 +37,24 @@ MANDATORY — DO NOT SKIP. Plan the UI/UX design before writing any UI code for 
 
 - **`{{SKILLS_REGISTRY}}`** _(static)_ — `https://skills.sh/`
 - **`{{PROJECT_ROOT}}`** _(static)_ — `/Users/pk/Projects/ping-monitoring`
+
+## Codebase Structure
+
+```
+ping-monitoring/
+├── src/                        # Desktop app (Tauri) — design reference
+│   ├── styles.css             # CSS custom properties, design tokens, colors
+│   ├── main.ts                # UI structure, layout patterns
+│   └── chart.ts               # uPlot chart patterns
+├── docs/                       # Design specs
+│   └── assets/                # Visual references (screenshots)
+└── dashboard/                  # Nuxt 4 + Vue 3 application
+    ├── app/
+    │   ├── components/        # Vue components to create
+    │   ├── composables/       # Shared composition functions
+    │   └── pages/             # File-based routing pages
+    └── server/                # API routes (backend)
+```
 
 ## MCP Servers
 
@@ -52,11 +80,13 @@ MANDATORY — DO NOT SKIP. Plan the UI/UX design before writing any UI code for 
 
 ## Workflow
 
-**Step 1: Install & Invoke Design Skills**
+### Step 1: Install & Invoke Design Skills
 
 For each skill: check if installed, install if needed, invoke and capture findings.
 
-**Step 2: Analyze Current Design**
+**Gate:** ALL design skills must be invoked before proceeding. IF a skill fails, note the failure and proceed.
+
+### Step 2: Analyze Current Design
 
 Analyze the LNPM desktop app's existing design:
 - Read `src/styles.css` — CSS custom properties, design tokens, color palette
@@ -65,11 +95,11 @@ Analyze the LNPM desktop app's existing design:
 - The desktop app uses vanilla CSS with custom properties (no CSS framework)
 - Identify existing components that can be conceptually reused in the Vue 3 dashboard
 
-**Step 3: Capture Current UI State**
+### Step 3: Capture Current UI State
 
 **Invoke `playwright` MCP server** (optional): Take a screenshot of the current UI state for reference.
 
-**Step 4: Plan UI Implementation**
+### Step 4: Plan UI Implementation
 
 Plan the Nuxt 4 + Vue 3 dashboard UI:
 - **Component hierarchy:** Layout shell → Sidebar (client groups, monitor list) → Dashboard panel (chart, metrics) → Modals (settings, target dialog)
@@ -80,7 +110,11 @@ Plan the Nuxt 4 + Vue 3 dashboard UI:
 - **Responsive design:** Desktop-first (monitoring tool), but functional on tablets
 - **i18n:** Mirror 5-locales approach (en, ko, ja, zh-CN, zh-TW) using Nuxt's i18n module or lightweight alternative
 
-## Output
+**Gate:** The UI implementation plan must cover all items above before proceeding. IF any item is missing, note it in the report.
+
+## Report
+
+After completing the workflow, output this summary:
 
 ```
 UI/UX Plan
@@ -94,12 +128,6 @@ UI/UX Plan
   Responsive design: [desktop-first approach]
   i18n: [5-locales strategy]
   Current UI state: [screenshot reference or description]
+  Status: Complete | Partial | Blocked
   Next agent: Agent 05 (Create Implementation Plan)
 ```
-
-## Gate
-
-- [ ] All design skills installed and invoked
-- [ ] Current design analyzed
-- [ ] Reusable components identified
-- [ ] UI implementation plan documented
