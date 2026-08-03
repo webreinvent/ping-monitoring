@@ -6,7 +6,6 @@ import type {
   ClientIdentity,
   PingSample,
   Monitor,
-  WsMessage,
   HealthResponse,
   HealthErrorResponse,
   MonitorListItem,
@@ -82,18 +81,6 @@ export function createMonitor(
   };
 }
 
-/** Create a valid WsMessage with optional overrides. */
-export function createWsMessage(
-  overrides: Partial<WsMessage> = {},
-): WsMessage {
-  return {
-    type: "ping_update",
-    data: {},
-    timestamp: "2025-01-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
 /** Create a valid IngestPayload with optional overrides. */
 export function createIngestPayload(
   overrides: Partial<IngestPayload> = {},
@@ -159,7 +146,8 @@ export function createMonitorListItem(
     targetName: "Google DNS",
     status: "up",
     latencyMs: 42,
-    qualityState: "unknown",
+    qualityState: "warmingUp",
+    qualityStateUpdatedAtMs: null,
     lastSeenMs: Date.now(),
     createdAt: "2025-01-01T00:00:00.000Z",
     ...overrides,
@@ -254,6 +242,8 @@ export function createTarget(
     host: "8.8.8.8",
     enabled: true,
     addressFamily: "ipv4",
+    qualityState: "warmingUp",
+    qualityStateUpdatedAtMs: null,
     intervalMs: 1000,
     timeoutMs: 5000,
     thresholds: {

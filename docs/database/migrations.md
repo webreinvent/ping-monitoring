@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 | `003_create_ping_samples.sql` | Raw ping data | `ping_samples` |
 | `004_create_minute_rollups.sql` | Aggregated stats | `minute_rollups` |
 | `005_create_indexes.sql` | Query indexes | (9 indexes) |
+| `006_add_quality_state_updated_at.sql` | F12 quality classifier — adds `quality_state_updated_at` + migrates legacy states | `monitors` |
 
 ## Checking Applied Migrations
 

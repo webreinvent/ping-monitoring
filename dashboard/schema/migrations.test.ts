@@ -40,7 +40,7 @@ function extractCreateIndexNames(sql: string): string[] {
 }
 
 describe("migration files", () => {
-  test("all 5 migration files exist", () => {
+  test("all 6 migration files exist", () => {
     const files = readdirSync(migrationsDir).filter(
       (f) => f.endsWith(".sql") && !f.startsWith("index"),
     );
@@ -51,6 +51,7 @@ describe("migration files", () => {
       "003_create_ping_samples.sql",
       "004_create_minute_rollups.sql",
       "005_create_indexes.sql",
+      "006_add_quality_state_updated_at.sql",
     ];
 
     expect(files.length).toBe(expected.length);
@@ -79,6 +80,7 @@ describe("migration files", () => {
     expect(files[2]).toBe("003_create_ping_samples.sql");
     expect(files[3]).toBe("004_create_minute_rollups.sql");
     expect(files[4]).toBe("005_create_indexes.sql");
+    expect(files[5]).toBe("006_add_quality_state_updated_at.sql");
   });
 });
 

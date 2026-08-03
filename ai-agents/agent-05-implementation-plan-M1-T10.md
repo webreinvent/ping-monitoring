@@ -16,7 +16,7 @@
 **Dependencies:** M1-T6 (ingest), M1-T8 (history), M1-T9 (WebSocket) — all satisfied
 **Risks:** 7 identified with mitigation strategies
 **Complexity:** Medium
-**Plan saved to memory:** yes
+**Plan saved to memory:** yes (see Step 10)
 **Next agent:** Agent 06 (Audit & Present Plan)
 
 ---

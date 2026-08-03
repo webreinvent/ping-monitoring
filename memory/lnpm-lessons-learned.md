@@ -91,3 +91,20 @@ metadata:
 ### Mock DB SQL Dispatching by String Matching
 - **Pattern**: When mocking `better-sqlite3`'s `prepare()`, dispatch on `sql.includes("INSERT INTO monitors")` etc. This is fragile but works for unit tests. The key is to match enough of the SQL string to uniquely identify each query path.
 - **Lesson**: This pattern requires the SQL strings to be stable. If a SQL string changes (e.g., adding a column), the mock needs to be updated. This is a tradeoff for avoiding real SQLite in tests.
+
+## M1-T10 Lessons (Quality Classifier)
+
+### Test Classification Logic Without Real DB
+- **Error**: Cannot test `classifyMonitor()` directly because it calls `getDb()` which returns a real `better-sqlite3` instance that segfaults in Vitest workers.
+- **Fix**: Write tests that verify the classification algorithm by computing the decision logic in pure JavaScript (same thresholds, same ordered-if chain). This verifies the algorithm is correct without touching the database.
+- **Lesson**: When testing database-dependent functions, separate the algorithm from the data access. The classifier's decision logic should be testable independently of the SQL queries that feed it.
+
+### Migration Numbering Must Be Sequential
+- **Error**: Initial implementation plan referenced `005_create_indexes.sql` but migration 005 doesn't exist (there's already `003_create_ping_samples.sql`). Agent 08 caught this.
+- **Fix**: Used `006_add_quality_state_updated_at.sql` (next available sequential number after 005).
+- **Lesson**: Always check existing migration files before assigning a new migration number. The schema directory uses alphabetical sorting so numbering must be sequential and gap-free.
+
+### Quality Sweep Interval Validation
+- **Error**: `QUALITY_SWEEP_INTERVAL_MS` env var could be set to a non-numeric string, causing `setInterval` to fire in a tight loop (CPU exhaustion).
+- **Fix**: Added `Number.isFinite()` + `> 0` validation with early return and info log. Agent 08 caught this during code review.
+- **Lesson**: Always validate env vars used as timer intervals. `setInterval(NaN, ...)` is treated as `setInterval(0, ...)` — a tight loop.

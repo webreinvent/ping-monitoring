@@ -162,15 +162,19 @@ This is the primary data source for the per-monitor detailed chart view in the w
 
 ### Quality States
 
+The F6 history endpoint computes quality intervals from aggregated data points using the F12 quality classifier. The `state` field in `QualityIntervalRecord` uses the F12 `QualityState` type:
+
 | State | Condition | Chart Color |
 |-------|-----------|-------------|
-| `warmingUp` | First 30s or fewer than 5 cumulative samples | Grey |
-| `low` | packetLoss < 1%, avgLatency < 50ms | Green |
-| `medium` | packetLoss < 5%, avgLatency < 100ms | Light green |
-| `high` | packetLoss < 10%, avgLatency < 200ms | Yellow |
-| `veryHigh` | packetLoss < 10%, avgLatency >= 200ms | Orange |
-| `unstable` | packetLoss >= 10% | Red |
-| `disconnected` | Gap between points > 2× bucket size | Grey (no data) |
+| `warmingUp` | Insufficient samples for classification | Grey (`#9ca3af`) |
+| `disconnected` | No data in interval | Grey (`#6b7280`) |
+| `unstable` | High latency variance (CV > 0.5) with < 10% packet loss | Red (`#ef4444`) |
+| `veryHigh` | 0% packet loss, avg latency < 50ms | Green (`#22c55e`) |
+| `high` | 0% packet loss, avg latency < 150ms | Lime (`#84cc16`) |
+| `medium` | <= 10% packet loss, avg latency <= 300ms | Yellow (`#eab308`) |
+| `low` | High packet loss or high latency | Orange (`#f97316`) |
+
+The per-interval quality classification uses the aggregated metrics from `HistoryPoint` objects. See [Quality Classifier](../utils/quality-classifier.md) for the F12 algorithm details.
 
 ### Quality Reasons
 
@@ -178,7 +182,8 @@ This is the primary data source for the per-monitor detailed chart view in the w
 |--------|---------------|
 | `packetLoss` | packetLoss >= 10% |
 | `highLatency` | averageLatencyMs >= 200ms |
-| `insufficientSamples` | sample count < 5 (warming up) |
+| `highJitter` | High coefficient of variation (CV > 0.5) |
+| `insufficientSamples` | sample count < 10 (warming up) |
 
 ### Error: Monitor Not Found (404)
 
@@ -332,8 +337,10 @@ console.log(`Stability: ${stablePercent.toFixed(1)}%, Packet loss: ${packetLossP
 ## Related
 
 - [History Utility](../utils/history.md) — `calculateBucketSize()`, `getMonitorHistoryPoints()`, `computeQualityIntervals()`, `computeRangeSummary()`, `buildTarget()`
-- [Shared Types](../shared/types.md) — `HistoryResponse`, `HistorySeries`, `HistoryPoint`, `QualityIntervalRecord`, `RangeSummary`, `Target`
+- [Quality Classifier](../utils/quality-classifier.md) — F12 classification algorithm used for quality intervals
+- [Shared Types](../shared/types.md) — `HistoryResponse`, `HistorySeries`, `HistoryPoint`, `QualityIntervalRecord`, `RangeSummary`, `Target`, `QualityState`
 - [Monitors List API](monitors.md) — `GET /api/monitors` (lists monitors; this endpoint provides detail)
 - [Ping Ingest API](ping-ingest.md) — `POST /api/ping/ingest` (populates the data this endpoint reads)
 - [Database Schema](../database/schema.md) — `ping_samples` table, `monitors` table
 - [Feature F6 Specification](../../requirements/features/feature-0006-monitor-history.md) — Original requirements
+- [Feature F12 Specification](../../requirements/features/feature-00012-quality-classifier.md) — Quality classifier

@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import { getClientBySlug, upsertClient } from "./client";
 import { info, error as logError } from "./logger";
+import { classifyMonitorsBatch } from "./quality-classifier";
 import type { Database } from "better-sqlite3";
 
 import type {
@@ -256,6 +257,23 @@ export function ingestPingBatch(
       accepted = result.accepted;
       duplicate = result.duplicate;
       acceptedSamples.push(...result.acceptedSamples);
+
+      // Phase 4: Post-ingest classification (after transaction commits)
+      if (result.monitorIds.size > 0) {
+        try {
+          const monitorIds = Array.from(result.monitorIds);
+          classifyMonitorsBatch(monitorIds);
+        } catch (classificationErr) {
+          // Classification failure should NOT fail the ingest
+          logError("Post-ingest classification failed", {
+            error:
+              classificationErr instanceof Error
+                ? classificationErr.message
+                : String(classificationErr),
+            monitorCount: result.monitorIds.size,
+          });
+        }
+      }
 
       info(
         `Ingested batch for client ${clientSlug}`,

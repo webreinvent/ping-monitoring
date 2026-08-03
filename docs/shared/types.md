@@ -70,13 +70,47 @@ interface Monitor {
 
 ---
 
-### QualityClass
+### QualityState (F12)
 
 ```typescript
-type QualityClass = "good" | "fair" | "poor" | "critical";
+type QualityState =
+  | "veryHigh"
+  | "high"
+  | "medium"
+  | "low"
+  | "unstable"
+  | "disconnected"
+  | "warmingUp";
 ```
 
-**Used by:** Quality classification, visual indicators.
+**Used by:** `MonitorListItem`, `WsMonitorState`, `Target`, `QualityIntervalRecord`, quality classifier logic.
+
+Seven quality states computed by the F12 backend quality classifier. See [Quality Classifier](./utils/quality-classifier.md) for the algorithm and [Quality States Constants](./utils/quality-states.md) for threshold values.
+
+| State | Condition | Color |
+|-------|-----------|-------|
+| `warmingUp` | Fewer than 10 samples in 5-min window, or no recent data | Gray (`#9ca3af`) |
+| `disconnected` | No samples in 5-min window AND last sample > 5 min ago | Gray (`#6b7280`) |
+| `unstable` | CV > 0.5 AND packet_loss < 10% | Red (`#ef4444`) |
+| `veryHigh` | packet_loss == 0% AND avg_latency < 50ms | Green (`#22c55e`) |
+| `high` | packet_loss == 0% AND avg_latency < 150ms | Lime (`#84cc16`) |
+| `medium` | packet_loss <= 10% AND avg_latency <= 300ms | Yellow (`#eab308`) |
+| `low` | Everything else | Orange (`#f97316`) |
+
+### ClassifyResult (F12)
+
+```typescript
+interface ClassifyResult {
+  qualityState: QualityState;
+  qualityStateUpdatedAtMs: number;
+  sampleCount: number;
+  packetLoss: number;
+  avgLatency: number;
+  cv: number;
+}
+```
+
+**Used by:** `classifyMonitor()` return type, [Quality Classifier](./utils/quality-classifier.md).
 
 ---
 
@@ -157,7 +191,7 @@ interface WsMonitorState {
   targetName: string;
   status: "up" | "down" | null;
   latencyMs: number | null;
-  qualityState: "good" | "degraded" | "poor" | "unknown";
+  qualityState: QualityState;
   lastSeenMs: number | null;
 }
 ```
@@ -173,7 +207,7 @@ Monitor state included in the `snapshot` message. Represents the monitor's curre
 | `targetName` | `string` | Human-readable target name (falls back to `targetHost`) |
 | `status` | `"up" \| "down" \| null` | Current status (`null` = no samples) |
 | `latencyMs` | `number \| null` | Latest latency in ms |
-| `qualityState` | `"good" \| "degraded" \| "poor" \| "unknown"` | Quality classification |
+| `qualityState` | `QualityState` | F12 quality classification (see [QualityState](#qualitystate-f12)) |
 | `lastSeenMs` | `number \| null` | Epoch ms of latest sample |
 
 ---
@@ -227,8 +261,9 @@ interface MonitorListItem {
   targetName: string;            // Human-readable target label (falls back to targetHost)
   status: "up" | "down" | null; // Latest ping status (null = no samples yet)
   latencyMs: number | null;     // Latest latency in ms (null = no samples)
-  qualityState: "good" | "degraded" | "poor" | "unknown";
+  qualityState: QualityState;    // F12 quality classification
   lastSeenMs: number | null;    // Epoch ms of latest sample (null = no samples)
+  qualityStateUpdatedAtMs: number | null;  // F12: Epoch ms of last classification
   createdAt: string;            // ISO 8601 creation timestamp
 }
 ```
@@ -244,8 +279,9 @@ interface MonitorListItem {
 | `targetName` | `string` | Human-readable target label; falls back to `targetHost` if `target_name` is null in DB |
 | `status` | `"up" \| "down" \| null` | `"up"` = success, `"down"` = timeout/error, `null` = no samples yet |
 | `latencyMs` | `number \| null` | Latency of the most recent sample in ms |
-| `qualityState` | `"good" \| "degraded" \| "poor" \| "unknown"` | Computed quality state; `"unknown"` for monitors still warming up |
+| `qualityState` | `QualityState` | F12 computed quality state (see [QualityState](#qualitystate-f12)) |
 | `lastSeenMs` | `number \| null` | Epoch milliseconds of the most recent sample |
+| `qualityStateUpdatedAtMs` | `number \| null` | F12: Epoch ms when quality state was last computed; `null` if never classified |
 | `createdAt` | `string` | ISO 8601 timestamp when the monitor was created |
 
 ### MonitorsListResponse
@@ -266,6 +302,8 @@ The following types are used by the `GET /api/monitors/:id` endpoint (F6 — Mon
 
 #### QualityState
 
+> **Note:** The `QualityState` type is defined once in this file (see [QualityState (F12)](#qualitystate-f12)) and re-used by both F6 and F12. This section documents its usage in the F6 history context.
+
 ```typescript
 type QualityState =
   | "warmingUp"
@@ -277,7 +315,7 @@ type QualityState =
   | "disconnected";
 ```
 
-**Used by:** `QualityIntervalRecord`, quality classification logic.
+**Used by:** `QualityIntervalRecord`, quality classification logic, `Target` metadata.
 
 #### QualityReason
 
@@ -353,6 +391,8 @@ interface Target {
   addressFamily: "ipv4" | "ipv6";      // Address family
   intervalMs: number;                  // Ping interval in ms
   timeoutMs: number;                   // Ping timeout in ms
+  qualityState: QualityState;          // F12: Current quality state from classifier
+  qualityStateUpdatedAtMs: number | null;  // F12: Epoch ms of last classification
   thresholds: {                         // Quality threshold configuration
     windowSeconds: number;
     minimumSamples: number;

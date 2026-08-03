@@ -231,7 +231,9 @@ Validation is **accumulative** — a single sample can have multiple rejection r
    b. Insert valid samples (INSERT OR IGNORE for dedup)
    c. Update monitor latest state
    d. Update client last_synced_at_ms
-7. Return result with HTTP status code
+7. Post-ingest: classifyMonitorsBatch() for each affected monitor (F12)
+8. WebSocket broadcast for accepted samples (F7)
+9. Return result with HTTP status code
 ```
 
 ## Configuration
@@ -247,7 +249,7 @@ Validation is **accumulative** — a single sample can have multiple rejection r
 - Transaction is a single `db.transaction()` call — atomic with rollback on any error
 - `INSERT OR IGNORE` uses the unique index on `(monitor_id, timestamp_ms, resolved_address)`
 - WebSocket broadcast (F7) is fire-and-forget and does not block the response
-- Quality classifier is not yet invoked (planned for F12)
+- Quality classifier (F12) runs post-ingest — after the transaction commits, `classifyMonitorsBatch()` is called for each affected monitor
 
 ## WebSocket Broadcast Integration (F7)
 
@@ -331,6 +333,8 @@ curl -s -X POST http://localhost:3000/api/ping/ingest \
 
 - [Ping Validation Utility](../utils/ping-validation.md) — Sample-level validation rules
 - [Ping Ingest Engine](../utils/ping-ingest.md) — Core ingest pipeline (transaction, dedup, monitor auto-create)
+- [Quality Classifier](../utils/quality-classifier.md) — Post-ingest classification via `classifyMonitorsBatch()`
+- [Quality Sweep Plugin](../utils/quality-sweep.md) — Background re-evaluation timer
 - [Shared Types](../shared/types.md) — `IngestPayload`, `PingSampleIngest`, `IngestResponse`, `Rejection`
 - [Database Schema](../database/schema.md) — `ping_samples` table, unique constraint, indexes
 - [Client Utilities](../utils/client.md) — `getClientBySlug()`, `upsertClient()`, `generateSlug()`
@@ -339,3 +343,4 @@ curl -s -X POST http://localhost:3000/api/ping/ingest \
 - [Feature F3 Specification](../../requirements/features/feature-0003-ping-ingest.md) — Original requirements
 - [Feature F4 Specification](../../requirements/features/feature-0004-client-sync.md) — Client auto-registration
 - [Feature F7 Specification](../../requirements/features/feature-0007-websocket-broadcast.md) — WebSocket live broadcast
+- [Feature F12 Specification](../../requirements/features/feature-00012-quality-classifier.md) — Quality classifier

@@ -4,7 +4,6 @@ import {
   createPingSamples,
   createClientIdentity,
   createMonitor,
-  createWsMessage,
   createIngestPayload,
   createIngestResponse,
   createHealthResponse,
@@ -141,28 +140,6 @@ describe("test fixtures", () => {
       const monitor = createMonitor({ status: "degraded" });
 
       expect(monitor.status).toBe("degraded");
-    });
-  });
-
-  describe("createWsMessage", () => {
-    test("creates a valid WsMessage with defaults", () => {
-      const msg = createWsMessage();
-
-      expect(msg.type).toBe("ping_update");
-      expect(msg.data).toEqual({});
-      expect(msg.timestamp).toBe("2025-01-01T00:00:00.000Z");
-    });
-
-    test("allows type override", () => {
-      const msg = createWsMessage({ type: "monitor_status" });
-
-      expect(msg.type).toBe("monitor_status");
-    });
-
-    test("allows data override", () => {
-      const msg = createWsMessage({ data: { rtt: 50 } });
-
-      expect(msg.data).toEqual({ rtt: 50 });
     });
   });
 

@@ -1,5 +1,6 @@
 import { getDb } from "./db";
-import type { MonitorListItem } from "../../shared/types";
+import { mapQualityState } from "./quality-states";
+import type { MonitorListItem } from "#shared/types";
 
 /**
  * Fetch all monitors with their latest state, joined with client info.
@@ -39,6 +40,7 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
       ls.latency_ms AS last_latency_ms,
       ls.timestamp_ms AS last_seen_ms,
       m.quality_state,
+      m.quality_state_updated_at,
       m.created_at
     FROM monitors m
     INNER JOIN clients c ON m.client_id = c.id
@@ -57,6 +59,7 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
       last_latency_ms: number | null;
       last_seen_ms: number | null;
       quality_state: string;
+      quality_state_updated_at: number | null;
       created_at: number;
     }>;
 
@@ -70,6 +73,7 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
     latencyMs: row.last_latency_ms,
     qualityState: mapQualityState(row.quality_state),
     lastSeenMs: row.last_seen_ms,
+    qualityStateUpdatedAtMs: row.quality_state_updated_at ?? null,
     createdAt: new Date(row.created_at).toISOString(),
   }));
 }
@@ -87,21 +91,3 @@ function mapSampleStatus(status: string | null): "up" | "down" | null {
   return null;
 }
 
-/**
- * Map monitor quality_state to API contract qualityState.
- *
- * "warmingUp" → "unknown"
- * "good" | "degraded" | "poor" → as-is
- */
-function mapQualityState(
-  qualityState: string,
-): "good" | "degraded" | "poor" | "unknown" {
-  if (
-    qualityState === "good" ||
-    qualityState === "degraded" ||
-    qualityState === "poor"
-  ) {
-    return qualityState;
-  }
-  return "unknown";
-}

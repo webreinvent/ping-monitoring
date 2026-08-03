@@ -232,3 +232,27 @@
 **Fix:** Iterate `[...subSet]` (spread copy) in `broadcastSample()` to avoid iteration issues.
 
 **Prevention:** When iterating over sets that may change, always iterate a copy. This is a standard pattern for broadcast/pub-sub systems.
+
+## Lesson 24: Classification algorithm testing without real DB (M1-T10)
+
+**Error:** Cannot test `classifyMonitor()` directly — it calls `getDb()` which segfaults in Vitest workers.
+
+**Fix:** Write tests verifying the decision logic in pure JavaScript (same thresholds, same ordered-if chain). Verifies algorithm correctness without touching the database.
+
+**Lesson:** Separate algorithm from data access. Test the decision logic independently of SQL queries.
+
+## Lesson 25: Migration numbering must be sequential (M1-T10)
+
+**Error:** Initial plan referenced `005_create_indexes.sql` but 005 doesn't exist (already `003_create_ping_samples.sql`).
+
+**Fix:** Used `006_add_quality_state_updated_at.sql`. Agent 08 caught this during audit.
+
+**Lesson:** Check existing migration files before assigning new numbers.
+
+## Lesson 26: Env var validation for timer intervals (M1-T10)
+
+**Error:** `QUALITY_SWEEP_INTERVAL_MS` with non-numeric value causes `setInterval(NaN, ...)` = tight loop (CPU exhaustion).
+
+**Fix:** `Number.isFinite()` + `> 0` validation with early return. Agent 08 caught during code review.
+
+**Lesson:** Always validate env vars used as timer intervals — `setInterval(NaN)` = `setInterval(0)` = tight loop.

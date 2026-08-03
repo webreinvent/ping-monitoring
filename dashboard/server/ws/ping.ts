@@ -1,6 +1,8 @@
 import { getDb } from "../utils/db";
 import { info, warn } from "../utils/logger";
+import { mapQualityState } from "../utils/quality-states";
 import type { WebSocket as WebSocketType } from "ws";
+import type { QualityState } from "#shared/types";
 
 // ============================================================================
 // Constants
@@ -47,7 +49,7 @@ interface SnapshotMessage {
       targetName: string;
       status: "up" | "down" | null;
       latencyMs: number | null;
-      qualityState: "good" | "degraded" | "poor" | "unknown";
+      qualityState: QualityState;
       lastSeenMs: number | null;
     };
     samples: {
@@ -62,6 +64,7 @@ interface SnapshotMessage {
 interface SampleMessage {
   type: "sample";
   monitorId: number;
+  qualityState: QualityState;
   data: {
     timestampMs: number;
     latencyMs: number | null;
@@ -188,18 +191,6 @@ function mapMonitorStatus(status: string | null): "up" | "down" | null {
   return null;
 }
 
-/**
- * Map quality_state from DB to API contract.
- */
-function mapQualityState(
-  state: string,
-): "good" | "degraded" | "poor" | "unknown" {
-  if (state === "good" || state === "degraded" || state === "poor") {
-    return state;
-  }
-  return "unknown";
-}
-
 // ============================================================================
 // Broadcast: send samples to all subscribers of a monitor
 // ============================================================================
@@ -209,9 +200,11 @@ function mapQualityState(
  * Called from the ingest endpoint after a successful insert.
  *
  * This function is exported so the ingest endpoint can call it.
+ * F12: Includes quality state in the broadcast message.
  *
  * @param monitorId - The monitor ID to broadcast to
  * @param sample - The sample data to broadcast
+ * @param qualityState - The current quality state of the monitor (F12)
  */
 export function broadcastSample(
   monitorId: number,
@@ -221,6 +214,7 @@ export function broadcastSample(
     status: "success" | "timeout" | "error";
     resolvedAddress: string | null;
   },
+  qualityState?: QualityState,
 ): void {
   const subSet = subscriptions.get(monitorId);
   if (!subSet || subSet.size === 0) {
@@ -230,6 +224,7 @@ export function broadcastSample(
   const message: SampleMessage = {
     type: "sample",
     monitorId,
+    qualityState: qualityState ?? "warmingUp",
     data: sample,
   };
   const payload = JSON.stringify(message);
@@ -394,7 +389,7 @@ function handleSubscribe(
         targetName: monitorState?.target_name ?? monitorState?.target_host ?? "",
         status: monitorState ? mapMonitorStatus(monitorState.last_status) : null,
         latencyMs: monitorState?.last_latency_ms ?? null,
-        qualityState: monitorState ? mapQualityState(monitorState.quality_state) : "unknown",
+        qualityState: monitorState ? mapQualityState(monitorState.quality_state) : "warmingUp",
         lastSeenMs: monitorState?.last_seen_ms ?? null,
       },
       samples: rawSamples.map((s) => ({

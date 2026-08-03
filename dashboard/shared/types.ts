@@ -74,27 +74,28 @@ export interface Monitor {
 }
 
 /**
- * Quality classification for a ping sample.
+ * F12: Quality state classification for a monitor.
+ * Six discrete states + warmingUp for monitors with insufficient data.
  */
-export type QualityClass = "good" | "fair" | "poor" | "critical";
+export type QualityState =
+  | "veryHigh"
+  | "high"
+  | "medium"
+  | "low"
+  | "unstable"
+  | "disconnected"
+  | "warmingUp";
 
 /**
- * WebSocket message types.
- * Legacy types retained for backward compatibility.
+ * F12: Result of a classification run for a single monitor.
  */
-export type WsMessageType =
-  | "ping_update"
-  | "monitor_status"
-  | "client_online"
-  | "client_offline";
-
-/**
- * WebSocket message payload.
- */
-export interface WsMessage {
-  type: WsMessageType;
-  data: Record<string, unknown>;
-  timestamp: string;
+export interface ClassifyResult {
+  qualityState: QualityState;
+  qualityStateUpdatedAtMs: number;
+  sampleCount: number;
+  packetLoss: number;
+  avgLatency: number;
+  cv: number;
 }
 
 // ============================================================================
@@ -147,8 +148,8 @@ export interface WsMonitorState {
   /** Latest latency */
   latencyMs: number | null;
 
-  /** Quality classification */
-  qualityState: "good" | "degraded" | "poor" | "unknown";
+  /** F12: Quality classification */
+  qualityState: QualityState;
 
   /** Epoch ms of latest ping, or null */
   lastSeenMs: number | null;
@@ -205,11 +206,14 @@ export interface MonitorListItem {
   /** Latest latency in milliseconds, or null if no samples */
   latencyMs: number | null;
 
-  /** Quality classification from monitor row */
-  qualityState: "good" | "degraded" | "poor" | "unknown";
+  /** F12: Quality classification from monitor row */
+  qualityState: QualityState;
 
   /** Timestamp in epoch ms of the latest ping sample, or null */
   lastSeenMs: number | null;
+
+  /** F12: Timestamp in epoch ms when quality_state was last updated, or null */
+  qualityStateUpdatedAtMs: number | null;
 
   /** ISO 8601 creation timestamp */
   createdAt: string;
@@ -227,17 +231,11 @@ export interface MonitorsListResponse {
 // ============================================================================
 
 /**
- * Quality state classification for a time interval.
- * Matches the F6 quality classifier thresholds.
+ * Quality state classification for a time interval (F6).
+ * Re-uses the F12 QualityState type defined above.
+ * @see QualityState
  */
-export type QualityState =
-  | "warmingUp"
-  | "low"
-  | "medium"
-  | "high"
-  | "veryHigh"
-  | "unstable"
-  | "disconnected";
+// QualityState is already defined above — no need to redefine.
 
 /**
  * Reason for a quality state classification.
@@ -335,6 +333,10 @@ export interface Target {
   intervalMs: number;
   /** Ping timeout in milliseconds */
   timeoutMs: number;
+  /** F12: Current quality state from the classifier */
+  qualityState: QualityState;
+  /** F12: Epoch ms when quality state was last updated, or null */
+  qualityStateUpdatedAtMs: number | null;
   /** Quality thresholds (used by frontend for display) */
   thresholds: {
     windowSeconds: number;

@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { mapQualityState } from "./quality-states";
 import type {
   HistoryPoint,
   QualityIntervalRecord,
@@ -65,6 +66,7 @@ export interface MonitorRow {
   target_host: string;
   target_name: string | null;
   quality_state: string;
+  quality_state_updated_at: number | null;
   state_since_ms: number | null;
   last_seen_ms: number | null;
   last_status: string | null;
@@ -275,6 +277,14 @@ export function computeQualityIntervals(
 
 /**
  * Classify a single point's quality state.
+ * Uses the F12 quality state semantics consistently with quality-classifier.ts:
+ * - veryHigh = best quality (0% loss, low latency)
+ * - low = worst acceptable quality
+ * - unstable = high variance or high packet loss
+ *
+ * Note: This classification is for historical chart intervals and uses
+ * slightly different thresholds than the real-time classifier because
+ * it operates on per-bucket aggregates rather than a sliding window.
  */
 function classifyPoint(
   point: HistoryPoint,
@@ -296,29 +306,29 @@ function classifyPoint(
     return "unstable";
   }
 
-  // unstable: packetLoss >= 10%
+  // Unstable: packetLoss >= 10%
   if (packetLossPercent >= 10) {
     return "unstable";
   }
 
-  // low: packetLoss < 1%, avgLatency < 50ms
+  // veryHigh: packetLoss < 1%, avgLatency < 50ms (best quality)
   if (packetLossPercent < 1 && avgLatency < 50) {
-    return "low";
+    return "veryHigh";
   }
 
-  // medium: packetLoss < 5%, avgLatency < 100ms
+  // high: packetLoss < 5%, avgLatency < 100ms
   if (packetLossPercent < 5 && avgLatency < 100) {
-    return "medium";
-  }
-
-  // high: packetLoss < 10%, avgLatency < 200ms
-  if (packetLossPercent < 10 && avgLatency < 200) {
     return "high";
   }
 
-  // veryHigh: packetLoss < 10%, avgLatency >= 200ms
+  // medium: packetLoss < 10%, avgLatency < 200ms
+  if (packetLossPercent < 10 && avgLatency < 200) {
+    return "medium";
+  }
+
+  // low: packetLoss < 10%, avgLatency >= 200ms (worst acceptable)
   if (packetLossPercent < 10) {
-    return "veryHigh";
+    return "low";
   }
 
   // Fallback
@@ -529,12 +539,17 @@ export function buildTarget(
   const addressFamily: "ipv4" | "ipv6" =
     monitorRow.target_host.includes(":") ? "ipv6" : "ipv4";
 
+  // F12: Map quality_state to QualityState type
+  const qualityState = mapQualityState(monitorRow.quality_state);
+
   return {
     id: String(monitorRow.id),
     name: targetName,
     host: monitorRow.target_host,
     enabled: true,
     addressFamily,
+    qualityState,
+    qualityStateUpdatedAtMs: monitorRow.quality_state_updated_at,
     intervalMs: 1000,
     timeoutMs: 5000,
     thresholds: { ...DEFAULT_THRESHOLDS },

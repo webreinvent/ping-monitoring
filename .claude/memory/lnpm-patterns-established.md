@@ -265,3 +265,34 @@ ORDER BY bucket_ms ASC
 - `close` handler iterates all monitor subscription sets removing the disconnected WebSocket
 - `error` events are handled by the same cleanup path (Nitro emits close on error)
 - Prevents memory leaks from stale connections
+
+## Quality Classifier Patterns (M1-T10)
+
+### Quality State Constants Module
+- **File**: `server/utils/quality-states.ts`
+- **Pattern**: Dedicated constants module with all classification thresholds as named exports (`QUALITY_WINDOW_MS`, `QUALITY_MIN_SAMPLES`, etc.)
+- **mapQualityState()**: Safe string-to-typed converter with legacy fallback (`good`→`veryHigh`, `degraded`→`medium`, `poor`→`low`, unknown→`warmingUp`)
+- **QUALITY_COLORS**: Record mapping each QualityState to a Tailwind-compatible hex color
+
+### Classification Engine (First-Match-Wins)
+- **File**: `server/utils/quality-classifier.ts`
+- **Pattern**: Two-query approach: (1) aggregate window stats + current quality_state in one query, (2) last sample time for disconnected detection
+- **Metrics**: packet_loss, avg_latency, CV (coefficient of variation) computed inline using `variance = E[X²] - E[X]²`
+- **Decision chain**: disconnected → warmingUp → unstable → veryHigh → high → medium → low (ordered, first match wins)
+- **Persist**: Single UPDATE sets `quality_state`, `quality_state_updated_at`, `updated_at`
+
+### Batch Classification with Change Detection
+- **Pattern**: `ClassifyResultWithDiff` extends `ClassifyResult` with `previousState` and `stateChanged` boolean
+- Per-monitor try/catch in batch — one failure doesn't stop the batch
+- Returns `Map<monitorId, QualityState>` of only changed monitors
+- `info()` log for changes, `debug()` for unchanged
+
+### Background Sweep Plugin
+- **File**: `server/plugins/quality-sweep.ts`
+- **Pattern**: `defineNitroPlugin` with `setInterval` (default 60s), graceful shutdown via cleanup function
+- Queries for monitors with samples in last 10 min only (avoids classifying dead monitors)
+- Env var validation: `Number.isFinite()` + `> 0` guard on interval
+
+### Post-Ingest Classification
+- Runs AFTER transaction commits (outside `db.transaction()`) so classifier sees new data
+- Best-effort: classification failure is logged but never causes ingest to fail
