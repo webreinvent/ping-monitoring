@@ -805,81 +805,63 @@ The quality classifier analyzes raw ping samples in a 5-minute sliding window an
 | ADR-031 | Coefficient of Variation for Jitter | CV = stddev/mean normalizes across latency ranges; threshold 0.5 catches unstable connections regardless of average |
 | ADR-032 | Quality State Persisted on Monitor Row | Single UPDATE per classification; `quality_state_updated_at` proves liveness even when state doesn't change |
 
-*Last updated: 2026-08-03 (Agent 14 — M1-T10 quality classifier conventions appended)*
+*Last updated: 2026-08-03 (Agent 14 — M1-T12 rate limiting conventions appended)*
 
-## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T11)
+## LNPM Cloud Dashboard — New Conventions (2026-08-03, M1-T12)
 
-### Data Retention Cleanup (M1-T11 / F10)
+### Rate Limiting Middleware (M1-T12 / F13)
 
-The data retention cleanup task periodically purges old `ping_samples` and `minute_rollups` rows beyond configurable retention periods, preventing unbounded SQLite growth. Implemented as a Nitro plugin scheduling a background task with configurable interval.
+The rate limiting middleware protects all API endpoints from excessive requests using an in-memory sliding window with LRU eviction. Runs automatically via Nitro's file-based middleware in `server/middleware/`.
 
-#### Background Task Plugin Pattern
+#### Nitro Middleware Pattern
+- **File**: `server/middleware/rate-limit.ts`
+- **Pattern**: Files in `server/middleware/` automatically run before every server route handler — no registration needed
+- **Path filtering**: Only applies to `/api/` paths — skips static assets, WebSocket, and frontend routes
+- **IP resolution**: `getRequestIP(event, { xForwardedFor: true })` — proper IP behind reverse proxies (Nginx, Cloudflare)
+- **Graceful degradation**: If IP cannot be determined (no header, no socket), the request is allowed through (not blocked)
+- **Early return**: Returns a 429 response to short-circuit the request; returns nothing to let the request continue
 
-- **File**: `server/plugins/retention.ts`
-- **Structure**: Nitro plugin (`defineNitroPlugin`) with `setInterval` for recurring execution
-- **Lifecycle**:
-  1. Read config from env vars on boot
-  2. Log initialization info with config values
-  3. If `RETENTION_ENABLED=false`, return early with no-op cleanup
-  4. Run first cycle immediately on boot (don't wait for first interval)
-  5. Schedule recurring cycles via `setInterval(runCycle, intervalMs)`
-  6. Return cleanup function to clear interval on shutdown
-- **Error resilience**: Each cycle is wrapped in try/catch — a single failure logs an error and continues on the next cycle
-- **Pattern**: Background tasks follow the **plugin + utility** separation — business logic in `server/utils/`, Nitro plugin in `server/plugins/`. This matches the `quality-sweep.ts` pattern.
+#### Sliding Window Rate Limiter Utility
+- **File**: `server/utils/rate-limiter.ts`
+- **Pattern**: Pure functions (`checkRateLimit`, `getRateLimitConfig`) with no HTTP context — testable in isolation
+- **Data structure**: `Map<string, RateLimitEntry>` keyed by IP address
+- **RateLimitEntry**: `{ timestamps: number[], lastAccess: number }` — timestamps within the window + LRU access time
+- **Sliding window**: Filters out timestamps older than `now - windowMs` on each check — not a fixed window
+- **LRU eviction**: When map exceeds `MAX_ENTRIES` (10,000), evicts entries with `lastAccess > 2× window` to bound memory
+- **Env var config**: `RATE_LIMIT_WINDOW_MS` (default: 60000ms) and `RATE_LIMIT_MAX_REQUESTS` (default: varies by endpoint)
 
-#### Retention Config Interface and Lazy Env Reading
+#### Rate Limit Tiers
+- **Ingest endpoint** (`/api/ping/ingest`): 100 requests/minute — high-frequency ping data from LNPM clients
+- **All other API endpoints**: 60 requests/minute — dashboard UI calls, lower frequency
+- **`getRateLimitConfig(isIngest)`**: Selects appropriate limit based on URL path prefix
 
-- **File**: `server/utils/retention.ts` → `getRetentionConfig()`
-- **Interface**: `RetentionConfig { enabled: boolean, sampleDays: number, rollupDays: number, intervalMin: number, vacuumThreshold: number }`
-- **Lazy reading**: Env vars are read fresh each call (no caching) — config changes after server restart are picked up on the next cycle
-- **Boolean parsing**: `enabledRaw.toLowerCase() !== "false"` — truthy by default, handles both `"false"` and `"FALSE"`
-- **Number validation**: `Number.isFinite(value) && value > 0` with fallback to default — prevents `NaN`, `0`, and negative values
-- **Returns**: `RetentionCleanupResult { deletedSamples, deletedRollups, durationMs, vacuumed }`
+#### 429 Response Shape (F13 Spec)
+- **Body**: `{ error: "rate_limit_exceeded", retryAfter: N }` — machine-readable `error` string, not human-readable
+- **Header**: `Retry-After: N` (seconds) — standard RFC 6585 header
+- **Status**: 429 Too Many Requests
+- **Logging**: `warn()` with structured JSON (IP, path, retryAfter, limit) — signal-rich logs for observability
+- **No `code` field**: The F13 spec does not include a `code` field — only `error` and `retryAfter`
 
-#### Retention Env Variables
+#### Test Isolation
+- **`resetRateLimitState()`**: Exported function to clear the rate limit map between tests
+- **Pattern**: Call `resetRateLimitState()` in `beforeEach` — same as `delete globalThis.__db` for DB tests
+- **Mock dates**: Use `vi.useFakeTimers()` to control time in sliding window tests
+- **24 tests** across 2 files: `rate-limiter.test.ts` (utility) and `rate-limit.test.ts` (middleware)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RETENTION_ENABLED` | `true` | Enable/disable retention cleanup entirely |
-| `RETENTION_SAMPLE_DAYS` | `30` | Days to keep raw ping samples |
-| `RETENTION_ROLLUP_DAYS` | `90` | Days to keep minute rollups |
-| `RETENTION_INTERVAL_MIN` | `60` | Minutes between cleanup cycles |
-| `RETENTION_VACUUM_THRESHOLD` | `10000` | Min rows deleted before triggering VACUUM |
+#### Middleware Test Patterns
+- **Mock h3 event**: Construct minimal event objects with `path` and simulated `socket.remoteAddress`
+- **`getRequestIP` mock**: `vi.mock("h3", ...)` to control IP resolution
+- **Verify response shape**: Assert `{ error: "rate_limit_exceeded", retryAfter: N }` — not human-readable strings
+- **Verify headers**: Check `Retry-After` header is set correctly
+- **Path filtering**: Verify middleware skips non-`/api/` paths (returns early without rate limiting)
 
-#### Transactional Deletion with .changes Counting
-
-- **File**: `server/utils/retention.ts` → `runRetentionCleanup()`
-- **Single transaction**: `db.transaction()` wrapping both `DELETE FROM ping_samples` and `DELETE FROM minute_rollups` — atomic, all-or-nothing
-- **`.changes` property**: `better-sqlite3` `RunResult.changes` gives deleted row count — no separate COUNT queries needed
-- **Cutoff calculation**: `Date.now() - days * 24 * 60 * 60 * 1000` — simple epoch-ms arithmetic
-- **VACUUM outside transaction**: SQLite does not allow VACUUM inside a transaction; it runs after, only when `totalDeleted >= vacuumThreshold`
-- **VACUUM error handling**: Wrapped in try/catch — VACUUM failure is `warn()` logged but doesn't fail the cycle
-- **Duration tracking**: `Date.now() - start` measured across the full cycle; `warn()` if > 5 seconds
-
-#### Plugin Integration Test Pattern
-
-- **File**: `server/plugins/retention.integration.test.ts`
-- **Mock `defineNitroPlugin`**: Set `globalThis.defineNitroPlugin = (fn) => fn` in `beforeEach` — Nitro auto-imports this, not available in tests
-- **Mock utilities**: `vi.doMock("#server/utils/logger", ...)` and `vi.doMock("#server/utils/retention", ...)` — mock both logger and business logic
-- **Test structure**: Import plugin default, invoke it (`plugin()`), verify cleanup function is returned, verify first cycle runs on boot
-- **Error handling test**: Mock `runRetentionCleanup` to throw, verify the plugin catches and logs the error without crashing
-- **Disabled test**: Set `RETENTION_ENABLED=false`, verify the plugin returns early without scheduling a timer
-
-#### Retention Unit Test Pattern
-
-- **File**: `server/utils/retention.test.ts`
-- **`createMockDb(options)`**: Factory function creating a mock `better-sqlite3` Database with configurable `.changes` values
-- **`vi.resetModules()` + `await import("./retention")`**: Fresh module import per test group to avoid cached env vars
-- **`vi.doMock("./db", () => ({ getDb: () => db }))`**: Mock the DB accessor within each test
-- **Config validation tests**: Verify defaults, custom values, invalid values (string, zero, negative), and boolean edge cases (uppercase "FALSE")
-- **VACUUM threshold tests**: Set low threshold to trigger VACUUM, verify `exec()` was called; set high threshold to skip, verify it wasn't
-
-### ADRs — Data Retention (M1-T11 / F10)
+### ADRs — Rate Limiting (M1-T12)
 
 | ADR | Decision | Summary |
 |-----|----------|---------|
-| ADR-033 | Plugin + Utility Separation for Background Tasks | Business logic in `server/utils/retention.ts`, Nitro plugin in `server/plugins/retention.ts`; matches quality-sweep pattern; enables unit testing without Nitro runtime |
-| ADR-034 | Single Transaction for Retention Deletion | `db.transaction()` wraps both DELETE operations; atomic cleanup ensures consistent state; `.changes` property provides counts without extra queries |
-| ADR-035 | VACUUM Outside Transaction with Threshold | SQLite restricts VACUUM outside transactions; configurable `RETENTION_VACUUM_THRESHOLD` (default 10000) prevents expensive VACUUM on every cycle; wrapped in try/catch |
-| ADR-036 | Lazy Env Var Reading (No Cache) | `getRetentionConfig()` reads env vars fresh each call; no in-memory caching; config changes after restart are picked up immediately |
-| ADR-037 | RETENTION_ENABLED Boolean Flag | Single env var for complete enable/disable; truthy by default; prevents tight-loop CPU exhaustion from misconfiguration |
+| ADR-033 | In-memory LRU Sliding Window (No Redis) | Single-instance deployment (SQLite backend) doesn't need distributed rate limiting; in-memory Map with LRU eviction bounds memory. Documented as known limitation for multi-process deployments |
+| ADR-034 | Separate Utility + Middleware Layers | Pure functions in `server/utils/rate-limiter.ts` for testability; HTTP integration in `server/middleware/rate-limit.ts`. Clean separation of concerns |
+| ADR-035 | Per-IP Tracking with xForwardedFor | `getRequestIP(event, { xForwardedFor: true })` for correct client IP behind reverse proxies. Graceful degradation — allows through if IP unknown |
+| ADR-036 | Different Limits for Ingest vs Other Endpoints | Ingest: 100 req/min (high-frequency ping data). Others: 60 req/min (dashboard UI). Selected by URL path prefix in `getRateLimitConfig()` |
+
+*Last updated: 2026-08-03 (Agent 14 — M1-T12 rate limiting conventions appended)*

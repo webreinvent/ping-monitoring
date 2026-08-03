@@ -40,7 +40,7 @@ cp dashboard/.env.example dashboard/.env
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit time window (milliseconds) |
-| `RATE_LIMIT_MAX_REQUESTS` | `1000` (dev) / `100` (prod) | Max requests per window per IP |
+| `RATE_LIMIT_MAX_REQUESTS` | *(per tier)* | Overrides default max requests — defaults are 100 for ingest, 60 for other endpoints |
 
 ### Data Retention
 
@@ -63,7 +63,8 @@ cp dashboard/.env.example dashboard/.env
 | Variable | Development | Production |
 |----------|------------|------------|
 | `LOG_LEVEL` | `debug` | `info` |
-| `RATE_LIMIT_MAX_REQUESTS` | `1000` | `100` |
+
+Rate limiting defaults are the same in both environments (100 req/min for ingest, 60 for other). Use `RATE_LIMIT_MAX_REQUESTS` to override globally if needed.
 
 ## Notes
 
@@ -77,4 +78,4 @@ cp dashboard/.env.example dashboard/.env
 - [Database Documentation](../database/schema.md) — `DATABASE_PATH` usage
 - [Logger Documentation](../utils/logger.md) — `LOG_LEVEL` usage
 - [WebSocket Protocol](../websocket/protocol.md) — `WS_HEARTBEAT_INTERVAL_MS`, `WS_MAX_CLIENTS`
-- [Retention Cleanup](../utils/retention.md) — `RETENTION_*` variables usage
+- [Rate Limit Middleware](../middleware/rate-limit.md) — `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX_REQUESTS`

@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -191,7 +191,7 @@ function createMockDb(rows: Array<{ ... }>): Database {
 ### SQL Bucket Aggregation
 ```sql
 SELECT
-  strftime('%s', datetime(timestamp_ms / 1000, 'unixepoch'), 'unixepoch', '+' || :bucketMs || ' milliseconds') * 1000 AS bucket_ms,
+  strftime('%s', datetime(timestamp_ms / 1000, 'unixepoch', 'unixepoch', '+' || :bucketMs || ' milliseconds') * 1000 AS bucket_ms,
   COUNT(*) AS sample_count,
   SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
   AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END) AS avg_latency_ms
@@ -296,3 +296,52 @@ ORDER BY bucket_ms ASC
 ### Post-Ingest Classification
 - Runs AFTER transaction commits (outside `db.transaction()`) so classifier sees new data
 - Best-effort: classification failure is logged but never causes ingest to fail
+
+## Nitro Middleware Pattern (M1-T12 / F13)
+
+**Pattern:** Server-side middleware in `server/middleware/` using `defineEventHandler()` for cross-cutting concerns (rate limiting, auth, CORS).
+
+- Files in `server/middleware/` automatically run before every server route handler
+- Uses `h3` utilities: `getRequestIP()`, `setHeader()`, `setResponseStatus()`
+- Returns early (no return value) to let request continue; returns a value to short-circuit with a response
+- Only applies to `/api/` paths — skips static assets, WebSocket, etc.
+
+**Example (rate limiting):**
+```typescript
+import { defineEventHandler, getRequestIP, setHeader, setResponseStatus } from "h3";
+
+export default defineEventHandler((event) => {
+  const url = event.path;
+  if (!url.startsWith("/api/")) return; // Skip non-API
+
+  const ip = getRequestIP(event, { xForwardedFor: true });
+  if (!ip) return; // Allow through if no IP
+
+  const config = getRateLimitConfig(isIngest);
+  const result = checkRateLimit(ip, config);
+
+  if (!result.allowed) {
+    setResponseStatus(event, 429);
+    setHeader(event, "Retry-After", String(result.retryAfter));
+    return { error: "rate_limit_exceeded", retryAfter: result.retryAfter };
+  }
+});
+```
+
+## Sliding Window Rate Limiter Pattern (M1-T12 / F13)
+
+**Pattern:** In-memory sliding window rate limiter using timestamp arrays per IP with LRU eviction.
+
+- `Map<string, RateLimitEntry>` keyed by IP address
+- Each entry holds `timestamps: number[]` (request times within window) and `lastAccess: number` (LRU)
+- Sliding window: filters out timestamps outside `now - windowMs` on each check
+- LRU eviction: when map exceeds MAX_ENTRIES (10,000), evicts entries older than 2× window
+- Env var configurable: `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS`
+- `getRateLimitConfig(isIngest)` returns different limits: 100 req/min for ingest, 60 for others
+- `resetRateLimitState()` for test isolation
+
+**Key design choices:**
+- No external dependencies (no Redis) — in-memory only
+- `getRequestIP(event, { xForwardedFor: true })` for proper IP resolution behind proxies
+- `warn()` log on rate limit exceeded (structured JSON with IP, path, retryAfter, limit)
+- 429 response shape: `{ error: "rate_limit_exceeded", retryAfter: N }` with `Retry-After` header

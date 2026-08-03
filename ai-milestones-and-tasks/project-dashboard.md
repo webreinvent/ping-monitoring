@@ -28,8 +28,8 @@ lastUpdated: "2026-08-03"
 | M1-T8 | Build monitor history API with aggregation and time windows | 🟢 Complete | Critical | 4-6 hours | M1 | M1-T6, M1-T7 |
 | M1-T9 | Create WebSocket live broadcast with subscription management | 🟢 Complete | High | 4-6 hours | M1 | M1-T6, M1-T8 |
 | M1-T10 | Implement backend quality classifier with post-ingest trigger | 🟢 Complete | High | 3-4 hours | M1 | M1-T6 |
-| M1-T11 | Add data retention cleanup background task | 🟢 Complete | Medium | 2-3 hours | M1 | M1-T6 |
-| M1-T12 | Implement rate limiting middleware | Not Started | Medium | 1-2 hours | M1 | M1-T1 |
+| M1-T11 | Add data retention cleanup background task | Not Started | Medium | 2-3 hours | M1 | M1-T6 |
+| M1-T12 | Implement rate limiting middleware | 🟢 Complete | Medium | 1-2 hours | M1 | M1-T1 |
 | M2-T1 | Build dashboard shell with layout, sidebar structure, and routing | Not Started | Critical | 2-3 hours | M2 | M1 |
 | M2-T2 | Create monitors list composable and sidebar components | Not Started | Critical | 3-4 hours | M2 | M2-T1 |
 | M2-T3 | Implement all-monitors combined uPlot chart | Not Started | Critical | 4-6 hours | M2 | M2-T2, M1-T8 |

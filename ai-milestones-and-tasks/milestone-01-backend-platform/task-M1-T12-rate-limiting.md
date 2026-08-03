@@ -3,7 +3,7 @@ taskId: M1-T12
 milestone: M1
 title: Implement rate limiting middleware
 priority: Medium
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "1-2 hours"
 features:
   - F13
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M1 (Backend Platform)
 > **Priority:** Medium
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 1-2 hours
 
 ## Description
@@ -29,25 +29,25 @@ Add per-IP rate limiting middleware to protect API endpoints from excessive requ
 
 ## Acceptance Criteria
 
-- [ ] Rate limiting middleware runs before route handlers
-- [ ] Ingest endpoint limited to 100 requests/minute per IP
-- [ ] All other endpoints limited to 60 requests/minute per IP
-- [ ] 429 response includes `retryAfter` and `Retry-After` header
-- [ ] Each IP tracked independently
-- [ ] Sliding window (not fixed window)
-- [ ] Stale entries evicted to bound memory
+- [x] Rate limiting middleware runs before route handlers
+- [x] Ingest endpoint limited to 100 requests/minute per IP
+- [x] All other endpoints limited to 60 requests/minute per IP
+- [x] 429 response includes `retryAfter` and `Retry-After` header
+- [x] Each IP tracked independently
+- [x] Sliding window (not fixed window)
+- [x] Stale entries evicted to bound memory
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Rate limit enforced correctly
-- [ ] 429 response shape matches spec
-- [ ] Different limits for ingest vs other endpoints
+- [x] Rate limit enforced correctly
+- [x] 429 response shape matches spec
+- [x] Different limits for ingest vs other endpoints
 
 ## Dependencies
 
