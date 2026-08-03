@@ -75,21 +75,6 @@ export interface MonitorRow {
   updated_at: number;
 }
 
-export interface ClientRow {
-  id: number;
-  slug: string;
-  name: string;
-  username: string;
-  hostname: string;
-  mac_address: string;
-  sync_enabled: number;
-  sync_interval_min: number;
-  backend_url: string;
-  last_synced_at_ms: number | null;
-  created_at: number;
-  updated_at: number;
-}
-
 // ============================================================================
 // Public API
 // ============================================================================
@@ -525,12 +510,11 @@ export function computeRangeSummary(
 }
 
 /**
- * Build a Target object from monitor and client DB rows.
+ * Build a Target object from monitor DB row.
  * Uses sensible defaults for fields not stored in the DB.
  */
 export function buildTarget(
   monitorRow: MonitorRow,
-  clientRow: ClientRow | null,
 ): Target {
   const targetName = monitorRow.target_name ?? monitorRow.target_host;
 

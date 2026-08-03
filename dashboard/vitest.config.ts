@@ -15,6 +15,10 @@ export default defineConfig({
     ],
     environment: "node",
     setupFiles: ["./test/setup.ts"],
+    // Use forks pool to isolate test workers.
+    pool: "forks",
+    // Vitest 4 moved poolOptions to top-level; this is kept for Vitest 3.x compat.
+    maxConcurrency: 2,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

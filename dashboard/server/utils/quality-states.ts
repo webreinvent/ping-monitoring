@@ -3,6 +3,21 @@ import type { QualityState } from "#shared/types";
 export type { QualityState };
 
 /**
+ * Map a ping sample status string to the API contract monitor status.
+ *
+ * "success" → "up"
+ * "timeout" | "error" → "down"
+ * null → null
+ */
+export function mapSampleStatus(
+  status: string | null,
+): "up" | "down" | null {
+  if (status === "success") return "up";
+  if (status === "timeout" || status === "error") return "down";
+  return null;
+}
+
+/**
  * Map a quality_state value from the database to a typed QualityState.
  * Handles both F12 values and legacy values with fallback to "warmingUp".
  *

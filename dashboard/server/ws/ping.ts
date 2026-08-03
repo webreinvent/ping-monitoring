@@ -1,6 +1,6 @@
 import { getDb } from "../utils/db";
 import { info, warn } from "../utils/logger";
-import { mapQualityState } from "../utils/quality-states";
+import { mapQualityState, mapSampleStatus } from "../utils/quality-states";
 import type { WebSocket as WebSocketType } from "ws";
 import type { QualityState } from "#shared/types";
 
@@ -184,12 +184,9 @@ function getMonitorState(monitorId: number): RawMonitorRow | undefined {
 
 /**
  * Map a sample status string to the monitor status for display.
+ * Delegated to shared utility: mapSampleStatus (quality-states.ts).
+ * @see mapSampleStatus
  */
-function mapMonitorStatus(status: string | null): "up" | "down" | null {
-  if (status === "success") return "up";
-  if (status === "timeout" || status === "error") return "down";
-  return null;
-}
 
 // ============================================================================
 // Broadcast: send samples to all subscribers of a monitor
@@ -387,7 +384,7 @@ function handleSubscribe(
         id: monitorState?.id ?? monitorId,
         targetHost: monitorState?.target_host ?? "",
         targetName: monitorState?.target_name ?? monitorState?.target_host ?? "",
-        status: monitorState ? mapMonitorStatus(monitorState.last_status) : null,
+        status: monitorState ? mapSampleStatus(monitorState.last_status) : null,
         latencyMs: monitorState?.last_latency_ms ?? null,
         qualityState: monitorState ? mapQualityState(monitorState.quality_state) : "warmingUp",
         lastSeenMs: monitorState?.last_seen_ms ?? null,

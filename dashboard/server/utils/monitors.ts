@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { mapQualityState } from "./quality-states";
+import { mapQualityState, mapSampleStatus } from "./quality-states";
 import type { MonitorListItem } from "#shared/types";
 
 /**
@@ -76,18 +76,5 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
     qualityStateUpdatedAtMs: row.quality_state_updated_at ?? null,
     createdAt: new Date(row.created_at).toISOString(),
   }));
-}
-
-/**
- * Map ping sample status values to API contract status.
- *
- * "success" → "up"
- * "timeout" | "error" → "down"
- * null → null
- */
-function mapSampleStatus(status: string | null): "up" | "down" | null {
-  if (status === "success") return "up";
-  if (status === "timeout" || status === "error") return "down";
-  return null;
 }
 

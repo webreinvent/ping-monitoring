@@ -51,6 +51,9 @@ ws.onmessage = (event) => {
     case "unsubscribed":
       console.log("Unsubscribed from monitor", message.monitorId);
       break;
+    case "client_name_updated":
+      console.log("Client", message.clientSlug, "renamed to", message.newName);
+      break;
     case "error":
       console.error("WebSocket error:", message.message);
       break;
@@ -126,6 +129,7 @@ A single WebSocket connection can subscribe to multiple monitors simultaneously.
 | `unsubscribed` | Unsubscription acknowledged |
 | `snapshot` | Initial batch of recent samples (sent after `subscribed`) |
 | `sample` | Real-time push of a new sample |
+| `client_name_updated` | Client display name has changed (broadcast to all connections) |
 | `error` | Error message (connection stays open) |
 
 #### Subscribed (Acknowledgment)
@@ -226,6 +230,23 @@ Sent immediately after `subscribed`. Contains:
 ```
 
 Pushed to all subscribers whenever a new sample is ingested for their subscribed monitor. Sent within 100ms of the ingest endpoint processing the sample.
+
+#### Client Name Updated
+
+```json
+{
+  "type": "client_name_updated",
+  "clientSlug": "alice-desktop-00bb11cc22",
+  "newName": "Alice Work Laptop"
+}
+```
+
+Broadcast to all connected WebSocket clients when a client's display name is updated (via `PUT /api/clients/:slug/name`). This allows dashboards to update the sidebar and any displayed client names in real time without refreshing.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `clientSlug` | `string` | The client's unique slug |
+| `newName` | `string` | The new display name |
 
 #### Error
 

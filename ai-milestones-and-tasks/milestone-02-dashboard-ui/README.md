@@ -3,7 +3,7 @@ milestoneId: M2
 title: Dashboard UI
 category: Frontend
 priority: High
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "5-7 days"
 dependencies:
   - M1
@@ -17,7 +17,7 @@ features:
 
 > **Category:** Frontend
 > **Priority:** High
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 5-7 days
 > **Dependencies:** M1 — Backend Platform
 

@@ -1,6 +1,6 @@
 ---
 name: lnpm-lessons-learned
-description: Errors encountered and lessons learned during M1-T1 implementation
+description: Errors encountered and lessons learned during M1 and M2 implementation
 metadata:
   type: project
   agent: "12"
@@ -9,102 +9,151 @@ metadata:
 
 # LNPM Cloud Dashboard — Lessons Learned
 
-## Errors and Fixes
+## M1 Lessons
 
 ### WebSocket Message Handler Type Mismatch (Agent 08)
-- **Error**: `server/ws/ping.ts` treated `message` as a `string`, but Nuxt's crossws passes a `Message` object with a `.text` property.
+- **Error**: `server/ws/ping.ts` treated `message` as a `string`, but crossws passes a `Message` object with `.text` property.
 - **Fix**: Changed `JSON.parse(message)` to `JSON.parse(message.text)`.
-- **Lesson**: Nuxt 4 WebSocket handlers use a different message type than raw `ws` — always check the handler signature.
+- **Lesson**: Nuxt 4 WebSocket handlers use a different message type than raw `ws`.
 
 ### Unused `ws` Import (Agent 08)
-- **Error**: `import { WebSocketServer } from "ws"` in `server/ws/ping.ts` — unused, causing potential bundle bloat.
+- **Error**: `import { WebSocketServer } from "ws"` in WebSocket handler — unused.
 - **Fix**: Removed import.
-- **Lesson**: When using Nuxt's `defineWebSocketHandler`, the `ws` package is not needed for the handler itself.
 
 ### No Migration Error Handling (Agent 08)
-- **Error**: `db.exec()` throws on malformed SQL with no try/catch — silent migration failures.
-- **Fix**: Added try/catch per migration with `console.error` and rethrow.
-- **Lesson**: Always wrap database operations in error handlers, especially for startup-time operations like migrations.
+- **Error**: `db.exec()` throws on malformed SQL with no try/catch.
+- **Fix**: Added try/catch per migration with console.error + rethrow.
 
 ### Migrations Re-run Every Startup (Agent 08)
-- **Error**: No tracking of applied migrations — all migrations execute every time the server starts, causing failures for non-idempotent DDL (e.g., `ALTER TABLE`, `CREATE TABLE` without `IF NOT EXISTS`).
-- **Fix**: Added `migrations` tracking table with `INSERT INTO migrations (name) VALUES (?)` after each successful migration, and a pre-check (`SELECT name FROM migrations`) to skip applied ones.
-- **Lesson**: Migration tracking is essential — even for simple projects. The tracking table must be created by the plugin, not a migration file.
+- **Error**: No tracking of applied migrations.
+- **Fix**: Added `migrations` tracking table with INSERT after each successful migration and pre-check to skip applied ones.
 
 ### package.json Read Every Health Check (Agent 08)
-- **Error**: `readFileSync` on `package.json` called on every `/api/health` request — wasted disk I/O.
-- **Fix**: Cached at module scope using an IIFE with fallback.
-- **Lesson**: Cache module-level constants that don't change at runtime.
+- **Error**: `readFileSync` on `package.json` called on every request.
+- **Fix**: Cached at module scope using IIFE with fallback.
 
 ### Missing `app/layouts/default.vue` (Agent 08)
-- **Error**: `<NuxtLayout>` in `app.vue` had no layout file — Nuxt renders a no-op when no default layout exists.
+- **Error**: `<NuxtLayout>` in `app.vue` had no layout file.
 - **Fix**: Created `app/layouts/default.vue` with flex column layout and `min-height: 100vh`.
-- **Lesson**: Always create a default layout when using `<NuxtLayout>`, even if minimal.
 
 ### Useless `imports.dirs` Config (Agent 08)
-- **Error**: `imports: { dirs: ["shared"] }` in `nuxt.config.ts` — Nuxt auto-import only picks up functions and constants, not type interfaces.
+- **Error**: `imports: { dirs: ["shared"] }` — Nuxt auto-import doesn't pick up type interfaces.
 - **Fix**: Removed from config.
-- **Lesson**: Nuxt auto-import does not work for type-only exports — import types explicitly.
 
 ### NaN Timeout from Bad Env Var (Agent 08)
 - **Error**: `parseInt(process.env.START_SERVER_TIMEOUT)` returns `NaN` for non-numeric strings.
-- **Fix**: Added `Number()` + `Number.isNaN()` guard with 60s fallback.
-- **Lesson**: Always validate env vars before using them as numbers — `parseInt` and `Number` silently produce `NaN` or `0`.
+- **Fix**: Added `Number()` + `Number.isNaN()` guard with fallback.
+
+### better-sqlite3 Segfault in Vitest Forked Workers (M1-T6)
+- **Error**: Integration tests with `better-sqlite3` crash with segfaults in Vitest's forked worker pools.
+- **Fix**: Use `vi.mock("./db", () => ({ getDb: vi.fn() }))` — mock the DB entirely. The mock DB pattern dispatches on SQL string matching.
+- **Lesson**: Always mock `getDb()` in tests. Don't use real SQLite in Vitest tests.
+
+### vi.doMock Inside Test Files Causes Parse Errors (M1-T6)
+- **Error**: `vi.doMock()` inside `describe`/`test` block causes "Failed to parse source code" errors.
+- **Fix**: Use top-level `vi.mock()` before imports.
+
+### Playwright Test Files Fail Under Vitest (M1-T6)
+- **Error**: `.spec.ts` files picked up by Vitest and failing with Playwright errors.
+- **Fix**: Ensure `vitest.config.ts` include is `**/*.test.ts` (not `**/*.spec.ts`). Playwright = `.spec.ts`, Vitest = `.test.ts`.
+
+### Test Classification Logic Without Real DB (M1-T10)
+- **Error**: Cannot test `classifyMonitor()` directly — `getDb()` returns real better-sqlite3 that segfaults.
+- **Fix**: Write tests verifying decision logic in pure JavaScript (same thresholds, same ordered-if chain).
+- **Lesson**: Separate algorithm from data access. Test decision logic independently.
+
+### Migration Numbering Must Be Sequential (M1-T10)
+- **Error**: Referenced `005_create_indexes.sql` but 005 doesn't exist.
+- **Fix**: Used `006_add_quality_state_updated_at.sql`.
+- **Lesson**: Check existing migration files before assigning new numbers.
+
+### Quality Sweep Interval Validation (M1-T10)
+- **Error**: Non-numeric env var causes `setInterval(NaN)` = tight loop.
+- **Fix**: `Number.isFinite()` + `> 0` validation with early return.
+
+### Database Field Naming Mismatch (M1-T4)
+- **Error**: `HealthResponse` type had `database` field instead of `db_path`.
+- **Fix**: Updated `shared/types.ts` to match F14 API contract.
+
+### Mock DB UPDATE Parameter Binding Bug (M2-T7)
+- **Error**: Mock DB's `run()` method for UPDATE statements wasn't binding parameters correctly — `stmt.run(params)` was ignoring the params array.
+- **Fix**: Updated `mock-db-factory.ts` to properly handle parameter binding in `run()` method.
+- **Lesson**: Mock DB dispatchers must handle all SQL operation types (SELECT, INSERT, UPDATE, DELETE) with correct parameter binding.
+
+### F13 Spec Compliance Requires Exact 429 Response Shape (M1-T12)
+- **Error**: Initial implementation used human-readable error string and extra `code` field.
+- **Fix**: Fixed to match F13 spec exactly: `{ error: "rate_limit_exceeded", retryAfter: N }`.
+- **Lesson**: Cross-reference feature spec for exact response shapes.
+
+## M2 Lessons
+
+### WebSocket Composable Lifecycle Hook (Agent 08)
+- **Error**: `useWebSocket.ts` used `onBeforeMount` instead of `onMounted` for initialization. WebSocket connection was set up too early, before the component was mounted.
+- **Fix**: Changed to `onMounted` for initialization, `onUnmounted` for cleanup.
+- **Lesson**: WebSocket connections should be established in `onMounted`, not `onBeforeMount`. The connection needs the component to be fully mounted.
+
+### Deep Watch on Typed Arrays (Agent 08)
+- **Error**: `watch` with `{ deep: true }` on `Float64Array` data was ineffective — deep watch doesn't detect mutations on typed arrays.
+- **Fix**: Used regular watch on the source data (HistoryPoint[]) and transform in the callback.
+- **Lesson**: Typed arrays are value objects — deep watch won't detect their mutations. Watch the source data instead.
+
+### Duplicated CSS in dashboard.css (Agent 08)
+- **Error**: Agent 07's changes to `dashboard.css` duplicated some CSS rules that were already present.
+- **Fix**: Removed duplicate rules during code review.
+- **Lesson**: When modifying CSS files, read the existing content first to avoid duplicating rules.
+
+### Redundant onMounted in Chart Components (Agent 08)
+- **Error**: Some chart components had redundant `onMounted` calls — one for uPlot initialization and another for data fetching, when a single lifecycle hook with proper sequencing would suffice.
+- **Fix**: Consolidated into single `onMounted` with sequential async calls.
+- **Lesson**: Minimize lifecycle hooks — one `onMounted` per component is cleaner than multiple.
+
+### Unused Imports After Refactoring (Agent 08)
+- **Error**: Multiple files had unused imports after refactoring (e.g., `ref` imported but not used, `watch` imported but replaced with direct calls).
+- **Fix**: Cleaned up all unused imports across 5+ files.
+- **Lesson**: After refactoring, always run `npx nuxi typecheck` to catch unused imports — they cause warnings but not errors by default.
+
+### uPlot setData Requires Proper Array Structure (M2-T3)
+- **Error**: Initial chart data transform returned flat arrays instead of uPlot's expected `[[timestamps], [series1], [series2], ...]` structure.
+- **Fix**: `useChartSeries()` composable properly transforms `HistoryPoint[]` into uPlot column format.
+- **Lesson**: uPlot uses column-major format (array of columns), not row-major (array of rows). Always use the composable for transforms.
+
+### Qual Plugin Path Generation Must Handle Edge Cases (M2-T3)
+- **Error**: Quality band path generation crashed when given empty intervals or single-point intervals.
+- **Fix**: Added guards for empty arrays and single-point intervals in `quality-bands.ts`.
+- **Lesson**: Chart utilities must handle all edge cases — empty data, single points, and gaps in time series.
+
+### better-sqlite3@13 Requires Node 22+ (M1-T5)
+- **Error**: `better-sqlite3@13` crashes on Node 20 with segfault for native bindings.
+- **Fix**: Tests use mock DBs exclusively (the `globalThis.__db` pattern). The server itself requires Node 22+.
+- **Lesson**: When using native Node.js modules, check Node version compatibility. The `globalThis.__db` mock pattern is the project standard for testing.
+
+### Task May Already Be Implemented (Lessons 8, 14, 19, 27)
+- **Error**: Multiple tasks (M1-T5, M1-T8, M1-T9, M1-T12) were already implemented by earlier agents but listed as "Not Started".
+- **Lesson**: Always check for existing implementation before writing new code. The `git diff --stat` command and reading existing files reveals what's already done. Agent 02 should always check for existing implementation.
 
 ## General Lessons
 
 ### TypeScript Strict Mode
-- TypeScript strict mode (`nuxt.config.ts → typescript.strict: true`) is essential — it catches type mismatches early (like the WebSocket message handler issue).
+- TypeScript strict mode catches type mismatches early.
 
 ### better-sqlite3 WAL Mode
-- Always enable WAL mode (`PRAGMA journal_mode = WAL`) for better concurrent read/write performance. Enable foreign keys (`PRAGMA foreign_keys = ON`) for data integrity.
+- Always enable WAL mode (`PRAGMA journal_mode = WAL`) and foreign keys (`PRAGMA foreign_keys = ON`).
 
 ### Vitest Setup for Nitro
-- The test setup file (`test/setup.ts`) needs to clear `globalThis.__db` before each test to ensure test isolation. Without this, tests share the same database instance.
+- Clear `globalThis.__db` before each test for isolation.
 
 ### Nuxt 4 Compatibility
-- `compatibilityVersion` is not needed in Nuxt 4 (removed from config).
 - `nuxt typecheck` (not `nuxi typecheck`) is the correct command in Nuxt 4.
-
-## M1-T6 Lessons (Ping Ingest)
-
-### better-sqlite3 Segfault in Vitest Forked Workers
-- **Error**: Integration tests with `better-sqlite3` crash with segfaults in Vitest's forked worker pools. The native module doesn't play well with Vitest's forked process model.
-- **Root cause**: `better-sqlite3` uses C++ bindings that don't survive process forking cleanly. This happens in both `--pool=forks` (default) and `--pool=threads` modes.
-- **Fix**: Use `vi.mock("./db", () => ({ getDb: vi.fn() }))` for unit tests — mock the DB entirely. Integration tests are problematic and should use in-memory SQLite with careful process isolation if needed. The mock DB pattern (dispatching on SQL string) is the recommended approach.
-- **Lesson**: Always mock `getDb()` in tests that involve `better-sqlite3`. Don't try to use the real database in Vitest tests unless you control the process lifecycle.
-
-### vi.doMock Inside Test Files Causes Parse Errors
-- **Error**: `vi.doMock()` called inside a `describe`/`test` block causes "Failed to parse source code" errors in Vitest.
-- **Root cause**: `vi.doMock()` must be called before any `import` statements that use the mocked module. Inside a test file, all imports are already hoisted.
-- **Fix**: Use top-level `vi.mock()` (not `vi.doMock()`) at the file level before imports. Or use the mock pattern already established in the project (top-level `vi.mock("./module", () => ({ fn: vi.fn() }))`).
-
-### Playwright Test Files Fail Under Vitest
-- **Error**: `.spec.ts` files (Playwright tests) were being picked up by Vitest and failing with "Playwright Test did not expect test.describe()".
-- **Root cause**: The `vitest.config.ts` include pattern was too broad, matching `.spec.ts` files.
-- **Fix**: Ensure `vitest.config.ts` include is `**/*.test.ts` (not `**/*.spec.ts`). Playwright tests use `.spec.ts`, Vitest uses `.test.ts`. The two don't conflict when naming conventions are respected.
+- `compatibilityVersion` is not needed in Nuxt 4.
 
 ### Environment Variable Config Reading at Runtime
-- **Lesson**: `INGEST_MAX_SAMPLES` and `INGEST_FUTURE_WINDOW_MS` are read at function call time (not module load time). This means tests can stub env vars with `vi.stubEnv()` and the module will pick up the new values — no need to re-import.
-- **Pattern**: Always read env vars inside functions (not at module scope) when they need to be testable.
+- Read env vars inside functions (not at module scope) when they need to be testable. Tests can stub with `vi.stubEnv()`.
 
 ### Mock DB SQL Dispatching by String Matching
-- **Pattern**: When mocking `better-sqlite3`'s `prepare()`, dispatch on `sql.includes("INSERT INTO monitors")` etc. This is fragile but works for unit tests. The key is to match enough of the SQL string to uniquely identify each query path.
-- **Lesson**: This pattern requires the SQL strings to be stable. If a SQL string changes (e.g., adding a column), the mock needs to be updated. This is a tradeoff for avoiding real SQLite in tests.
+- When mocking `better-sqlite3`'s `prepare()`, dispatch on `sql.includes("INSERT INTO monitors")`. This is fragile but works for unit tests.
 
-## M1-T10 Lessons (Quality Classifier)
+### Worker Exit Errors Are Infrastructure, Not Code
+- 4 worker exit errors appear in every Vitest run — these are Vitest infrastructure issues, not test failures. Don't chase them.
 
-### Test Classification Logic Without Real DB
-- **Error**: Cannot test `classifyMonitor()` directly because it calls `getDb()` which returns a real `better-sqlite3` instance that segfaults in Vitest workers.
-- **Fix**: Write tests that verify the classification algorithm by computing the decision logic in pure JavaScript (same thresholds, same ordered-if chain). This verifies the algorithm is correct without touching the database.
-- **Lesson**: When testing database-dependent functions, separate the algorithm from the data access. The classifier's decision logic should be testable independently of the SQL queries that feed it.
-
-### Migration Numbering Must Be Sequential
-- **Error**: Initial implementation plan referenced `005_create_indexes.sql` but migration 005 doesn't exist (there's already `003_create_ping_samples.sql`). Agent 08 caught this.
-- **Fix**: Used `006_add_quality_state_updated_at.sql` (next available sequential number after 005).
-- **Lesson**: Always check existing migration files before assigning a new migration number. The schema directory uses alphabetical sorting so numbering must be sequential and gap-free.
-
-### Quality Sweep Interval Validation
-- **Error**: `QUALITY_SWEEP_INTERVAL_MS` env var could be set to a non-numeric string, causing `setInterval` to fire in a tight loop (CPU exhaustion).
-- **Fix**: Added `Number.isFinite()` + `> 0` validation with early return and info log. Agent 08 caught this during code review.
-- **Lesson**: Always validate env vars used as timer intervals. `setInterval(NaN, ...)` is treated as `setInterval(0, ...)` — a tight loop.
+### Iterating Mutable Sets — Always Copy
+- When iterating over sets that may change (like subscriber sets), always iterate a copy (`[...subSet]`).

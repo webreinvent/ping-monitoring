@@ -3,7 +3,7 @@ taskId: M2-T1
 milestone: M2
 title: Build dashboard shell with layout, sidebar structure, and routing
 priority: Critical
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "2-3 hours"
 features:
   - F8
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M2 (Dashboard UI)
 > **Priority:** Critical
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 2-3 hours
 
 ## Description
@@ -29,23 +29,23 @@ Create the Nuxt 4 app shell with default layout, routing structure, and the side
 
 ## Acceptance Criteria
 
-- [ ] Default layout renders with sidebar + main content area
-- [ ] Routes work: /, /monitors/:id, /clients/:slug
-- [ ] Responsive layout works on narrow viewports
-- [ ] Empty state shown when no data loaded
-- [ ] App matches LNPM desktop design aesthetic
+- [x] Default layout renders with sidebar + main content area
+- [x] Routes work: /, /monitors/:id, /clients/:slug
+- [x] Responsive layout works on narrow viewports
+- [x] Empty state shown when no data loaded
+- [x] App matches LNPM desktop design aesthetic
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors and health endpoint returns 200
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors and health endpoint returns 200
 
 ## Testing Checklist
 
-- [ ] Pages render without errors
-- [ ] Layout responsive on mobile
-- [ ] Navigation works
+- [x] Pages render without errors
+- [x] Layout responsive on mobile
+- [x] Navigation works
 
 ## Dependencies
 

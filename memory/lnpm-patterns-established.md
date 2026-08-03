@@ -1,6 +1,6 @@
 ---
 name: lnpm-patterns-established
-description: Patterns established during M1-T1 — Nuxt 4 + Nitro foundation patterns
+description: Patterns established during M1 and M2 — Nuxt 4 + Nitro foundation, uPlot charts, WebSocket, Vue composables
 metadata:
   type: project
   agent: "12"
@@ -40,7 +40,7 @@ metadata:
 ### WebSocket Handler Pattern
 - **File**: `server/ws/ping.ts`
 - **Pattern**: `defineWebSocketHandler` with `open`, `message`, `close` lifecycle. Messages are JSON-serialized strings. Uses `message.text` (crossws passes a Message object, not raw string).
-- **Stub behavior**: Echoes messages back with `type: "echo"` wrapper.
+- **Subscription map**: `Map<number, Set<WebSocketType>>` keyed by monitor_id. Snapshot on subscribe (last 100 samples). Broadcast from ingest endpoint.
 
 ### Shared Types Pattern
 - **File**: `shared/types.ts`
@@ -60,6 +60,33 @@ metadata:
 - **File**: `app/pages/index.vue`
 - **Pattern**: Semantic `<section>` elements, `data-testid` attributes for E2E testing, `useHead` for page title, scoped CSS.
 
+### Sidebar Pattern (M2-T1)
+- **File**: `app/components/DashboardSidebar.vue`
+- **Pattern**: Fixed-width sidebar (260px) with collapse on narrow viewports. Uses `useResponsiveSidebar()` composable for breakpoint detection.
+- **Components**: `SidebarContent` (scrollable list), `ClientGroup` (expandable client section), `MonitorRow` (individual monitor status).
+
+### uPlot Chart Pattern (M2-T3)
+- **File**: `app/components/charts/LatencyChart.vue`
+- **Pattern**: uPlot chart wrapped in Vue component with reactive props. Uses `useChartSeries()` composable for data transforms, `useMonitorHistory()` for data fetching.
+- **Key**: `onMounted` creates chart, `onUnmounted` destroys it. `watch` on data props triggers `uPlot.setData()`. Quality bands rendered via `Qual` plugin.
+
+### All-Monitors Chart Pattern (M2-T3)
+- **File**: `app/components/charts/AllMonitorsChart.vue`
+- **Pattern**: Multi-series uPlot chart showing all monitors on a single chart. Uses `useDashboardPalette()` composable for color cycling. Toggle checkbox per monitor for visibility control.
+
+### Chart Composable Pattern (M2-T3)
+- **File**: `app/composables/useChartSeries.ts`
+- **Pattern**: Pure function composable for transforming `HistoryPoint[]` into uPlot-compatible `[[timestamps], [values], ...]` arrays.
+- **Composables**: `useTimeWindow()` for time range management, `useDashboardPalette()` for color palette generation, `useMonitorHistory()` for API fetching.
+
+### Quality Bands Pattern (M2-T3)
+- **File**: `app/utils/quality-bands.ts`
+- **Pattern**: Generates `Qual` plugin path data from `QualityIntervalRecord[]`. Maps quality state → color via `QUALITY_COLORS` constants. Produces SVG path strings for uPlot's background bands.
+
+### Time Range Selector Pattern (M2-T3)
+- **File**: `app/components/shared/TimeRangeSelector.vue`
+- **Pattern**: Button-group component with preset time ranges (1h, 6h, 24h, 7d, 30d). Emits `select` event with `{ fromMs, toMs }` payload. Uses `useTimeWindow()` composable for computation.
+
 ## Test Patterns
 
 ### Vitest Configuration
@@ -75,6 +102,15 @@ metadata:
 - **File**: `test/fixtures.ts`
 - **Pattern**: Factory functions with `Partial<T>` overrides — `createPingSample()`, `createMonitor()`, `createClientIdentity()`, etc. Spread defaults, then overrides.
 
+### Mock DB Pattern
+- **File**: `test/mock-db-factory.ts`
+- **Pattern**: Creates a minimal Database stub dispatching on SQL string matching. `prepare(sql)` returns mock statement objects with `all()`, `get()`, `run()` methods. Transaction mock: `transaction: vi.fn((fn) => () => fn())`.
+- **Key**: Avoids better-sqlite3 segfault in Vitest forked workers entirely.
+
+### Frontend Utility Test Pattern (M2-T7)
+- **Files**: `app/utils/quality-bands.test.ts`, `app/composables/useChartSeries.test.ts`, `app/composables/useDashboardPalette.test.ts`
+- **Pattern**: Test frontend utility functions and composables with pure function assertions. No DOM required. Use fixtures from `test/fixtures.ts` for consistent test data.
+
 ## Environment Configuration
 
 ### .env.example Pattern
@@ -85,71 +121,63 @@ metadata:
 
 ### Type-First Module Pattern
 - **File**: `server/utils/ping-types.ts`
-- **Pattern**: Dedicated type file for a feature domain. Co-located with implementation (`server/utils/`). Defines `PingSampleIngest`, `IngestPayload`, `IngestResponse`, `Rejection`, and `ValidationResult` interfaces. No runtime logic — pure TypeScript types. Imported by both the route handler and ingest engine.
-- **Rationale**: Keeps types in one place, avoids scattering types across implementation files. Follows the existing `shared/types.ts` pattern but scoped to the ping ingest domain.
+- **Pattern**: Dedicated type file for a feature domain. Co-located with implementation (`server/utils/`). Defines `PingSampleIngest`, `IngestPayload`, `IngestResponse`, `Rejection`, and `ValidationResult` interfaces.
 
 ### Validation Rule Pattern
 - **File**: `server/utils/ping-validation.ts`
-- **Pattern**: Single `validateSample()` function returns `ValidationResult { valid, rejections[] }`. Each validation rule is a named block (Rule 1–6) that independently pushes rejections. Multiple rejections can accumulate on a single sample. Configurable thresholds via env vars (`INGEST_FUTURE_WINDOW_MS`).
-- **Key rules**: targetHost required, timestamp positive integer + future window, status enum (success/timeout/error), conditional latencyMs (required for success only), conditional resolvedAddress (required for success only).
-- **Helper**: `isValidPositiveInteger()` helper for type-safe number validation (handles NaN, Infinity, non-integer).
+- **Pattern**: Single `validateSample()` function returns `ValidationResult { valid, rejections[] }`. Multiple rejections can accumulate on a single sample.
 
 ### Ingest Engine Pattern (3-Phase Pipeline)
 - **File**: `server/utils/ping-ingest.ts`
-- **Pattern**: `ingestPingBatch()` orchestrates 3 phases: (1) client lookup/auto-register, (2) sample validation (delegates to `validateSample`), (3) transactional ingest via `ingestSamples()`. Returns `IngestResponse` with accepted/duplicate/rejected counts and optional rejections array.
-- **Key insight**: The function returns `null` for unknown clients — the route handler maps this to 401. This separation keeps the engine pure (no HTTP concerns).
+- **Pattern**: `ingestPingBatch()` orchestrates: (1) client lookup/auto-register, (2) validation, (3) transactional ingest. Returns `IngestResponse` with accepted/duplicate/rejected counts.
 
 ### Transactional Ingest Pattern
 - **File**: `server/utils/ping-ingest.ts` → `ingestSamples()`
-- **Pattern**: `db.transaction()` wraps 4 phases: (1) resolve monitor IDs with `ensureMonitor()` (INSERT OR IGNORE + SELECT), (2) bulk insert samples with INSERT OR IGNORE tracking `changes`, (3) update monitor latest state per affected monitor, (4) update client `last_synced_at_ms`.
-- **Dedup detection**: better-sqlite3 `stmt.run().changes` returns 0 for ignored rows (duplicates), 1 for inserted rows. This is how accepted vs duplicate is counted.
-- **Monitor auto-creation**: `ensureMonitor()` uses `INSERT INTO monitors ... ON CONFLICT DO NOTHING` then `SELECT id` to get existing or new monitor ID.
+- **Pattern**: `db.transaction()` wraps 4 phases: resolve monitor IDs, bulk insert samples, update monitor latest state, update client last_synced_at_ms. Dedup via INSERT OR IGNORE.
 
 ### Route Handler Status Code Logic
 - **File**: `server/api/ping/ingest.post.ts`
-- **Pattern**: `sendResponse()` helper uses `setResponseStatus(event, statusCode)` to set HTTP status code without interfering with body return. Status code determined by result composition:
-  - 201: all accepted (no dupes, no rejected)
-  - 200: all dupes or all rejected
-  - 207: mixed (some accepted + some duplicate/rejected)
-- **Error shape**: `createError({ statusCode, statusMessage, data: { error, code } })` — consistent with F3 API contract.
-
-### Mock DB Pattern for Tests
-- **File**: `server/utils/ping-ingest.test.ts`
-- **Pattern**: Mock `getDb()` to return an object with `prepare(sql)` dispatching based on SQL string matching. Uses `vi.fn((sql) => { if (sql.includes("INSERT INTO monitors")) ... })` to return the right mock statement. Transaction mock: `transaction: vi.fn((fn) => () => fn())` — runs the function synchronously without actual transaction wrapper.
-- **Key**: This avoids the better-sqlite3 segfault in Vitest forked workers entirely.
+- **Pattern**: 201 (all accepted), 200 (all dupes or all rejected), 207 (mixed). `sendResponse()` helper with `setResponseStatus()`.
 
 ## Quality Classifier Patterns (M1-T10)
 
 ### Quality State Constants Pattern
 - **File**: `server/utils/quality-states.ts`
-- **Pattern**: Dedicated constants module for classification thresholds. All magic numbers extracted to named constants (`QUALITY_WINDOW_MS`, `QUALITY_MIN_SAMPLES`, `QUALITY_VERY_HIGH_MAX_LATENCY`, etc.). Includes `mapQualityState()` function for safe string-to-typed conversion with legacy fallback. `QUALITY_COLORS` record maps each state to a Tailwind-compatible hex color.
-- **Rationale**: Centralized configuration makes thresholds easy to tune. Single source of truth for both classifier and UI color mapping.
+- **Pattern**: Dedicated constants module with named exports. `mapQualityState()` for safe string-to-typed conversion. `QUALITY_COLORS` record for UI color mapping.
 
 ### Classification Engine Pattern (First-Match-Wins)
 - **File**: `server/utils/quality-classifier.ts`
-- **Pattern**: `classifyMonitor()` uses a single aggregate query (window stats + current quality_state) to compute metrics, then applies a deterministic first-match-wins decision chain: disconnected → warmingUp → unstable → veryHigh → high → medium → low. Two queries total: (1) aggregated window stats + current state, (2) last sample time for disconnected detection.
-- **Metrics computed inline**: packet_loss, avg_latency, coefficient of variation (CV = stddev/mean) using the identity `variance = E[X²] - E[X]²`.
-- **Persist**: Updates `quality_state`, `quality_state_updated_at`, and `updated_at` on the monitor row in a single UPDATE.
-- **Key insight**: Reading `current_quality_state` in the same query as the aggregate stats avoids a redundant read when batching (classifyMonitorsBatch uses it to detect changes without re-querying).
+- **Pattern**: `classifyMonitor()` uses single aggregate query + ordered decision chain: disconnected → warmingUp → unstable → veryHigh → high → medium → low.
 
 ### Batch Classification with Change Detection
 - **File**: `server/utils/quality-classifier.ts` → `classifyMonitorsBatch()`
-- **Pattern**: Iterates over monitor IDs, classifies each one, and returns a `Map<monitorId, QualityState>` of only monitors whose state actually changed. `ClassifyResultWithDiff` extends `ClassifyResult` with `previousState` and `stateChanged` flags.
-- **Error handling**: Per-monitor try/catch ensures one failed classification doesn't stop the batch. Failed classifications are logged but don't propagate.
-- **Logging**: `info()` for state changes (includes new/old state, metrics), `debug()` for unchanged states.
+- **Pattern**: Returns `Map<monitorId, QualityState>` of only changed monitors. Per-monitor try/catch for fault isolation.
 
 ### Background Sweep Plugin Pattern
 - **File**: `server/plugins/quality-sweep.ts`
-- **Pattern**: `defineNitroPlugin` with `setInterval` for periodic background work. Reads `QUALITY_SWEEP_INTERVAL_MS` env var (default 60s). Queries for monitors with recent samples (last 10 min) to avoid classifying dead monitors. Uses `classifyMonitorsBatch()` and logs changes on completion.
-- **Graceful shutdown**: Returns cleanup function that clears the interval timer.
-- **Input validation**: Validates `Number.isFinite()` and `> 0` on interval value, skips plugin with info log if invalid.
+- **Pattern**: `defineNitroPlugin` with `setInterval`. Queries monitors with recent samples only. Env var validated with `Number.isFinite()`.
 
-### Post-Ingest Classification Trigger
-- **File**: `server/utils/ping-ingest.ts`
-- **Pattern**: After the transactional ingest commits, `classifyMonitorsBatch()` is called with the affected monitor IDs. Classification runs in a try/catch so failure never causes the ingest to fail (ingest is the critical path; classification is best-effort).
-- **Key**: Classification runs AFTER the transaction commits (outside `db.transaction()`), so it sees the newly inserted samples.
+## CTE + ROW_NUMBER Pattern (M1-T7)
+- **Pattern**: `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ... DESC)` to fetch latest row per entity, then LEFT JOIN. Single query, no N+1. NULL-safe with COALESCE for sort ordering.
 
-### Quality State in WebSocket Broadcast (F12)
-- **File**: `server/ws/ping.ts`
-- **Pattern**: `SampleMessage` now includes `qualityState: QualityState` field. `broadcastSample()` accepts an optional `qualityState` parameter (defaults to `"warmingUp"`). Snapshot includes `qualityState` from monitor row via `mapQualityState()`.
-- **Type safety**: `mapQualityState()` in `quality-states.ts` safely converts any string to a valid `QualityState`, mapping legacy values (`good`, `degraded`, `poor`) to `"warmingUp"`.
+## History Aggregation Pattern (M1-T8)
+- **Pattern**: SQL GROUP BY on timestamp-truncated buckets. Application-side quality classification and down-sampling via bucket size adjustment.
+
+## WebSocket Live Broadcast Pattern (M1-T9 / M2-T5)
+- **Subscription map**: `Map<number, Set<WebSocketType>>` keyed by monitor_id
+- **Message protocol**: JSON with `type` discriminator (subscribe, unsubscribe, subscribed, unsubscribed, snapshot, sample, error)
+- **Snapshot on subscribe**: Last 100 samples, oldest-first order
+- **Broadcast from ingest**: `broadcastSample()` exported from `server/ws/ping.ts`, called by ingest endpoint
+- **Frontend composable**: `useWebSocket()` with auto-reconnect, connection state reactivity
+
+## Rate Limiting Pattern (M1-T12)
+- **Pattern**: In-memory sliding window rate limiter using `Map<string, RateLimitEntry>` with LRU eviction. Different limits for ingest (100/min) vs other endpoints (60/min). Nitro middleware auto-applied to `/api/*` paths.
+
+## Client Page Patterns (M2-T6)
+- **Client overview**: `app/pages/clients/[slug]/index.vue` — displays client identity, monitors list, sync status
+- **Client settings**: `app/pages/clients/[slug]/settings.vue` — sync configuration form with PUT endpoint
+- **Components**: `ClientInfo`, `ClientMonitors`, `SyncStatusIndicator`, `SyncSettingsForm` — all composable, reusable
+
+## Inline Name Editing Pattern (M2-T7)
+- **File**: `app/components/sidebars/ClientGroup.vue`
+- **Pattern**: Click-to-edit inline name field with blur/enter to save, escape to cancel. Optimistic update with rollback on error. `PUT /api/clients/[slug]/name` endpoint.

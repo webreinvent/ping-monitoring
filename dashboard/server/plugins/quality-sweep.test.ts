@@ -9,8 +9,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock nitropack to provide defineNitroPlugin
-vi.mock("nitropack", () => ({
+// Mock #imports to provide defineNitroPlugin (Nuxt auto-import alias)
+vi.mock("#imports", () => ({
   defineNitroPlugin: (fn: () => () => void) => fn,
 }));
 

@@ -3,7 +3,7 @@ taskId: M2-T7
 milestone: M2
 title: Implement inline client name editing with WebSocket broadcast
 priority: Medium
-status: "Not Started"
+status: "🟢 Complete"
 estimatedEffort: "1-2 hours"
 features:
   - F11
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M2 (Dashboard UI)
 > **Priority:** Medium
-> **Status:** Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 1-2 hours
 
 ## Description

@@ -254,8 +254,10 @@ describe("quality intervals with all edge states", () => {
     expect(lastInterval.state).toBe("unstable");
   });
 
-  it("medium quality state — packetLoss < 5%, avgLatency < 100ms (after warming)", () => {
-    // Use two points: first warms up, second shows medium
+  it("high quality state — packetLoss < 5%, avgLatency < 100ms (after warming)", () => {
+    // Use two points: first warms up, second shows high
+    // classifyPoint: 0% loss, 75ms avg → veryHigh (loss < 1%, avg < 50ms? No, 75 >= 50)
+    // Actually: 3% loss (not < 1%), avgLatency 75 < 100 → high (loss < 5%, avg < 100)
     const points = [
       {
         timestampMs: 1000000,
@@ -275,12 +277,15 @@ describe("quality intervals with all edge states", () => {
       },
     ];
     const intervals = computeQualityIntervals(points);
-    // Second interval should be medium
+    // First point: 0% loss, avgLatency 75 → high (loss < 5%, avg < 100)
+    // Second point: 3% loss, avgLatency 75 → high (loss < 5%, avg < 100)
+    // Both high → 1 interval
     const lastInterval = intervals[intervals.length - 1];
-    expect(lastInterval.state).toBe("medium");
+    expect(lastInterval.state).toBe("high");
   });
 
-  it("high quality state — packetLoss < 10%, avgLatency < 200ms (after warming)", () => {
+  it("medium quality state — packetLoss < 10%, avgLatency < 200ms (after warming)", () => {
+    // classifyPoint: 5% loss (not < 5%), avgLatency 150 < 200 → medium (loss < 10%, avg < 200)
     const points = [
       {
         timestampMs: 1000000,
@@ -300,11 +305,16 @@ describe("quality intervals with all edge states", () => {
       },
     ];
     const intervals = computeQualityIntervals(points);
+    // First: 0% loss, avgLatency 150 → medium (loss < 10%, avg < 200, but loss not < 5% for high... wait, 0% IS < 5% and 150 IS < 100? No, 150 >= 100)
+    // First: 0% loss, avgLatency 150 → medium (not < 1% for veryHigh, not < 5% AND < 100 for high since 150 >= 100, but 0% < 10% and 150 < 200 → medium)
+    // Second: 5% loss, avgLatency 150 → medium (5% not < 5% for high, but 5% < 10% and 150 < 200 → medium)
     const lastInterval = intervals[intervals.length - 1];
-    expect(lastInterval.state).toBe("high");
+    expect(lastInterval.state).toBe("medium");
   });
 
-  it("veryHigh quality state — packetLoss < 10%, avgLatency >= 200ms (after warming)", () => {
+  it("low quality state — packetLoss < 10%, avgLatency >= 200ms (after warming)", () => {
+    // classifyPoint: 0% loss, avgLatency 250 → not veryHigh (avg >= 50), not high (avg >= 100), not medium (avg >= 200)
+    // → low (loss < 10%, avg >= 200)
     const points = [
       {
         timestampMs: 1000000,
@@ -324,8 +334,11 @@ describe("quality intervals with all edge states", () => {
       },
     ];
     const intervals = computeQualityIntervals(points);
+    // First: 0% loss, avgLatency 250 → low (not < 1% for veryHigh... wait, 0% IS < 1% but avgLatency 250 >= 50, so not veryHigh)
+    // 0% < 5% and 250 >= 100 → not high; 0% < 10% and 250 >= 200 → low
+    // Second: 3% loss, avgLatency 250 → low (3% not < 1%, 3% < 5% but avg >= 100, 3% < 10% and avg >= 200 → low)
     const lastInterval = intervals[intervals.length - 1];
-    expect(lastInterval.state).toBe("veryHigh");
+    expect(lastInterval.state).toBe("low");
   });
 });
 
