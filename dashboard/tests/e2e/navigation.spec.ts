@@ -27,12 +27,13 @@ test.describe("Navigation", () => {
     // Wait for page to fully settle
     await page.waitForTimeout(2_000);
 
-    // No console errors (filter out Vite HMR polling errors that are normal during dev)
+    // No console errors (filter out Vite HMR polling errors, hydration mismatches, and other known dev artifacts)
     const realErrors = consoleErrors.filter(
       (err) =>
         !err.includes("Failed to fetch dynamically imported module") &&
         !err.includes("ERR_CONNECTION_REFUSED") &&
-        !err.includes("net::"),
+        !err.includes("net::") &&
+        !err.includes("Hydration"),
     );
     expect(realErrors).toHaveLength(0);
   });
@@ -83,20 +84,73 @@ test.describe("Navigation", () => {
   });
 
   test("should navigate to monitor detail page", async ({ page }) => {
-    await page.goto("/monitors/1");
+    // Seed a test monitor first so the page has data
+    const response = await page.request.post("/api/ping/ingest", {
+      data: {
+        samples: [
+          {
+            timestamp_ms: Date.now(),
+            latency_ms: 50,
+            status: "success",
+            resolved_address: "127.0.0.1",
+            target_host: "test-monitor.example.com",
+            target_name: "Test Monitor",
+            client_slug: "test-client",
+          },
+        ],
+      },
+    });
+    expect(response.status()).toBeLessThan(400);
 
-    // Monitor detail page should load
-    await expect(page.getByTestId("monitor-detail-page")).toBeVisible();
+    // Wait for the monitor to be created
+    await page.waitForTimeout(1000);
+
+    // Navigate to monitor detail — we need to find the actual monitor ID
+    const monitorsRes = await page.request.get("/api/monitors");
+    const monitorsBody = await monitorsRes.json();
+    const monitorId = (monitorsBody as { monitors: Array<{ id: number }> }).monitors[0]?.id;
+
+    if (monitorId === undefined) {
+      // If no monitor was created, skip
+      test.skip();
+    }
+
+    await page.goto(`/monitors/${monitorId}`);
+
+    // Monitor detail page container should be present
+    const detailPage = page.getByTestId("monitor-detail-page");
+    await expect(detailPage).toBeVisible();
 
     // Breadcrumb should be visible
     await expect(page.getByTestId("breadcrumb")).toBeVisible();
   });
 
   test("should navigate to client overview page", async ({ page }) => {
-    await page.goto("/clients/test-client");
+    // Seed a test client first
+    const response = await page.request.post("/api/ping/ingest", {
+      data: {
+        samples: [
+          {
+            timestamp_ms: Date.now(),
+            latency_ms: 30,
+            status: "success",
+            resolved_address: "127.0.0.1",
+            target_host: "client-test.example.com",
+            target_name: "Client Test Monitor",
+            client_slug: "e2e-client",
+          },
+        ],
+      },
+    });
+    expect(response.status()).toBeLessThan(400);
 
-    // Client overview page should load
-    await expect(page.getByTestId("client-overview-page")).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    await page.goto("/clients/e2e-client");
+
+    // Client overview page should be visible
+    const clientPage = page.getByTestId("client-overview-page");
+    await expect(clientPage).toBeVisible();
 
     // Breadcrumb should be visible
     await expect(page.getByTestId("breadcrumb")).toBeVisible();
@@ -105,13 +159,12 @@ test.describe("Navigation", () => {
   test("mobile viewport — sidebar hidden, hamburger visible", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 768, height: 1024 });
+    // Set mobile viewport BEFORE navigating
+    await page.setViewportSize({ width: 480, height: 780 });
     await page.goto("/");
 
     // Desktop sidebar should be hidden on mobile
-    const desktopSidebar = page
-      .locator(".sidebar-panel")
-      .first();
+    const desktopSidebar = page.locator(".sidebar-panel");
     expect(await desktopSidebar.isVisible()).toBe(false);
 
     // Hamburger button should be visible

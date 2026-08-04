@@ -29,7 +29,7 @@ Bootstrapping step: load cached knowledge, create the feature branch, and read t
 - Parallelize all independent reads. Mark sequential dependencies explicitly.
 - IF any referenced file doesn't exist, note the gap and proceed — do not block.
 - Write down key findings inline — file paths, acceptance criteria, constraints. This survives context compaction.
-- Use `TodoWrite` to track progress through the 9 workflow steps below.
+- Use `TodoWrite` to track progress through the 10 workflow steps below.
 
 ## Scope Boundaries
 
@@ -97,7 +97,12 @@ Search memory for `"LNPM Cloud Dashboard"` entries. Load all cached findings fro
 
 **Error recovery:** IF `memory` MCP server is unavailable, proceed without cached context. Note this limitation.
 
-### Step 2: Read Project Context Files
+### Step 2: Analyze Task Scope (if needed)
+
+IF the task scope is ambiguous or requires complex decomposition:
+- **Invoke `sequential-thinking` MCP server** to break down the problem, identify dependencies, and clarify scope before reading requirements.
+
+### Step 3: Read Project Context Files
 
 Read these files in parallel:
 - `{{MILESTONES_DIR}}/project-dashboard.md` — overall project progress, active milestones (M1 Backend Platform, M2 Dashboard UI), priorities
@@ -109,7 +114,7 @@ Read these files in parallel:
 
 **Error recovery:** IF multiple files are missing, list all gaps and determine if there is enough context to continue.
 
-### Step 3: Identify Task ID
+### Step 4: Identify Task ID
 
 Sequential — depends on Step 2 results:
 - Identify `{{TASK_ID}}` — the next incomplete task from project-dashboard.md
@@ -118,7 +123,7 @@ Sequential — depends on Step 2 results:
 
 **Gate:** `{{TASK_ID}}` must be determined before proceeding. IF auto-detection fails, ask the user.
 
-### Step 4: Create Feature Branch
+### Step 5: Create Feature Branch
 
 1. **Checkout `develop`** — Switch to `develop` and pull latest from remote to ensure it is up-to-date.
 2. **Determine branch name** — Start with `feature/{{TASK_ID}}-short-description`.
@@ -133,7 +138,7 @@ Sequential — depends on Step 2 results:
 
 **Error recovery:** IF `develop` doesn't exist, create it from `main` first, then proceed.
 
-### Step 5: Read Task Scope
+### Step 6: Read Task Scope
 
 Read the scope document for `{{TASK_ID}}`:
 - `{{MILESTONES_DIR}}/milestone-01-backend-platform/task-{{TASK_ID}}-scope.md` or equivalent milestone directory
@@ -143,7 +148,7 @@ Read the scope document for `{{TASK_ID}}`:
 
 **Error recovery:** IF both the task scope file and project dashboard are missing, report as Blocked — cannot determine scope.
 
-### Step 6: Read Related Requirements
+### Step 7: Read Related Requirements
 
 Read in parallel:
 - Related requirements in `requirements/features/` — feature specs
@@ -153,13 +158,13 @@ Read in parallel:
 
 **Error recovery:** IF requirement files are missing, note which ones and proceed with available context.
 
-### Step 7: Map Affected Files
+### Step 8: Map Affected Files
 
 List files in `dashboard/` and its subdirectories (`server/`, `app/`, `shared/`). Summarize which files will be created, modified, or deleted. The dashboard lives in the `dashboard/` subdirectory — never modify the existing `src/` (Tauri desktop app) or `src-tauri/` directories unless the task explicitly requires it.
 
 **Compaction survival:** Write the file list inline (create/modify/delete) so it survives context compaction.
 
-### Step 8: Verify Directories & Git State
+### Step 9: Verify Directories & Git State
 
 Confirm these directories exist: `{{MILESTONES_DIR}}`, `{{DOCS_DIR}}`, `{{REQUIREMENTS_DIR}}`, `dashboard/`.
 
@@ -172,7 +177,7 @@ Check the current branch, recent commits, and any uncommitted changes. Note:
 
 **Error recovery:** IF git state shows uncommitted changes from a previous session, note them as a potential interrupted task.
 
-### Step 9: Recover Interrupted Tasks
+### Step 10: Recover Interrupted Tasks
 
 IF memory contains an interrupted task entry, load the implementation plan and identify the last completed step.
 

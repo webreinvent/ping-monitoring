@@ -99,6 +99,8 @@ ping-monitoring/
 
 #### Step B1: Determine Scope
 
+**Invoke `sequential-thinking` MCP server** if the task scope is large — categorize what was implemented (API, components, utils, types) to determine documentation targets.
+
 Review what was implemented during this task. IF this task introduced new components, composables, utilities, API patterns, or architectural decisions, identify documentation targets:
 
 - New API endpoints — document request/response shapes, error codes

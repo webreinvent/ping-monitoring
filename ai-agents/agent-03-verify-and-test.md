@@ -26,7 +26,7 @@ Quality assurance phase: review all implemented code, verify every acceptance cr
 - Invoke MCP servers before executing any workflow step that requires them.
 - Write down key findings inline — file paths, patterns, constraints. This survives context compaction.
 - Errors are not a reason to skip — they are the work.
-- Use `TodoWrite` to track progress through the 4 workflow phases below.
+- Use `TodoWrite` to track progress through the 5 workflow phases below (A through E).
 
 ## Scope Boundaries
 
@@ -162,15 +162,12 @@ Review against:
 
 #### Step B3: UAT Sweep
 
-For each acceptance criterion:
-1. Navigate to URL via Playwright MCP
-2. Take accessibility snapshot
-3. Drive the flow — click, fill, select, submit
-4. Capture screenshot: `.vaahagents/screenshots/<flow>.png`
-5. Check console — zero errors
-6. Check network — zero 4xx/5xx
+Work through each acceptance criterion:
+- Navigate to the URL via Playwright MCP and take an accessibility snapshot.
+- Drive the flow — click, fill, select, submit — then capture a screenshot at `.vaahagents/screenshots/<flow>.png`.
+- Check console for errors and network for 4xx/5xx responses.
 
-Cover:
+Verify these flows at minimum:
 - **Dashboard load** — homepage loads, sidebar renders, chart renders
 - **Monitors list** — monitors appear in sidebar, grouped by client
 - **Per-monitor view** — clicking a monitor shows detail view with chart and metrics
@@ -184,30 +181,34 @@ Cover:
 
 ### Phase C: Fix Bugs
 
-After UAT sweep, enter the bug fix loop:
+After the UAT sweep, address every bug and failing criterion:
 
-WHILE any criterion unverified OR errors detected:
-1. Document the bug — expected vs actual, reproduction steps
-2. Diagnose root cause
-3. Implement fix — minimal change, run typecheck after
-4. Regression test — re-run affected flow
-5. Cascade check — IF shared code touched, re-run ALL flows
+**Invoke `sequential-thinking` MCP server** for complex debugging — decompose the root cause, map the data flow, and identify the fix point.
+
+For each bug:
+- Document it — expected vs actual, reproduction steps.
+- **Invoke `nuxt` skill** if it relates to Nuxt 4 / Nitro specific behavior (SSR, file-based routing, server routes).
+- Diagnose the root cause, then implement a minimal fix and run typecheck.
+- Regression test — re-run the affected flow.
+- Cascade check — if shared code is touched, re-run all flows.
+
+Continue iterating until every acceptance criterion is verified, console errors are zero, network errors are zero, all screenshots are captured, and no open bugs remain.
 
 **Error recovery:**
-- IF fix introduces new error, revert and re-diagnose. Never layer fixes.
-- IF unable to find root cause after 3 attempts, escalate to user.
+- If a fix introduces a new error, revert and re-diagnose. Never layer fixes.
+- If you cannot find the root cause after 3 attempts, escalate to the user.
 
 **Gate:** Every acceptance criterion verified, zero console errors, zero network errors, all screenshots captured, no open bugs.
 
 ### Phase D: Unit Tests
 
-#### Step C1: Check & Configure Test Infrastructure
+#### Step D1: Check & Configure Test Infrastructure
 
-**IF the dashboard directory does not have a configured test runner:**
-1. Install Vitest `^4.1.10` and any required plugins
-2. Create `dashboard/vitest.config.ts` or add to `dashboard/nuxt.config.ts`
-3. Set up test utilities: mock factories for database, fixtures for ping samples, helpers for API testing
-4. Verify: `cd dashboard && pnpm test -- --run`
+If the dashboard directory does not have a configured test runner, set one up:
+1. Install Vitest `^4.1.10` and any required plugins.
+2. Create `dashboard/vitest.config.ts` or add to `dashboard/nuxt.config.ts`.
+3. Set up test utilities: mock factories for database, fixtures for ping samples, helpers for API testing.
+4. Verify: `cd dashboard && pnpm test -- --run`.
 
 **Test patterns to follow:**
 - Vitest with `describe`/`test` blocks
@@ -217,7 +218,7 @@ WHILE any criterion unverified OR errors detected:
 
 **Gate:** Test infrastructure configured and verified before writing tests.
 
-#### Step C2: Write Integration Tests
+#### Step D2: Write Integration Tests
 
 For each API endpoint or service:
 - Create or extend a test file co-located with source
@@ -233,7 +234,7 @@ Test targets:
 - `server/utils/cache.ts` — LRU cache operations
 - API routes — test request/response shapes
 
-#### Step C3: Write Unit Tests
+#### Step D3: Write Unit Tests
 
 Write for:
 - Pure business-logic functions with non-trivial branches
@@ -242,25 +243,25 @@ Write for:
 - Edge-case handling that integration tests cannot exercise
 - State machines, transition logic, status guards
 
-#### Step C4: Run Tests
+#### Step D4: Run Tests
 
 Run the full test suite: `cd dashboard && pnpm test -- --run`. All tests must pass.
 
 **Gate:** All tests pass with zero failures. Typecheck and lint pass.
 
-### Phase D: E2E Tests
+### Phase E: E2E Tests
 
-#### Step D1: Check & Configure Playwright Infrastructure
+#### Step E1: Check & Configure Playwright Infrastructure
 
-**IF Playwright test infrastructure does not exist in the dashboard directory:**
-1. Install Playwright test runner (`@playwright/test`)
-2. Create `dashboard/playwright.config.ts` with Chromium and base URL `http://localhost:3000`
-3. Set up global fixtures: API test data factories
-4. Verify: `cd dashboard && npx playwright test --list`
+If Playwright test infrastructure does not exist in the dashboard directory, set it up:
+1. Install Playwright test runner (`@playwright/test`).
+2. Create `dashboard/playwright.config.ts` with Chromium and base URL `http://localhost:3000`.
+3. Set up global fixtures: API test data factories.
+4. Verify: `cd dashboard && npx playwright test --list`.
 
 **Gate:** Playwright infrastructure verified before proceeding.
 
-#### Step D2: Write E2E Tests
+#### Step E2: Write E2E Tests
 
 For each acceptance criterion with frontend UI:
 - Create `.spec.ts` file in `dashboard/tests/e2e/`
@@ -277,13 +278,13 @@ E2E test scenarios:
 - **API health** — verify `/api/health` returns 200 with expected shape
 - **WebSocket connection** — verify WS connection at `/ws/ping`
 
-#### Step D3: Run E2E Tests
+#### Step E3: Run E2E Tests
 
 Run E2E tests. Run **twice** to confirm determinism. Fix any flakes — never `test.skip` or `test.fixme`.
 
-#### Step D4: Regression Check
+#### Step E4: Regression Check
 
-Run all unit tests from Phase C — confirm they still pass.
+Run all unit tests from Phase D — confirm they still pass.
 
 **Gate:** All E2E tests pass twice (deterministic). Unit tests still pass.
 

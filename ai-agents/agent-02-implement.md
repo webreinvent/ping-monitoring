@@ -111,12 +111,22 @@ Write the plan sequence inline so it survives compaction: layer order, file coun
 
 **Error recovery:** IF plan cannot be loaded from memory, check for fallback file at `{{AGENT_OUTPUT_DIR}}/plan-{{TASK_ID}}.md`.
 
-### Step 3: Project Setup
+### Step 3: Set Up Node.js Environment
+
+**Invoke the Bash tool** to set up NVM and switch to Node 22:
+```bash
+source ~/.nvm/nvm.sh && nvm use 22
+```
+Verify `node --version` is **22.19.0+** or **24.11.0+**. If older, install: `nvm install 22 && nvm use 22`.
+**Warning:** Homebrew's Node may take PATH priority over NVM. Always verify.
+
+**Gate:** Node.js version confirmed before proceeding.
+
+### Step 4: Project Setup
+
+**Invoke `nuxt` skill** before writing Nuxt 4 / Nitro code.
 
 Create `dashboard/package.json`, `dashboard/nuxt.config.ts`, `dashboard/tsconfig.json`.
-
-**Runtime requirements:**
-- **Node.js** — Nuxt 4.5.1 requires **Node `^22.19.0 || ^24.11.0 || >=26.0.0`**. Use NVM (`source ~/.nvm/nvm.sh && nvm use 22`), NOT Homebrew Node. Verify with `node --version`.
 
 After completing: run typecheck. Save progress to memory.
 
@@ -124,7 +134,9 @@ After completing: run typecheck. Save progress to memory.
 
 **Error recovery:** IF `better-sqlite3` native module fails, rebuild: `rm -rf node_modules/better-sqlite3 && npm install better-sqlite3@11.7.0 --build-from-source`.
 
-### Step 4: Shared Types
+### Step 5: Shared Types
+
+**Invoke `sequential-thinking` MCP server** if type adaptation from `src/types.ts` requires complex decisions.
 
 Create `dashboard/shared/types.ts` (adapt from `src/types.ts`).
 
@@ -132,7 +144,7 @@ After completing: run typecheck. Save progress to memory.
 
 **Gate:** Types defined, no type errors.
 
-### Step 5: Data Layer
+### Step 6: Data Layer
 
 Create `dashboard/schema/migrations/*.sql` and `dashboard/server/plugins/database.ts`.
 
@@ -140,7 +152,7 @@ After completing: run typecheck. Save progress to memory.
 
 **Gate:** Schema and database plugin work, typecheck passes.
 
-### Step 6: Business Logic
+### Step 7: Business Logic
 
 Create `dashboard/server/utils/` files: db.ts, client.ts, ping-validation.ts, ping-ingest.ts, quality-classifier.ts, cache.ts, rate-limiter.ts.
 
@@ -148,7 +160,9 @@ Independent utility files can be created in parallel. After completing: run type
 
 **Gate:** All business logic utilities pass typecheck.
 
-### Step 7: API Layer
+### Step 8: API Layer
+
+**Invoke `nuxt` skill** before writing Nitro API route code.
 
 Create `dashboard/server/api/` routes: health.get.ts, ping/ingest.post.ts, monitors.get.ts, monitors/[id].get.ts, clients/[slug].get.ts, clients/[slug].name.put.ts.
 
@@ -156,7 +170,7 @@ Independent route files can be created in parallel. After completing: run typech
 
 **Gate:** All API routes pass typecheck, respond correctly.
 
-### Step 8: WebSocket & Middleware
+### Step 9: WebSocket & Middleware
 
 Create `dashboard/server/ws/ping.ts` and `dashboard/server/middleware/rate-limit.ts`.
 
@@ -164,7 +178,9 @@ After completing: run typecheck. Save progress to memory.
 
 **Gate:** WebSocket handler and middleware pass typecheck.
 
-### Step 9: Frontend State
+### Step 10: Frontend State
+
+**Invoke `nuxt` skill** before writing Vue 3 composable code.
 
 Create `dashboard/app/composables/`: useMonitors.ts, useWebSocket.ts, useChart.ts.
 
@@ -172,7 +188,9 @@ After completing: run typecheck. Save progress to memory.
 
 **Gate:** All composables pass typecheck, reactive state works.
 
-### Step 10: Frontend Components & Pages
+### Step 11: Frontend Components & Pages
+
+**Invoke `nuxt` skill** before writing Vue 3 component code.
 
 Create `dashboard/app/components/` (Layout, Sidebar, Chart, Metrics, Modals) and `dashboard/app/pages/` (index.vue, settings.vue).
 
@@ -180,7 +198,7 @@ Independent component files can be created in parallel. Pages depend on componen
 
 **Gate:** All components and pages render without errors.
 
-### Step 11: Inline Tests
+### Step 12: Inline Tests
 
 Write tests as you go (co-located `*.test.ts` files). Run the test suite after all implementation layers are complete.
 
@@ -188,7 +206,7 @@ Write tests as you go (co-located `*.test.ts` files). Run the test suite after a
 
 **Error recovery:** IF any layer fails typecheck after 3 attempts, document the failure, what was tried, and mark as Blocked — do not proceed to the next layer.
 
-### Step 12: Review Diff
+### Step 13: Review Diff
 
 **Invoke `git` MCP server** (`git diff`) to review all changes. Confirm only intended changes are present. Verify no changes to `src/` or `src-tauri/` unless required.
 

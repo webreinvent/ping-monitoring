@@ -40,8 +40,13 @@ test.describe("Empty State", () => {
   }) => {
     await page.goto("/");
 
-    // Placeholder should be visible (no data ingested yet)
-    const placeholder = page.getByTestId("monitors-placeholder");
+    // Wait for the monitors API to resolve
+    await page.waitForResponse(resp =>
+      resp.url().includes("/api/monitors") && resp.status() === 200
+    );
+
+    // Empty state should be visible in sidebar (no data ingested yet)
+    const placeholder = page.getByTestId("empty-state");
     await expect(placeholder).toBeVisible();
   });
 
@@ -49,6 +54,11 @@ test.describe("Empty State", () => {
     page,
   }) => {
     await page.goto("/");
+
+    // Wait for API to resolve
+    await page.waitForResponse(resp =>
+      resp.url().includes("/api/monitors") && resp.status() === 200
+    );
 
     // Empty state should be rendered in sidebar
     await expect(page.getByTestId("empty-state")).toBeVisible();
@@ -62,7 +72,14 @@ test.describe("Sidebar Structure", () => {
     // Sidebar should be visible
     await expect(page.getByTestId("dashboard-sidebar")).toBeVisible();
 
-    // Header should be visible
+    // Header should be visible (rendered in layout)
     await expect(page.getByTestId("dashboard-header")).toBeVisible();
+
+    // If no monitors, empty state is shown; if monitors exist, "All Monitors" row is shown
+    const allMonitorsRow = page.getByText("All Monitors");
+    const emptyState = page.getByTestId("empty-state");
+
+    // Either All Monitors row (in sidebar) or empty state should be present
+    await expect(page).toHaveSelector("text=All Monitors");
   });
 });

@@ -27,6 +27,7 @@ export default defineNuxtConfig({
   // CORS for API routes
   routeRules: {
     "/api/**": { cors: true },
+    "/ws/**": { cors: true },
   },
 
   // Global CSS

@@ -34,7 +34,9 @@ test.describe("API Health", () => {
     expect(typeof body.monitor_count).toBe("number");
     expect(typeof body.sample_count).toBe("number");
     // last_ingest_time is string or null
-    expect(body.last_ingest_time).toBeNull().or.toBeString();
+    if (body.last_ingest_time !== null) {
+      expect(typeof body.last_ingest_time).toBe("string");
+    }
   });
 
   test("should have CORS headers on API response", async ({ request }) => {

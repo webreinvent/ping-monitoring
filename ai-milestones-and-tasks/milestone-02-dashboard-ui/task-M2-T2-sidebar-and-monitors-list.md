@@ -30,19 +30,19 @@ Build the `useMonitors` composable for fetching and caching the monitors list, a
 
 ## Acceptance Criteria
 
-- [ ] `useMonitors` fetches and groups monitors by client
-- [ ] Sidebar renders client groups with monitors
-- [ ] Client groups are collapsible
-- [ ] MonitorRow shows status dot, name, and toggle
-- [ ] Clicking monitor navigates to detail view
-- [ ] Status dot colors match spec (green/yellow/red/gray)
-- [ ] Toggle shows/hides monitor in all-monitors chart
+- [x] `useMonitors` fetches and groups monitors by client
+- [x] Sidebar renders client groups with monitors
+- [x] Client groups are collapsible
+- [x] MonitorRow shows status dot, name, and toggle
+- [x] Clicking monitor navigates to detail view
+- [x] Status dot colors match spec (green/yellow/red/gray)
+- [x] Toggle shows/hides monitor in all-monitors chart
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
