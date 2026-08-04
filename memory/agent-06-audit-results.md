@@ -1,106 +1,61 @@
 ---
 name: agent-06-audit-results
-description: Agent 06 audit results — principles audit, progress report, risks for LNPM Cloud Dashboard implementation plan
+description: Agent 06 audit results for M2-T3 implementation plan — all-monitors chart completion
 metadata:
   type: project
-  hook: Audit findings from Agent 06 — plan review against SOLID/DRY/KISS/YAGNI
+  task: M2-T3
+  hook: Audit findings from Agent 06 — plan review against SOLID/DRY/KISS/YAGNI for M2-T3
 ---
 
-## Audit Results
+## Agent 06: Audit & Present Plan — Results
+
+### Status: Complete
+
+### Progress Report
+
+| Agent | Title                    | Status | Notes |
+|-------|--------------------------|--------|-------|
+| 00 | Load Session Context     | ✅ Done | Loaded all project context, identified 2 AC gaps |
+| 01 | Create Feature Branch    | ✅ Done | Created `feature/M2-T3-all-monitors-chart` |
+| 02 | Understand Task Scope    | ✅ Done | Mapped all affected files, verified 5/7 AC done |
+| 03 | Analyze Related Code     | ✅ Done | 22+ files analyzed, documented patterns & conventions |
+| 04 | Plan UI/UX Design        | ✅ Done | 3 design skills invoked, complete UI/UX plan |
+| 05 | Create Implementation Plan | ✅ Done | 7-step plan, Incremental approach chosen |
+| 06 | Audit & Present Plan     | 🔄 In Progress | Audit complete, presenting to user |
 
 ### Principles Audit
 
 | Principle | Status | Findings |
 |-----------|--------|----------|
-| **DRY** | ✅ Passed | Shared types in `shared/types.ts` used by both server and client. Composables reuse across components (useMonitors used by Sidebar, Chart, Metrics). No duplicated validation — single `ping-validation.ts` used by ingest engine and API routes. |
-| **KISS** | ✅ Passed | In-memory LRU over Redis (per ADR-003). Composables over Pinia (simpler for this scope). Vanilla CSS over Tailwind (matches desktop app). Native Nitro WebSocket over Socket.io (per ADR-006). No premature abstractions. |
-| **YAGNI** | ✅ Passed | Auth not in scope — public dashboard. Settings dialog deferred. Mobile hamburger menu not in plan (desktop-first scope). Data retention (F10) and quality classifier (F12) are MVP features, not deferred. |
-| **SoC** | ✅ Passed | Clear 3-layer separation: `server/` (API routes, WebSocket, business logic, DB), `app/` (pages, components, composables — presentation), `shared/` (types). Nitro handles data layer, Vue handles presentation layer. |
-| **SRP** | ✅ Passed | Each composable has one responsibility (`useMonitors` = monitor state, `useWebSocket` = connection lifecycle, `useTimeWindow` = range management). Each component renders one visual concern (MetricCard, StatusDot, etc.). Each utility has one purpose (validation, client utils, cache). |
-| **SOLID** | ✅ Passed | No god classes — `ingestBatch` delegates to `validateSample`, `upsertClient`, and LRU cache. Map-based WS subscriptions avoid tight coupling. LRU cache is a concrete class, not an interface (appropriate level of abstraction). |
-| **Abstraction** | ✅ Passed | Right level — `LruCache<K,V>` is generic but concrete. `LatencyChart.vue` is a thin uPlot wrapper. No abstract base classes. No factory patterns where simple function calls suffice. |
-| **Traceability** | ✅ Passed | Every file traces to a feature ID: Phase 2.1 → F2, Phase 3.1 → F3, Phase 3.6 → F13, Phase 4.1 → F2+F3, Phase 4.4 → F11. Dependency graph is explicit with critical path documented. |
-| **Debuggability** | ⚠️ Minor | **Finding 1:** Structured logger exists (`logger.ts` with `LOG_LEVEL` awareness) — good. **Finding 2:** No explicit error boundary components in the plan. **Recommendation:** Add `<ErrorBoundary>` wrapper in `AppShell.vue` — one component, low effort. |
+| **DRY** | ✅ Pass | `useMonitors` composable reused (toggle, isVisible). `getPaletteColor` shared utility. `transformPointsToUPlotSeries` reused. No duplicated logic. |
+| **KISS** | ✅ Pass | Incremental approach — two targeted changes. No new architecture, no new API endpoints, no server changes. Approach B (Rebuild) correctly rejected. |
+| **YAGNI** | ✅ Pass | Only 2 missing AC addressed. No speculative features. Threshold values hardcoded to desktop pattern. No new component files beyond tests. |
+| **SoC** | ✅ Pass | LatencyChart = rendering, AllMonitorsChart = composition, useMonitors = state, CSS = styling. Clean separation. |
+| **SRP** | ✅ Pass | Each component has one responsibility. Each step targets one concern. |
+| **SOLID** | ✅ Pass | Open/Closed (new prop, backward compat), Dependency Inversion (composable abstraction), Interface Segregation (optional props). No god classes, no tight coupling. |
+| **Abstraction** | ✅ Pass | Right level — component-level concerns. No premature abstraction (no generic wrapper, no event bus). |
+| **Traceability** | ✅ Pass | All 7 steps trace to AC: Steps 1+4 → thresholds, Steps 2+3+5 → toggle, Step 6 → tests, Step 7 → verification. |
+| **Debuggability** | ✅ Pass | Computed properties inspectable in DevTools. localStorage persistence debuggable. Tests planned for both features. |
 
-### Violations Found and Resolved
+### Minor Observations (Not Violations)
 
-1. **Debuggability: No error boundary components** — The plan has 25+ Vue components but no `<ErrorBoundary>` wrapper. **Recommendation:** Wrap `AppShell.vue` content with Vue 3's `onErrorCaptured` or `<Suspense>` fallback. Low effort, high value for a monitoring tool.
+1. **Color stability:** When monitors are hidden, palette index must use original position (not filtered index). Documented as a risk with mitigation in the plan.
+2. **Legend UX:** Hidden monitors shown with dimmed state — correct UX, allows re-toggle.
+3. **Threshold colors:** Plan's rgba values match desktop's `barColorThresholds` pattern — correct.
 
-2. **DRY: `schema/index.sql` inconsistency** — The original Agent 05 plan listed `schema/index.sql` as "Create" in Phase 2 (#6) and "Modify" in the file inventory. The updated plan correctly notes it as "Modify" since the file already exists from M1-T1 (placeholder). No code issue — documentation only.
+### File Inventory Verified
 
-3. **YAGNI: `ClientIdentity` type vs. ADR-004** — The current `shared/types.ts` defines `ClientIdentity` with fields `ip`, `os` that don't appear in ADR-004's slug-based identity (`username`, `hostname`, `mac_address`). The plan's Phase 3 types expansion needs to align with ADR-004. **Action:** Ensure the expanded types in Phase 3 match the data model spec.
-
-### File Inventory (Corrected)
-
-**Files to Create: 72** (excluding the 16 files already implemented in M1-T1)
-
-| Layer | Count | Details |
-|-------|-------|---------|
-| Schema Migrations | 5 | 001-005 migration files |
-| Server Utils | 6 | ping-validation, client, ping-ingest, cache, quality-classifier, rate-limiter |
-| Server Middleware | 1 | rate-limit |
-| Server WebSocket Utils | 1 | ws-broadcast |
-| Server Plugins | 1 | websocket plugin (database.ts already done) |
-| API Routes | 5 | ingest, monitors list, monitor history, client get, client name put |
-| CSS/Assets | 6 | global.css + 5 locale files |
-| Composables | 9 | useMonitors, useMonitorHistory, useWebSocket, useChartSeries, useTimeWindow, useDashboardPalette, useI18n, useSidebarWidth, useToast |
-| Layout Components | 3 | AppShell, AppHeader, DashboardPanel |
-| Sidebar Components | 5 | MonitorSidebar, ClientGroup, MonitorRow, AllMonitorsRow, SidebarResizer |
-| Chart Components | 4 | LatencyChart, ChartCard, ChartLegend, ChartTooltip |
-| Metrics Components | 3 | SummaryGrid, MetricCard, StatePill |
-| Shared Components | 7 | StatusDot, TimeRangeSelector, EmptyState, ToggleButton, ToastStack, IconButton, Button |
-| Modal Components | 3 | ModalBase, ClientNameDialog, CustomRangeDialog |
-| Unit Tests | 5 | ping-validation, client, quality-classifier, cache, rate-limiter |
-| Integration Tests | 3 | health, ingest, monitors |
-
-**Files to Modify: 5**
-
-| File | Change |
-|------|--------|
-| `dashboard/shared/types.ts` | Expand with missing types (IngestPayload, MonitorListItem, etc.) |
-| `dashboard/schema/index.sql` | Update with full schema from migrations |
-| `dashboard/server/ws/ping.ts` | Expand stub to full handler |
-| `dashboard/app.vue` | Dark theme CSS, global import |
-| `dashboard/app/pages/index.vue` | Replace placeholder with AppShell |
-
-### Progress Report
-
-| Agent | Title | Status | Notes |
-|-------|-------|--------|-------|
-| 00 | Load Session Context | ✅ Done | Memory files loaded, project context established |
-| 01 | Create Feature Branch | ✅ Done | Branch `feature/M1-T1-setup-nuxt-project` created |
-| 02 | Understand Task Scope | ✅ Done | M1-T1 scope: Nuxt 4 + Nitro project setup |
-| 03 | Analyze Related Code | ✅ Done | Desktop app patterns, ADRs 001-009 reviewed |
-| 04 | Plan UI/UX Design | ✅ Done | 25 components, 9 composables, design system, i18n |
-| 05 | Create Implementation Plan | ✅ Done | 9 phases, 72 create + 5 modify, dependency graph |
-| 06 | Audit & Present Plan | 🔄 In Progress | Audit complete, presenting to user |
+**Modify (3):** LatencyChart.vue, AllMonitorsChart.vue, charts.css — all verified to exist
+**Create (2):** AllMonitorsChart.test.ts, useMonitors.test.ts — new files following Vitest convention
 
 ### Risk Assessment
 
-| Risk | Severity | Mitigation | Status |
-|------|----------|------------|--------|
-| `better-sqlite3` native build fails | High | `pnpm rebuild`; ensure node-gyp deps | Unchanged |
-| Nuxt 4 WebSocket API differences | Medium | Test early in Phase 6; stub already works | Unchanged |
-| uPlot Canvas lifecycle in SSR | Medium | `onMounted` guard, client-only rendering | Unchanged |
-| TypeScript strict mode conflicts | Low | Fix incrementally; typecheck passes for Phase 1 | Unchanged |
-| Migration ordering errors | Medium | `IF NOT EXISTS` guards, sequential numbering | Unchanged |
-| DB file permissions | Low | `mkdirSync` in DB plugin (already implemented) | Unchanged |
-| **Type mismatch in shared/types.ts** | **Low-Medium** | **Current types don't match data model spec (ADR-004)** | **New finding** |
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| uPlot re-renders on series count change | Medium | High | Filter in computed; uPlot setData |
+| Palette color shift when hidden | Low | Medium | Use original index |
+| Threshold/data overlap | Low | Low | drawClear hook ordering |
+| visibleMonitors desync | Low | Medium | Nuxt composables are singletons |
+| Type errors from prop changes | Low | Low | npx nuxi typecheck |
 
-### Overall Assessment
-
-The implementation plan is **well-structured, comprehensive, and follows engineering principles**. The plan correctly:
-
-- Follows the architecture defined in ADRs 001-009
-- Maintains strict separation of concerns (server/app/shared)
-- Uses appropriate complexity (in-memory LRU, composables, vanilla CSS)
-- Defers out-of-scope work (auth, settings dialog, mobile)
-- Traces every item to a feature ID (F1-F14)
-- Identifies parallelizable work and the critical path
-- Has a realistic dependency graph with 8 phases remaining
-
-**Minor recommendations (non-blocking):**
-1. Add an error boundary wrapper in `AppShell.vue` during Phase 9 implementation
-2. Ensure Phase 3 type expansion aligns with ADR-004 and data-models.md (the current `ClientIdentity` type uses `ip`/`os` fields that aren't in the spec)
-
-**Next agent:** Agent 07 (Implement the Task)
+### Plan Verdict: ALL PRINCIPLES PASSED — No violations found.
