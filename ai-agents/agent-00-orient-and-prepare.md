@@ -36,7 +36,7 @@ Bootstrapping step: load cached knowledge, create the feature branch, and read t
 **This agent MUST:**
 - Read memory entries, project documentation, requirements, and milestone tracking
 - Identify the next task ID from project-dashboard.md
-- Create a feature branch from the latest `feature/*` branch
+- Create a feature branch from `develop` (always use `develop` as the base)
 - Read the task definition, related requirements, and documentation
 - Map which files will be affected (created, modified, deleted) in `dashboard/`
 - Summarize acceptance criteria for downstream agents
@@ -120,15 +120,18 @@ Sequential — depends on Step 2 results:
 
 ### Step 4: Create Feature Branch
 
-1. List all local `feature/*` branches sorted by most recent commit
-2. IF no `feature/*` branches exist, fall back to `develop` as the base (note this fallback)
-3. Checkout the latest feature branch, pull latest changes from remote
-4. Create new branch: `feature/{{TASK_ID}}-short-description`
-5. Verify the new branch is active
+1. **Checkout `develop`** — Switch to `develop` and pull latest from remote to ensure it is up-to-date.
+2. **Determine branch name** — Start with `feature/{{TASK_ID}}-short-description`.
+3. **Check for existing branch** — List all local and remote branches. IF a branch with the target name already exists:
+   - Append `-v1` to the branch name (e.g., `feature/{{TASK_ID}}-short-description-v1`).
+   - IF that also exists, try `-v2`, then `-v3`, etc.
+   - Increment until you find a name that doesn't exist.
+4. **Create the branch** — From `develop`, create the new branch with the determined name.
+5. **Verify** — Confirm the new branch is active and points to `develop`.
 
-**Error recovery:** IF a branch with `{{BRANCH_NAME}}` already exists, switch to it and verify it is up-to-date.
+**Gate:** Branch is active and pointing to the correct, unique name. Write the branch name inline.
 
-**Gate:** Branch is active and pointing to the correct name. Write the branch name inline.
+**Error recovery:** IF `develop` doesn't exist, create it from `main` first, then proceed.
 
 ### Step 5: Read Task Scope
 
