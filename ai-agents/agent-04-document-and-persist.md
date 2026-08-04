@@ -10,6 +10,15 @@ version: 3.0
 
 Persist session knowledge to the memory MCP server, generate technical documentation for all new components and patterns, and update project-level AI context files. This reduces ramp-up time and prevents repeating mistakes for future sessions.
 
+## Variables
+
+- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
+- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
+- **`{{DOCS_DIR}}`** *(static)* — `docs/`
+- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **`{{CONTEXT_FILE}}`** *(static)* — `AGENTS.md` (or `CLAUDE.md` / `CONTEXT.md` / `.cursorrules` if present)
+- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
+
 ## Instructions
 
 - Use the `memory` MCP server as the primary tool for all memory operations.
@@ -17,6 +26,8 @@ Persist session knowledge to the memory MCP server, generate technical documenta
 - Use `git` MCP server to review changes before writing.
 - Load existing memory and context before writing to ensure updates augment rather than duplicate.
 - This agent is **read-only for project source files** — only writes to memory, docs, and context files.
+- Use `TodoWrite` to track progress through the 3 workflow phases below.
+- Write down key values inline — memory entry names, doc file paths, convention changes. This survives context compaction.
 
 ## Scope Boundaries
 
@@ -31,13 +42,11 @@ Persist session knowledge to the memory MCP server, generate technical documenta
 - Update task tracking or milestone status (that is Agent 05's job)
 - Commit changes
 
-## Variables
+## Input
 
-- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
-- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
-- **`{{DOCS_DIR}}`** *(static)* — `docs/`
-- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
-- **`{{CONTEXT_FILE}}`** *(static)* — `AGENTS.md` (or `CLAUDE.md` / `CONTEXT.md` / `.cursorrules` if present)
+- **From Agent 03:** Completed implementation with all tests passing, list of files created/modified.
+- **From memory:** Task acceptance criteria, implementation plan, patterns established during coding.
+- **From user:** Optional — documentation format preferences, additional context to preserve.
 
 ## Codebase Structure
 
@@ -84,6 +93,8 @@ ping-monitoring/
 
 **Gate:** All four memory entries created or updated.
 
+**Error recovery:** IF memory write fails for any entry, note which entries failed and retry once. If still failing, save to fallback file at `{{AGENT_OUTPUT_DIR}}/memory-{{TASK_ID}}.md`.
+
 ### Phase B: Generate Documentation
 
 #### Step B1: Determine Scope
@@ -104,6 +115,8 @@ Each doc includes: purpose, API/parameters, usage example, integration notes, ed
 #### Step B2: Write Documentation
 
 **Invoke `filesystem` MCP server** to create or update documentation files in `docs/`. Follow the existing documentation convention if one exists. Code snippets must be copy-pasteable and reflect actual code.
+
+**Error recovery:** IF no existing documentation convention is found, use a simple format: title, purpose, API/parameters, usage example, edge cases.
 
 **Gate:** All docs written, code snippets verified against actual source code.
 
@@ -150,6 +163,8 @@ Review what was established during this task:
 ### Coding Conventions
 - [Add any new conventions established]
 ```
+
+**Error recovery:** IF context file cannot be written (permissions, disk space), save to fallback location and alert the user.
 
 **Gate:** Context file updated with append-only changes, existing content preserved.
 

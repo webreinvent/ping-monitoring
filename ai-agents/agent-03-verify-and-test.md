@@ -10,6 +10,14 @@ version: 3.0
 
 Quality assurance phase: review all implemented code, verify every acceptance criterion through browser automation, write unit tests, and write E2E tests. Fix all defects found. This is a **gate** — do not proceed until all checks pass.
 
+## Variables
+
+- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
+- **`{{DASHBOARD_DIR}}`** *(static)* — `dashboard/`
+- **`{{DASHBOARD_URL}}`** *(static)* — `http://localhost:3000`
+- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
+
 ## Instructions
 
 - Use the Playwright MCP server for all browser interactions — never rely on visual inspection alone.
@@ -18,6 +26,7 @@ Quality assurance phase: review all implemented code, verify every acceptance cr
 - Invoke MCP servers before executing any workflow step that requires them.
 - Write down key findings inline — file paths, patterns, constraints. This survives context compaction.
 - Errors are not a reason to skip — they are the work.
+- Use `TodoWrite` to track progress through the 4 workflow phases below.
 
 ## Scope Boundaries
 
@@ -41,12 +50,11 @@ Quality assurance phase: review all implemented code, verify every acceptance cr
 - Use CSS or XPath selectors in E2E tests
 - Mask flakes with `test.skip` or `test.fixme`
 
-## Variables
+## Input
 
-- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
-- **`{{DASHBOARD_DIR}}`** *(static)* — `dashboard/`
-- **`{{DASHBOARD_URL}}`** *(static)* — `http://localhost:3000`
-- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **From Agent 02:** Implemented code (all files created/modified per the plan).
+- **From memory:** Task acceptance criteria (from `{{TASK_ID}}` scope file), implementation plan with file inventory.
+- **From user:** Optional — additional test scenarios beyond acceptance criteria.
 
 ## Codebase Structure
 
@@ -146,9 +154,15 @@ Review against:
 
 **Gate:** Server must be running and healthy (200 on root and /api/health) before starting UAT.
 
-#### Step B2: UAT Sweep
+#### Step B2: Load Acceptance Criteria
 
-For each acceptance criterion from the task:
+**Invoke `memory` MCP server** or read the task scope file for `{{TASK_ID}}` to load the acceptance criteria list. Write them inline so they survive compaction.
+
+**Gate:** Acceptance criteria loaded before proceeding with UAT sweep.
+
+#### Step B3: UAT Sweep
+
+For each acceptance criterion:
 1. Navigate to URL via Playwright MCP
 2. Take accessibility snapshot
 3. Drive the flow — click, fill, select, submit
@@ -166,7 +180,11 @@ Cover:
 - **API endpoints** — test each API endpoint with correct request/response shapes
 - **Edge cases** — empty state, error state, loading state
 
-#### Step B3: Bug Fix Loop
+**Compaction survival:** Write the UAT result for each criterion inline (pass/fail + screenshot path).
+
+### Phase C: Fix Bugs
+
+After UAT sweep, enter the bug fix loop:
 
 WHILE any criterion unverified OR errors detected:
 1. Document the bug — expected vs actual, reproduction steps
@@ -181,7 +199,7 @@ WHILE any criterion unverified OR errors detected:
 
 **Gate:** Every acceptance criterion verified, zero console errors, zero network errors, all screenshots captured, no open bugs.
 
-### Phase C: Unit Tests
+### Phase D: Unit Tests
 
 #### Step C1: Check & Configure Test Infrastructure
 

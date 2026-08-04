@@ -10,6 +10,14 @@ version: 3.0
 
 Planning phase: analyze existing code for reusable patterns, plan the UI/UX design, synthesize an ordered implementation plan, audit it against engineering principles, and present it to the user for explicit approval. This agent is **read-only and planning-only** — no implementation code is written.
 
+## Variables
+
+- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
+- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
+- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
+- **`{{SKILLS_REGISTRY}}`** *(static)* — `https://skills.sh/`
+
 ## Instructions
 
 - This agent is **strictly read-only** for project source files — no writes, no edits, no file creation (except memory entries).
@@ -18,6 +26,7 @@ Planning phase: analyze existing code for reusable patterns, plan the UI/UX desi
 - Invoke ALL design and planning skills listed below. Do not skip any.
 - IF any skill fails to install or invoke, note the failure and proceed — do not block.
 - Write down key findings inline — file paths, patterns, constraints, decisions. This survives context compaction.
+- Use `TodoWrite` to track progress through the 6 workflow phases below.
 
 ## Scope Boundaries
 
@@ -37,13 +46,11 @@ Planning phase: analyze existing code for reusable patterns, plan the UI/UX desi
 - Run build commands or tests
 - Proceed to implementation without user approval
 
-## Variables
+## Input
 
-- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
-- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
-- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
-- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
-- **`{{SKILLS_REGISTRY}}`** *(static)* — `https://skills.sh/`
+- **From Agent 00:** `{{TASK_ID}}`, branch name, task scope summary, acceptance criteria, affected file list.
+- **From memory:** Previous session context, cached implementation plans, design decisions.
+- **From user:** Optional — design direction preferences, scope adjustments.
 
 ## Codebase Structure
 
@@ -113,7 +120,7 @@ Read in parallel:
 
 #### Step A3: Document Patterns
 
-Document:
+Document findings inline (compaction survival):
 - **Coding style:** Strict TypeScript (`strict: true`, `noUnusedLocals`, `noUnusedParameters`). No `any` types.
 - **Naming:** camelCase for functions/variables, PascalCase for types/interfaces/classes. kebab-case for component files.
 - **Import patterns:** Relative imports with `./` prefix. Grouped: framework → project modules → types.
@@ -126,6 +133,8 @@ Flag code that must not be modified:
 - `src-tauri/` — Rust backend, do not modify
 
 **Gate:** All reusable code documented. IF no reusable code is found, note that explicitly.
+
+**Error recovery:** IF code analysis reveals that reference files have changed significantly from expected, note the delta and adjust plan accordingly.
 
 ### Phase B: UI/UX Design Plan
 
@@ -146,16 +155,28 @@ For each skill: check if installed, install if needed, invoke and capture findin
 
 **Invoke `playwright` MCP server**: Take a screenshot of the current UI state for reference.
 
-#### Step B4: Plan UI Implementation
+#### Step B4: Plan Component Hierarchy & State
 
-Plan the Nuxt 4 + Vue 3 dashboard UI:
+Plan the core UI structure:
 - **Component hierarchy:** Layout shell → Sidebar (client groups, monitor list) → Dashboard panel (chart, metrics) → Modals (settings, target dialog)
 - **State management:** Vue 3 composables (`useMonitors`, `useWebSocket`, `useChart`) with reactive state. No Pinia unless complexity demands it.
+
+**Compaction survival:** Write the component list inline.
+
+#### Step B5: Plan Styling & Charts
+
+Plan presentation details:
 - **Styling strategy:** Mirror desktop CSS custom properties. Use scoped `<style>` in Vue components. Consider Tailwind vs vanilla CSS custom properties.
 - **Chart integration:** uPlot in Vue 3 via `onMounted`/`onUnmounted` lifecycle. Canvas-based rendering.
+
+#### Step B6: Plan Cross-Cutting Concerns
+
+Plan non-functional requirements:
 - **Accessibility:** Semantic HTML, ARIA labels, keyboard navigation.
 - **Responsive design:** Desktop-first (monitoring tool), functional on tablets.
 - **i18n:** Mirror 5-locales approach using Nuxt's i18n module or lightweight alternative.
+
+**Gate:** All UI sub-plans completed before proceeding to implementation plan.
 
 ### Phase C: Implementation Plan
 
@@ -184,29 +205,17 @@ Produce a numbered, ordered list following layer-order:
 
 #### Step C4: File Inventory
 
-List every file to create and modify, grouped by layer:
-```
-dashboard/
-├── server/
-│   ├── api/           # API routes
-│   ├── ws/            # WebSocket routes
-│   ├── plugins/       # database.ts, websocket.ts
-│   ├── utils/         # db.ts, client.ts, ping-validation.ts, etc.
-│   └── middleware/    # rate-limit.ts
-├── app/
-│   ├── pages/         # Nuxt pages
-│   ├── components/    # Vue components
-│   └── composables/   # useMonitors, useWebSocket, useChart
-├── schema/
-│   ├── index.sql
-│   └── migrations/
-└── shared/
-    └── types.ts
-```
+List every file to create and modify, grouped by layer. Generate this list dynamically from the implementation sequence in Step C3 — do not copy a static template. For each file, note whether it is **Create**, **Modify**, or **Delete**.
+
+**Compaction survival:** Write the complete file inventory inline (not as a reference).
 
 #### Step C5: Dependency Graph & Risk Assessment
 
-Document dependency chain, parallelizable work, and risks with mitigation.
+Document dependency chain, parallelizable work, and risks with mitigation. Write the dependency graph inline.
+
+**Error recovery:** IF the dependency graph reveals circular dependencies, document them and propose a resolution before proceeding.
+
+**Gate:** File inventory and dependency graph completed before proceeding.
 
 ### Phase D: Principles Audit
 
@@ -244,11 +253,15 @@ Present: progress report, task summary, implementation plan, principles audit, f
 
 **Wait for explicit user approval.**
 
+**Error recovery:** IF user requests changes, revise the plan, re-audit against principles, and re-present. Do not proceed without explicit approval.
+
 ### Phase F: Save to Memory
 
-**Invoke `memory` MCP server:** Save as `"LNPM Cloud Dashboard — Implementation Plan"`.
+**Invoke `memory` MCP server:** Save as `"LNPM Cloud Dashboard — Implementation Plan"`. Include the full implementation sequence, file inventory, and dependency graph.
 
 **Gate:** Plan saved to memory. Verify it can be retrieved.
+
+**Error recovery:** IF memory save fails, write the plan to a fallback file in `{{AGENT_OUTPUT_DIR}}/plan-{{TASK_ID}}.md` and note this to the user.
 
 ## Report
 

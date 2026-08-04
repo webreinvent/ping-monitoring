@@ -4,7 +4,8 @@
 - [AI Agents Node.js Environment Setup](ai-agents/node-env-setup.md) — NVM vs Homebrew conflict, Node 22.19.0+ requirement, native module rebuild
 - [LNPM Milestones & Tasks Planner](lnpm-milestones-tasks-planner.md) — planner prompt generated
 - [LNPM Milestones Plan](lnpm-milestones-plan.md) — 2 milestones, 19 tasks, 14 features
-- [Agent Prompts Generated](agent-prompts-generated.md) — 16 agent pipeline files in ai-agents/
+- [Agent Prompts Generated](agent-prompts-generated.md) — superseded by agent-pipeline-reduced
+- [Agent Pipeline Reduced](agent-pipeline-reduced.md) — 16 agents merged to 6, agent-05 commits all + merges to develop + never pushes
 - [UI/UX Design Decisions](ui-ux-design-decisions.md) — dashboard styling, state management, chart approach, i18n strategy
 - [Agent 05 Implementation Plan](agent-05-implementation-plan.md) — updated plan: M1-T1 complete, 73 files to create, 8 to modify, 10 phases
 - [Implementation Plan (original)](implementation-plan.md) — 9 phases, 78 files (superseded by agent-05)

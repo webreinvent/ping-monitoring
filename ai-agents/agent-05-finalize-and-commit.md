@@ -10,6 +10,16 @@ version: 3.0
 
 Finalize the LNPM Cloud Dashboard task: update task status, collect completion evidence, stage all changes, and commit using Conventional Commits. This is the final step in the pipeline.
 
+## Variables
+
+- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
+- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **`{{MILESTONES_DIR}}`** *(static)* — `ai-milestones-and-tasks/`
+- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
+- **`{{BRANCH_NAME}}`** *(dynamic)* — The current feature branch name
+- **`{{COMMIT_TYPE}}`** *(dynamic)* — `feat`, `fix`, `chore`, `docs`, `style`
+- **`{{COMMIT_CONVENTION}}`** *(static)* — Conventional Commits: `feat(scope): description`
+
 ## Instructions
 
 - Use the `git` MCP server for ALL git operations — do NOT use Bash for git commands.
@@ -19,6 +29,7 @@ Finalize the LNPM Cloud Dashboard task: update task status, collect completion e
 - Commit all relevant changes in a single atomic commit.
 - IF the diff shows unexpected changes, report them — do not suppress.
 - IF tests fail or the linter reports errors, STOP and report the blocker — do not commit broken code.
+- Use `TodoWrite` to track progress through the workflow steps below.
 
 ## Scope Boundaries
 
@@ -37,15 +48,11 @@ Finalize the LNPM Cloud Dashboard task: update task status, collect completion e
 - Write tests (that was Agent 03's job)
 - Push changes to remote (origin) under any circumstances
 
-## Variables
+## Input
 
-- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
-- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
-- **`{{MILESTONES_DIR}}`** *(static)* — `ai-milestones-and-tasks/`
-- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
-- **`{{BRANCH_NAME}}`** *(dynamic)* — The current feature branch name
-- **`{{COMMIT_TYPE}}`** *(dynamic)* — `feat`, `fix`, `chore`, `docs`, `style`
-- **`{{COMMIT_CONVENTION}}`** *(static)* — Conventional Commits: `feat(scope): description`
+- **From Agent 04:** All documentation complete, memory persisted, project context updated.
+- **From memory:** `{{TASK_ID}}`, `{{BRANCH_NAME}}`, implementation summary, acceptance criteria results.
+- **From user:** Optional — commit message customization, additional notes to include.
 
 ## Codebase Structure
 
@@ -139,21 +146,41 @@ Commit type mapping:
 
 **Gate:** IF the working tree is not clean, report the uncommitted files.
 
-### Step 10: Merge Feature Branch into Develop
+### Step 10: Checkout Develop
 
-After all changes are committed, merge the feature branch into `develop` **locally**:
+**Invoke `git` MCP server:** Checkout `develop`.
 
-1. **Invoke `git` MCP server:** Checkout `develop`
-2. **Invoke `git` MCP server:** Pull latest changes from remote (`git_pull`) to ensure `develop` is up-to-date
-3. **Invoke `git` MCP server:** Merge the feature branch into `develop` (`git_merge`)
-4. **Resolve conflicts** if any — fix them, commit the merge
-5. **Verify** the merge is clean with `git_status` and `git_log`
+**Gate:** Successfully on `develop` branch.
+
+### Step 11: Pull Latest Develop
+
+**Invoke `git` MCP server:** Pull latest changes from remote to ensure `develop` is up-to-date.
+
+**Error recovery:** IF pull fails (network, auth), note the error and proceed with local `develop` — report to user.
+
+### Step 12: Merge Feature Branch
+
+**Invoke `git` MCP server:** Merge the feature branch into `develop`.
+
+**Error recovery:** IF merge conflicts occur:
+1. Document conflicting files
+2. Resolve conflicts — preserve feature branch changes unless they conflict with core architecture
+3. Commit the merge
+4. Verify with `git_status`
 
 **DO NOT push to origin.** The merged branch stays local only. The user decides when to push.
 
-### Step 11: Identify Unblocked Tasks
+### Step 13: Verify Merge
+
+**Invoke `git` MCP server:** Use `git_status` and `git_log` to confirm merge is clean.
+
+**Gate:** Merge is clean, no conflicts remaining.
+
+### Step 14: Identify Unblocked Tasks
 
 Read `{{MILESTONES_DIR}}/project-dashboard.md` to identify tasks now unblocked by this completion based on the dependency graph.
+
+**Compaction survival:** Write the list of unblocked task IDs inline.
 
 ## Report
 

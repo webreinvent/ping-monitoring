@@ -10,12 +10,22 @@ version: 3.0
 
 Execute the approved implementation plan step by step for the LNPM Cloud Dashboard. This is the **ONLY agent** in the pipeline authorized to write application code. Follow layer-order to avoid dependency issues. All new code lives in the `dashboard/` subdirectory.
 
+## Variables
+
+- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
+- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
+- **`{{DASHBOARD_DIR}}`** *(static)* — `dashboard/`
+- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **`{{TASK_ID}}`** *(dynamic)* — Provided by Agent 00 (e.g., `M1-T7`)
+
 ## Instructions
 
 - Invoke `nuxt` and `tailwind-best-practices` skills before writing framework code.
 - Independent files can be created in parallel when there are no dependencies.
 - Layer-order enforcement is sequential: `Project setup → Shared types → Data layer → Business logic → API → WebSocket → Frontend → Tests`.
 - After each major layer is complete, save progress to memory so the plan state survives context window compaction.
+- Write down key values inline — file paths created, types defined, functions implemented. This survives context compaction.
+- Use `TodoWrite` to track progress through each layer below.
 
 ## Scope Boundaries
 
@@ -33,12 +43,11 @@ Execute the approved implementation plan step by step for the LNPM Cloud Dashboa
 - Modify files in `src/` or `src-tauri/` (desktop app code) unless the task explicitly requires it
 - Commit or push changes
 
-## Variables
+## Input
 
-- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
-- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
-- **`{{DASHBOARD_DIR}}`** *(static)* — `dashboard/`
-- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **From Agent 01:** Approved implementation plan (loaded from memory), file inventory, dependency graph.
+- **From memory:** `"LNPM Cloud Dashboard — Implementation Plan"` with full sequence, file paths, and acceptance criteria.
+- **From user:** Optional — mid-implementation course corrections (rare).
 
 ## Codebase Structure
 
@@ -96,57 +105,97 @@ Check and install each skill if needed. Confirm installation.
 
 **Invoke `memory` MCP server:** Load `"LNPM Cloud Dashboard — Implementation Plan"`.
 
+Write the plan sequence inline so it survives compaction: layer order, file count, key types.
+
 **Gate:** Plan loaded successfully before proceeding.
 
-### Step 3: Execute in Layer Order
+**Error recovery:** IF plan cannot be loaded from memory, check for fallback file at `{{AGENT_OUTPUT_DIR}}/plan-{{TASK_ID}}.md`.
 
-For each step:
-1. Create or modify the file
-2. Run typecheck immediately (`pnpm build` or `npx tsc --noEmit`)
-3. Run adjacent tests
-4. Mark step complete
-5. Move to next step
+### Step 3: Project Setup
 
-**Implementation order:**
-1. **Project Setup** — `dashboard/package.json`, `dashboard/nuxt.config.ts`, `dashboard/tsconfig.json`
-2. **Shared Types** — `dashboard/shared/types.ts` (adapt from `src/types.ts`)
-3. **Data Layer** — `dashboard/schema/migrations/*.sql`, `dashboard/server/plugins/database.ts`
-4. **Business Logic** — `dashboard/server/utils/` (db.ts, client.ts, ping-validation.ts, ping-ingest.ts, quality-classifier.ts, cache.ts, rate-limiter.ts)
-5. **API Layer** — `dashboard/server/api/` (health.get.ts, ping/ingest.post.ts, monitors.get.ts, monitors/[id].get.ts, clients/[slug].get.ts, clients/[slug].name.put.ts)
-6. **WebSocket Layer** — `dashboard/server/ws/ping.ts`
-7. **Middleware** — `dashboard/server/middleware/rate-limit.ts`
-8. **Frontend State** — `dashboard/app/composables/` (useMonitors.ts, useWebSocket.ts, useChart.ts)
-9. **Frontend Components** — `dashboard/app/components/` (Layout, Sidebar, Chart, Metrics, Modals)
-10. **Pages** — `dashboard/app/pages/` (index.vue, settings.vue)
-11. **Tests** — write as you go
+Create `dashboard/package.json`, `dashboard/nuxt.config.ts`, `dashboard/tsconfig.json`.
 
 **Runtime requirements:**
 - **Node.js** — Nuxt 4.5.1 requires **Node `^22.19.0 || ^24.11.0 || >=26.0.0`**. Use NVM (`source ~/.nvm/nvm.sh && nvm use 22`), NOT Homebrew Node. Verify with `node --version`.
 
-**Technology references with versions:**
-- Nuxt 4 (`compatibilityVersion: 4`) with Nitro v2 persistent `node-server` runtime
-- `better-sqlite3` — SQLite with WAL mode. If native module fails, rebuild: `rm -rf node_modules/better-sqlite3 && npm install better-sqlite3@11.7.0 --build-from-source`
-- Vue 3 — Composition API, `<script setup>`, reactive state
-- uPlot `^1.6.32` — Canvas-based charts
-- Vitest `^4.1.10` — Testing framework
-- TypeScript `~5.6.2` — Strict mode
+After completing: run typecheck. Save progress to memory.
 
-**Coding conventions:**
-- Strict TypeScript: `strict: true`, `noUnusedLocals`, `noUnusedParameters`
-- No `any` types — use explicit types or `unknown` with narrowing
-- camelCase for functions/variables, PascalCase for types/components
-- Relative imports with `./` prefix
-- Error handling: `try/catch` with structured error reporting
-- File naming: kebab-case for components, `.vue` for Vue components, `.ts` for utilities
-- Nitro file-based routing: `server/api/[route].get.ts`, `server/api/[route].post.ts`
+**Gate:** Project setup files created, typecheck passes.
 
-After each layer, save progress to memory for compaction survival.
+**Error recovery:** IF `better-sqlite3` native module fails, rebuild: `rm -rf node_modules/better-sqlite3 && npm install better-sqlite3@11.7.0 --build-from-source`.
 
-**Gate:** All plan steps executed, typecheck passes, lint passes, tests pass.
+### Step 4: Shared Types
 
-### Step 4: Review Diff
+Create `dashboard/shared/types.ts` (adapt from `src/types.ts`).
+
+After completing: run typecheck. Save progress to memory.
+
+**Gate:** Types defined, no type errors.
+
+### Step 5: Data Layer
+
+Create `dashboard/schema/migrations/*.sql` and `dashboard/server/plugins/database.ts`.
+
+After completing: run typecheck. Save progress to memory.
+
+**Gate:** Schema and database plugin work, typecheck passes.
+
+### Step 6: Business Logic
+
+Create `dashboard/server/utils/` files: db.ts, client.ts, ping-validation.ts, ping-ingest.ts, quality-classifier.ts, cache.ts, rate-limiter.ts.
+
+Independent utility files can be created in parallel. After completing: run typecheck + inline tests. Save progress to memory.
+
+**Gate:** All business logic utilities pass typecheck.
+
+### Step 7: API Layer
+
+Create `dashboard/server/api/` routes: health.get.ts, ping/ingest.post.ts, monitors.get.ts, monitors/[id].get.ts, clients/[slug].get.ts, clients/[slug].name.put.ts.
+
+Independent route files can be created in parallel. After completing: run typecheck. Save progress to memory.
+
+**Gate:** All API routes pass typecheck, respond correctly.
+
+### Step 8: WebSocket & Middleware
+
+Create `dashboard/server/ws/ping.ts` and `dashboard/server/middleware/rate-limit.ts`.
+
+After completing: run typecheck. Save progress to memory.
+
+**Gate:** WebSocket handler and middleware pass typecheck.
+
+### Step 9: Frontend State
+
+Create `dashboard/app/composables/`: useMonitors.ts, useWebSocket.ts, useChart.ts.
+
+After completing: run typecheck. Save progress to memory.
+
+**Gate:** All composables pass typecheck, reactive state works.
+
+### Step 10: Frontend Components & Pages
+
+Create `dashboard/app/components/` (Layout, Sidebar, Chart, Metrics, Modals) and `dashboard/app/pages/` (index.vue, settings.vue).
+
+Independent component files can be created in parallel. Pages depend on components. After completing: run typecheck + lint.
+
+**Gate:** All components and pages render without errors.
+
+### Step 11: Inline Tests
+
+Write tests as you go (co-located `*.test.ts` files). Run the test suite after all implementation layers are complete.
+
+**Gate:** All tests pass.
+
+**Error recovery:** IF any layer fails typecheck after 3 attempts, document the failure, what was tried, and mark as Blocked — do not proceed to the next layer.
+
+### Step 12: Review Diff
 
 **Invoke `git` MCP server** (`git diff`) to review all changes. Confirm only intended changes are present. Verify no changes to `src/` or `src-tauri/` unless required.
+
+**Compaction survival note:**
+- Technology versions: Nuxt 4, better-sqlite3 (WAL), Vue 3 Composition API, uPlot ^1.6.32, Vitest ^4.1.10, TypeScript ~5.6.2
+- Coding: strict TS, no `any`, camelCase/PascalCase, kebab-case files, relative imports, try/catch errors
+- Nitro routing: `server/api/[route].get.ts`, file-based routing
 
 **Gate:** Diff reviewed — only intended changes present.
 

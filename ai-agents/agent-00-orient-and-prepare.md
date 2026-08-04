@@ -10,6 +10,17 @@ version: 3.0
 
 Bootstrapping step: load cached knowledge, create the feature branch, and read the task definition with all related requirements. This agent is **strictly read-only** for project files (git branch creation is the only write).
 
+## Variables
+
+- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
+- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
+- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
+- **`{{MILESTONES_DIR}}`** *(static)* — `ai-milestones-and-tasks/`
+- **`{{DOCS_DIR}}`** *(static)* — `docs/`
+- **`{{REQUIREMENTS_DIR}}`** *(static)* — `requirements/`
+- **`{{TASK_ID}}`** *(dynamic)* — Detected from project-dashboard.md (e.g., `M1-T7`)
+- **`{{BRANCH_NAME}}`** *(dynamic)* — `feature/{{TASK_ID}}-short-description`
+
 ## Instructions
 
 - Use the Read tool for file reads, NOT `cat`, `head`, or `tail`.
@@ -18,6 +29,7 @@ Bootstrapping step: load cached knowledge, create the feature branch, and read t
 - Parallelize all independent reads. Mark sequential dependencies explicitly.
 - IF any referenced file doesn't exist, note the gap and proceed — do not block.
 - Write down key findings inline — file paths, acceptance criteria, constraints. This survives context compaction.
+- Use `TodoWrite` to track progress through the 9 workflow steps below.
 
 ## Scope Boundaries
 
@@ -38,16 +50,11 @@ Bootstrapping step: load cached knowledge, create the feature branch, and read t
 - Commit or push changes
 - Modify files in `src/` or `src-tauri/` (desktop app)
 
-## Variables
+## Input
 
-- **`{{PROJECT_ROOT}}`** *(static)* — `/Users/pk/Projects/ping-monitoring`
-- **`{{PROJECT_NAME}}`** *(static)* — `LNPM Cloud Dashboard`
-- **`{{AGENT_OUTPUT_DIR}}`** *(static)* — `.vaahagents/`
-- **`{{MILESTONES_DIR}}`** *(static)* — `ai-milestones-and-tasks/`
-- **`{{DOCS_DIR}}`** *(static)* — `docs/`
-- **`{{REQUIREMENTS_DIR}}`** *(static)* — `requirements/`
-- **`{{TASK_ID}}`** *(dynamic)* — Detected from project-dashboard.md (e.g., `M1-T7`)
-- **`{{BRANCH_NAME}}`** *(dynamic)* — `feature/{{TASK_ID}}-short-description`
+- **From previous agent:** None (this is the first agent in the pipeline).
+- **From memory:** Previous session context if available (task ID, interrupted task state, cached findings).
+- **From user:** Optional — explicit task ID override if auto-detection fails.
 
 ## Codebase Structure
 
@@ -90,7 +97,7 @@ Search memory for `"LNPM Cloud Dashboard"` entries. Load all cached findings fro
 
 **Error recovery:** IF `memory` MCP server is unavailable, proceed without cached context. Note this limitation.
 
-### Step 2: Read Project Context
+### Step 2: Read Project Context Files
 
 Read these files in parallel:
 - `{{MILESTONES_DIR}}/project-dashboard.md` — overall project progress, active milestones (M1 Backend Platform, M2 Dashboard UI), priorities
@@ -100,11 +107,18 @@ Read these files in parallel:
 
 **Gate:** IF any file doesn't exist, note the gap and proceed.
 
-Then sequentially:
+**Error recovery:** IF multiple files are missing, list all gaps and determine if there is enough context to continue.
+
+### Step 3: Identify Task ID
+
+Sequential — depends on Step 2 results:
 - Identify `{{TASK_ID}}` — the next incomplete task from project-dashboard.md
 - Note dependencies for `{{TASK_ID}}`
+- Write the task ID inline so it survives compaction.
 
-### Step 3: Create Feature Branch
+**Gate:** `{{TASK_ID}}` must be determined before proceeding. IF auto-detection fails, ask the user.
+
+### Step 4: Create Feature Branch
 
 1. List all local `feature/*` branches sorted by most recent commit
 2. IF no `feature/*` branches exist, fall back to `develop` as the base (note this fallback)
@@ -116,7 +130,7 @@ Then sequentially:
 
 **Gate:** Branch is active and pointing to the correct name. Write the branch name inline.
 
-### Step 4: Read Task Scope
+### Step 5: Read Task Scope
 
 Read the scope document for `{{TASK_ID}}`:
 - `{{MILESTONES_DIR}}/milestone-01-backend-platform/task-{{TASK_ID}}-scope.md` or equivalent milestone directory
@@ -124,7 +138,9 @@ Read the scope document for `{{TASK_ID}}`:
 
 **Gate:** IF the task scope file doesn't exist, note it and proceed with whatever context the dashboard provides.
 
-### Step 5: Read Related Requirements
+**Error recovery:** IF both the task scope file and project dashboard are missing, report as Blocked — cannot determine scope.
+
+### Step 6: Read Related Requirements
 
 Read in parallel:
 - Related requirements in `requirements/features/` — feature specs
@@ -132,26 +148,32 @@ Read in parallel:
 - `requirements/data-models/data-models.md` — SQLite schema, tables, indexes
 - Related developer documentation in `docs/` — architecture notes, design specs
 
-### Step 6: Map Affected Files
+**Error recovery:** IF requirement files are missing, note which ones and proceed with available context.
+
+### Step 7: Map Affected Files
 
 List files in `dashboard/` and its subdirectories (`server/`, `app/`, `shared/`). Summarize which files will be created, modified, or deleted. The dashboard lives in the `dashboard/` subdirectory — never modify the existing `src/` (Tauri desktop app) or `src-tauri/` directories unless the task explicitly requires it.
 
-### Step 7: Verify Directories
+**Compaction survival:** Write the file list inline (create/modify/delete) so it survives context compaction.
+
+### Step 8: Verify Directories & Git State
 
 Confirm these directories exist: `{{MILESTONES_DIR}}`, `{{DOCS_DIR}}`, `{{REQUIREMENTS_DIR}}`, `dashboard/`.
-
-**Gate:** IF `dashboard/` doesn't exist, report it as a blocker — the project hasn't been bootstrapped.
-
-### Step 8: Check Git State
 
 Check the current branch, recent commits, and any uncommitted changes. Note:
 - Current branch name
 - Last 3 commit messages
 - Any uncommitted changes that might indicate an interrupted task
 
+**Gate:** IF `dashboard/` doesn't exist, report it as a blocker — the project hasn't been bootstrapped.
+
+**Error recovery:** IF git state shows uncommitted changes from a previous session, note them as a potential interrupted task.
+
 ### Step 9: Recover Interrupted Tasks
 
 IF memory contains an interrupted task entry, load the implementation plan and identify the last completed step.
+
+**Error recovery:** IF the interrupted task's implementation plan is missing, report the task ID and ask the user whether to restart or skip.
 
 ## Report
 
