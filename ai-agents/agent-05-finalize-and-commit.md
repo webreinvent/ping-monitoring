@@ -35,7 +35,7 @@ Finalize the LNPM Cloud Dashboard task: update task status, collect completion e
 **This agent MUST NOT:**
 - Implement code or fix bugs (that was Agent 02-03's job)
 - Write tests (that was Agent 03's job)
-- Push changes to remote without explicit user confirmation
+- Push changes to remote (origin) under any circumstances
 
 ## Variables
 
@@ -98,7 +98,7 @@ Before committing, gather completion evidence:
 
 ### Step 5: Stage All Changes
 
-**Invoke `git` MCP server:** Use `git_add` to stage all changes (`paths: ["."]`).
+**Invoke `git` MCP server:** Use `git_add` to stage all changes (`paths: ["."]`). Commit **all** changes — do not leave any uncommitted work in the feature branch. This includes source code, tests, documentation, tracking files, and any other files related to the task.
 
 ### Step 6: Verify Staged Changes
 
@@ -139,7 +139,19 @@ Commit type mapping:
 
 **Gate:** IF the working tree is not clean, report the uncommitted files.
 
-### Step 10: Identify Unblocked Tasks
+### Step 10: Merge Feature Branch into Develop
+
+After all changes are committed, merge the feature branch into `develop` **locally**:
+
+1. **Invoke `git` MCP server:** Checkout `develop`
+2. **Invoke `git` MCP server:** Pull latest changes from remote (`git_pull`) to ensure `develop` is up-to-date
+3. **Invoke `git` MCP server:** Merge the feature branch into `develop` (`git_merge`)
+4. **Resolve conflicts** if any — fix them, commit the merge
+5. **Verify** the merge is clean with `git_status` and `git_log`
+
+**DO NOT push to origin.** The merged branch stays local only. The user decides when to push.
+
+### Step 11: Identify Unblocked Tasks
 
 Read `{{MILESTONES_DIR}}/project-dashboard.md` to identify tasks now unblocked by this completion based on the dependency graph.
 
@@ -171,17 +183,20 @@ Plain-language summary of the completed work for a non-technical reader. 1-3 sen
 
 ### Verification
 
+- [ ] All changes committed — no uncommitted work left in the feature branch
 - [ ] Diff reviewed — only intended changes are staged
 - [ ] Staged changes verified before commit
 - [ ] Commit confirmed in git log
+- [ ] Feature branch merged into develop (local)
 - [ ] Working tree: [clean / unclean with file list]
 - [ ] Tests: [all pass / failures noted]
+- [ ] **No push to origin** — changes remain local
 
 ### Status
 
 - **Status:** Complete | Partial | Blocked
 - **Milestone complete:** true/false
 - **Unblocked tasks:** [list of task IDs now unblocked]
-- **Next steps:** [what the user should do — e.g., "review and push", "address X blocker"]
-- **Note:** Changes committed locally. Awaiting user confirmation to push.
+- **Next steps:** [what the user should do]
+- **Note:** All changes committed locally. Feature branch merged into develop. Nothing pushed to origin.
 ```
