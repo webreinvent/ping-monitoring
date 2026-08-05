@@ -46,9 +46,9 @@ Build the `useMonitors` composable for fetching and caching the monitors list, a
 
 ## Testing Checklist
 
-- [ ] Monitors list loads correctly
-- [ ] Sidebar renders with groups
-- [ ] Status colors correct
+- [x] Monitors list loads correctly
+- [x] Sidebar renders with groups
+- [x] Status colors correct
 
 ## Dependencies
 
