@@ -549,6 +549,17 @@
   gap: 6px;
   font-size: 11px;
   color: var(--muted);
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+
+.chart-legend-item:hover {
+  color: var(--text);
+}
+
+.chart-legend-item--hidden {
+  opacity: 0.4;
+  text-decoration: line-through;
 }
 
 .chart-legend-item .legend-color {

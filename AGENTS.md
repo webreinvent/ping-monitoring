@@ -1044,3 +1044,74 @@ The sidebar is composed of two layers: a responsive wrapper (`DashboardSidebar`)
 | ADR-047 | Toggle Button with Click Isolation | MonitorRow toggle uses @click.stop to prevent navigation; dimmed visual state (opacity 0.35) for hidden monitors |
 
 *Last updated: 2026-08-05 (Agent 04 — M2-T2 sidebar conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-05, M2-T3)
+
+### Multi-Threshold Lines in uPlot Charts (M2-T3)
+
+`LatencyChart.vue` now supports both single and multi-threshold rendering via uPlot's `drawClear` hook.
+
+#### Threshold Prop Pattern
+- **`thresholdValue`** (single, backward compat): Optional `number | null` prop. When set and `thresholdValues` is empty, draws one dashed red line.
+- **`thresholdValues`** (multi, takes precedence): Optional `number[]` prop. When non-empty, overrides `thresholdValue`. Each value draws a separate dashed horizontal line.
+- **Resolution logic**: `thresholdValues.length > 0` → use `thresholdValues`; else if `thresholdValue != null` → wrap in `[thresholdValue]`; else → no thresholds.
+- **Implementation**: `drawClear` hook iterates over thresholds, drawing each as a dashed horizontal line at the Y coordinate.
+
+#### Threshold Color Mapping
+Hard-coded `THRESHOLD_COLORS` record in `LatencyChart.vue`:
+
+| Value (ms) | Color (rgba) | Design Token | Meaning |
+|------------|-------------|--------------|---------|
+| 50 | `rgba(69, 223, 194, 0.45)` | `--accent` (teal) | Good |
+| 100 | `rgba(246, 169, 74, 0.45)` | `--warning` (yellow) | Caution |
+| 150 | `rgba(249, 115, 22, 0.45)` | Orange | Elevated |
+| 200 | `rgba(255, 107, 120, 0.45)` | `--danger` (red) | Bad |
+
+**Style**: Dashed `[8, 4]` pattern, `lineWidth: 1`, 0.45 alpha for all known thresholds. Unknown values use fallback `rgba(239, 68, 68, 0.6)` (red).
+
+### Legend Toggle Interaction (M2-T3)
+
+`AllMonitorsChart` legend items are now clickable to toggle monitor visibility, wired to `useMonitors()` composable.
+
+#### Toggle Integration Pattern
+- **`useMonitors()`** returns `toggleMonitor(id)`, `isVisible(id)` — shared singleton composable with localStorage persistence
+- **Visibility filtering**: `seriesConfig` computed filters by `isVisible(m.id)`; `chartData` computed filters entries by `isVisible(id)` before merging
+- **Color stability**: Uses `props.monitors.indexOf(m)` (original array index) for `getPaletteColor()` — prevents colors from shifting when monitors are toggled. **Critical:** Never use the filtered index — always use the original monitor array position.
+- **Empty handling**: When all monitors are hidden, `chartData` returns `[new Float64Array(0)]` — uPlot handles gracefully
+
+#### Legend Accessibility Pattern
+- **Interactive elements**: Each legend item has `role="button"`, `tabindex="0"`, `aria-pressed="true/false"`, and `aria-label="Toggle {name}"`
+- **Keyboard support**: `@keydown.enter.prevent` and `@keydown.space.prevent` handlers toggle the monitor
+- **Visual state**: `.chart-legend-item--hidden` class applies `opacity: 0.4` + `text-decoration: line-through` for hidden monitors
+- **CSS transitions**: `transition: opacity 140ms ease` on `.chart-legend-item` for smooth toggle state changes
+
+### Multi-Series Data Merging with NaN Gaps (M2-T3)
+
+When combining multiple monitor time series into a single uPlot dataset:
+
+1. **Filter by visibility** — only include monitors where `isVisible(id)` is true
+2. **Collect all unique timestamps** into a `Set`, then sort numerically
+3. **Build merged time column** — `Float64Array` from sorted timestamps
+4. **Build value columns per monitor** — use `Map<number, number>` (timestamp → index) for O(1) lookup; fill with `NaN` for missing timestamps
+5. **Return** — `[mergedTime, ...seriesColumns]`
+
+**NaN handling**: uPlot treats `NaN` as a gap — breaks the line at that point (spanGaps behavior). This allows monitors with different data points to share a unified X-axis.
+
+### Contract Testing for uPlot Components (M2-T3)
+
+uPlot components require a canvas DOM context — testing rendering directly in Vitest's node environment is complex. Instead, test the **logic contracts**:
+
+- **Threshold tests** (`LatencyChart.test.ts`): Test the color mapping constants and threshold resolution logic as pure functions
+- **Visibility tests** (`AllMonitorsChart.test.ts`): Test visibility filtering, palette stability, and data merging logic without mounting components
+- **Pattern**: Extract or duplicate the logic (threshold colors, resolution function) and test the contract — not the rendering
+
+### ADRs — M2-T3 All-Monitors Chart
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-048 | Multi-Threshold via drawClear Hook | uPlot's drawClear hook draws dashed horizontal lines for arbitrary Y-values; color-mapped to design tokens with 0.45 alpha |
+| ADR-049 | Original Index for Palette Color Stability | `props.monitors.indexOf(m)` for `getPaletteColor()` — same monitor always gets same color regardless of which other monitors are visible |
+| ADR-050 | NaN Gaps for Multi-Series Alignment | Shared X-axis with NaN values for missing timestamps per monitor; uPlot handles gaps natively via spanGaps |
+| ADR-051 | Legend Toggle via useMonitors Integration | AllMonitorsChart wires into useMonitors() composable for toggle state; clickable legend items with full accessibility (role, aria-pressed, keyboard) |
+
+*Last updated: 2026-08-05 (Agent 04 — M2-T3 chart conventions appended)*

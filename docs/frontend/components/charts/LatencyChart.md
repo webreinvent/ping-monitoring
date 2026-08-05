@@ -15,7 +15,8 @@ Core chart component that wraps uPlot for rendering latency data over time. Supp
 | `seriesConfig` | `uPlot.Series[]` | No | `[]` | uPlot series configuration (index 0 is always time). Does NOT include the time series — that is added internally |
 | `height` | `number` | No | `300` | Chart height in pixels |
 | `qualityBands` | `QualityBand[]` | No | `[]` | Background regions showing quality state intervals |
-| `thresholdValue` | `number \| null` | No | `null` | Horizontal threshold line Y value in ms |
+| `thresholdValue` | `number \| null` | No | `null` | Horizontal threshold line Y value in ms (single threshold, backward compat) |
+| `thresholdValues` | `number[]` | No | `[]` | Multiple horizontal threshold lines Y values in ms. Takes precedence over `thresholdValue` when non-empty |
 
 ### QualityBand Interface
 
@@ -74,6 +75,7 @@ const qualityBands = computed(() => getQualityBandPaths(history.value?.series[0]
   <LatencyChart
     :data="mergedData"
     :series-config="seriesConfig"
+    :threshold-values="[50, 100, 150, 200]"
     :height="320"
   />
 </template>
@@ -107,12 +109,29 @@ Quality bands are drawn on the `drawClear` hook before any data series. Each ban
 - Uses `fillRect` to paint a semi-transparent background
 - Uses `toLeft(scale, timestamp)` to convert data coordinates to pixel coordinates
 
-### Threshold Line
+### Threshold Line (Single — Backward Compatible)
 
-When `thresholdValue` is set, a dashed red horizontal line is drawn at that Y value:
+When `thresholdValue` is set (and `thresholdValues` is empty), a dashed red horizontal line is drawn at that Y value:
 - Stroke: `rgba(239, 68, 68, 0.6)`, dashed `[8, 4]`
 - Clipped to the chart bounding box
 - Drawn on `drawClear` hook (so it renders behind data)
+
+### Multi-Threshold Lines
+
+When `thresholdValues` is provided (non-empty array), multiple dashed horizontal lines are drawn — one per value. Takes precedence over `thresholdValue` when both are set.
+
+Each threshold line uses a color from the `THRESHOLD_COLORS` mapping:
+
+| Value (ms) | Color (rgba) | Design Token | Meaning |
+|------------|-------------|--------------|---------|
+| 50 | `rgba(69, 223, 194, 0.45)` | `--accent` (teal) | Good |
+| 100 | `rgba(246, 169, 74, 0.45)` | `--warning` (yellow) | Caution |
+| 150 | `rgba(249, 115, 22, 0.45)` | Orange | Elevated |
+| 200 | `rgba(255, 107, 120, 0.45)` | `--danger` (red) | Bad |
+
+**Fallback:** Unknown threshold values use `rgba(239, 68, 68, 0.6)` (red).
+**Style:** Dashed `[8, 4]`, `lineWidth: 1`, 0.45 alpha.
+**Resolution logic:** `thresholdValues` → if non-empty, use it; else if `thresholdValue` is set, wrap in `[thresholdValue]`; else no thresholds.
 
 ## Lifecycle
 
@@ -122,9 +141,7 @@ When `thresholdValue` is set, a dashed red horizontal line is drawn at that Y va
 
 ## Data Attributes
 
-| Attribute | Element | Purpose |
-|-----------|---------|---------|
-| `data-testid="all-monitors-chart"` | `.chart-container` (parent) | E2E test selector for all-monitors chart |
+No data attributes on this component — it's a pure chart renderer. The parent component (e.g., `AllMonitorsChart`) sets `data-testid` for E2E tests.
 
 ## Edge Cases
 
