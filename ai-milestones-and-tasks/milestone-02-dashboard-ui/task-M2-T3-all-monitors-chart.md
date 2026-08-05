@@ -31,25 +31,25 @@ Build the all-monitors combined uPlot line chart that renders all monitors as se
 
 ## Acceptance Criteria
 
-- [ ] uPlot chart renders with all monitors as separate series
-- [ ] Each series has distinct color from palette
-- [ ] Time range presets work (1h, 6h, 24h, 7d)
-- [ ] Monitor toggle shows/hides series
-- [ ] Threshold lines rendered
-- [ ] Chart data matches HistoryResponse format from F6
-- [ ] Chart handles empty data gracefully
+- [x] uPlot chart renders with all monitors as separate series
+- [x] Each series has distinct color from palette
+- [x] Time range presets work (1h, 6h, 24h, 7d)
+- [x] Monitor toggle shows/hides series
+- [x] Threshold lines rendered
+- [x] Chart data matches HistoryResponse format from F6
+- [x] Chart handles empty data gracefully
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Chart renders with data
-- [ ] Time range changes work
-- [ ] Toggle works
+- [x] Chart renders with data
+- [x] Time range changes work
+- [x] Toggle works
 
 ## Dependencies
 

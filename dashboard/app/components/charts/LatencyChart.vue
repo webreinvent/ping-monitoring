@@ -23,14 +23,17 @@ interface Props {
   height?: number;
   /** Quality interval bands to render as background regions */
   qualityBands?: QualityBand[];
-  /** Horizontal threshold line Y value (in ms) */
+  /** Horizontal threshold line Y value (in ms) — single threshold (backward compat) */
   thresholdValue?: number | null;
+  /** Multiple horizontal threshold lines Y values (in ms) — takes precedence over thresholdValue */
+  thresholdValues?: number[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
   height: 300,
   qualityBands: () => [],
   thresholdValue: null,
+  thresholdValues: () => [],
 });
 
 const wrapperRef = ref<HTMLDivElement>();
@@ -40,25 +43,23 @@ function buildOptions(): Record<string, unknown> {
   const seriesConfig = props.seriesConfig ?? [];
   const bands = props.qualityBands;
   const threshold = props.thresholdValue;
+  const thresholds = props.thresholdValues.length > 0 ? props.thresholdValues : (threshold != null ? [threshold] : []);
 
-  // Build series array: time + data series + optional threshold
+  // Threshold color mapping — matching desktop app and design tokens
+  const THRESHOLD_COLORS: Record<number, string> = {
+    50: "rgba(69, 223, 194, 0.45)",    // --accent (green) — good
+    100: "rgba(246, 169, 74, 0.45)",   // --warning (yellow) — caution
+    150: "rgba(249, 115, 22, 0.45)",   // orange — elevated
+    200: "rgba(255, 107, 120, 0.45)",  // --danger (red) — bad
+  };
+
+  // Build series array: time + data series
   const series: uPlot.Series[] = [
     {
       label: "Time",
     },
     ...seriesConfig,
   ];
-
-  if (threshold != null) {
-    series.push({
-      label: `Threshold (${threshold}ms)`,
-      stroke: "rgba(239, 68, 68, 0.6)",
-      width: 1,
-      dash: [8, 4],
-      points: { show: false },
-      spanGaps: true,
-    });
-  }
 
   const opts: Record<string, unknown> = {
     title: "Latency",
@@ -131,26 +132,31 @@ function buildOptions(): Record<string, unknown> {
         }
       });
 
-      // Draw threshold line
-      if (threshold != null) {
+      // Draw threshold lines (single or multi)
+      if (thresholds.length > 0) {
         u.addHook("drawClear", () => {
           const ctx: CanvasRenderingContext2D | null = u.ctx;
           if (!ctx) return;
           const { bbox, scale, toBottom } = u;
           const yScale = scale["y"];
           if (!yScale) return;
-          const y = toBottom(yScale, threshold);
-          if (y < bbox.top || y > bbox.top + bbox.height) return;
 
-          ctx.save();
-          ctx.strokeStyle = "rgba(239, 68, 68, 0.6)";
-          ctx.lineWidth = 1;
-          ctx.setLineDash([8, 4]);
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(bbox.width, y);
-          ctx.stroke();
-          ctx.restore();
+          for (const tv of thresholds) {
+            const y = toBottom(yScale, tv);
+            if (y < bbox.top || y > bbox.top + bbox.height) continue;
+
+            const color = THRESHOLD_COLORS[tv] ?? "rgba(239, 68, 68, 0.6)";
+
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([8, 4]);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(bbox.width, y);
+            ctx.stroke();
+            ctx.restore();
+          }
         });
       }
     },
