@@ -1,7 +1,7 @@
 # Composable: useResponsiveSidebar
 
 **File:** `app/composables/useResponsiveSidebar.ts`
-**Feature:** M2-T1 (Dashboard shell)
+**Feature:** M2-T2 (Monitors list composable and sidebar components)
 
 ## Purpose
 

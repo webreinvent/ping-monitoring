@@ -1,7 +1,7 @@
 # Component: EmptyState
 
 **File:** `app/components/shared/EmptyState.vue`
-**Feature:** M2-T1 (Dashboard shell)
+**Feature:** M2-T2 (Monitors list composable and sidebar components)
 
 ## Purpose
 

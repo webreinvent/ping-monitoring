@@ -955,3 +955,92 @@ The dashboard frontend follows a composable-driven architecture. Charts, state m
 | ADR-043 | Optimistic UI Updates with Rollback | Inline name editing and settings form use optimistic updates — show change immediately, rollback on error. Improves perceived responsiveness. |
 
 *Last updated: 2026-08-03 (Agent 14 — M2 frontend conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-05, M2-T2)
+
+### Sidebar Component Architecture (M2-T2)
+
+The sidebar is composed of two layers: a responsive wrapper (`DashboardSidebar`) and shared content (`SidebarContent`). This separation eliminates code duplication between desktop and mobile layouts.
+
+#### DashboardSidebar — Responsive Wrapper
+- **File**: `app/components/DashboardSidebar.vue`
+- **Pattern**: Thin wrapper that renders `SidebarContent` in two layouts:
+  - **Desktop**: Persistent `.sidebar-panel` with `v-show="!isMobile"`
+  - **Mobile**: Fixed `.sidebar-mobile` overlay with `translateX` transition + backdrop `.sidebar-overlay`
+- **Responsive state**: Uses `useResponsiveSidebar()` for `isMobile`/`isOpen`/`close` — delegates all content logic to `SidebarContent`
+- **Rationale**: Avoids duplicating the sidebar content (monitor list, client groups, empty state) in two template blocks
+
+#### SidebarContent — Shared Content
+- **File**: `app/components/shared/SidebarContent.vue`
+- **Pattern**: Owns the sidebar content: "All Monitors" row + ClientGroup list + EmptyState fallback
+- **Data source**: Uses `useMonitors()` for `monitors`, `groupedByClient`, `isVisible`, `toggleMonitor`
+- **Event handling**: Receives `toggle` and `rename` events from ClientGroup; handles API calls internally
+- **Rename flow**: Calls `PUT /api/clients/:slug/name` → updates local `groupedByClient` state on success → rollback on failure
+
+### useMonitors Composable — Data + Toggle State
+- **File**: `app/composables/useMonitors.ts`
+- **Dual responsibility**: Fetches monitor data (via `useAsyncData`) AND manages toggle visibility state
+- **Toggle API**: Returns `toggleMonitor(id)`, `isVisible(id)`, `showMonitor(id)`, `hideMonitor(id)` — imperative functions for child components
+- **localStorage persistence**: Toggle state persisted to `localStorage` under key `"lnpm-visible-monitors"`
+- **Auto-initialization**: First load auto-shows all monitors (if localStorage is empty, `watch` with `immediate: true` populates the set)
+- **SSR-safe**: localStorage guarded with `typeof window !== "undefined"` — no crashes during server render
+
+### ClientGroup — Inline Name Editing
+- **File**: `app/components/sidebars/ClientGroup.vue`
+- **Props**: `clientName`, `clientSlug`, `monitors`, `isVisible`
+- **Events**: `toggle(monitorId)`, `rename(slug, newName)`
+- **Inline edit pattern**: Click pencil icon → input field with save/cancel → auto-focus + select text → Enter/save to submit, Escape/cancel to revert
+- **Optimistic UI**: Emits `rename` event with new name; parent (`SidebarContent`) calls API. On failure, component re-renders with original name
+- **Validation**: Trims whitespace, rejects empty/whitespace-only or >100 chars
+- **Header click during edit**: No-op — `handleHeaderClick()` returns early if editing
+
+### MonitorRow — Toggle + Navigation
+- **File**: `app/components/sidebars/MonitorRow.vue`
+- **Props**: `monitor`, `visible?` (default: `true`)
+- **Events**: `toggle` (no payload)
+- **Toggle button**: Checkbox-like `.monitor-toggle` with `@click.stop` — prevents navigation when clicking the toggle
+- **Dimmed state**: `.dimmed` class on wrapper with `opacity: 0.35` when `visible` is `false`
+- **Navigation**: Clicking the row (not the toggle) navigates to `/monitors/:id` via `<NuxtLink>`
+- **Selected state**: Computed from `route.path.startsWith(/monitors/${monitor.id})`
+- **Accessibility**: `aria-label` ("Show/Hide in chart") and `aria-pressed` on toggle button
+
+### StatusDot — Quality State Colors
+- **File**: `app/components/shared/StatusDot.vue`
+- **Props**: `qualityState?` (optional, nullable)
+- **Pattern**: Single `<span>` with dynamic class `state-{qualityState}` — CSS in `dashboard.css` handles color and glow
+- **Color mapping**: low/medium → teal (accent), high → orange, veryHigh → red, unstable → purple, disconnected → pink-red, warmingUp → blue, null → gray
+- **No events/slots**: Pure presentational component
+
+### useResponsiveSidebar Composable
+- **File**: `app/composables/useResponsiveSidebar.ts`
+- **Breakpoint**: 980px (matches CSS `@media (max-width: 980px)`)
+- **Resize detection**: `window.addEventListener("resize")` with `requestAnimationFrame` throttling
+- **Cleanup**: `onScopeDispose()` removes listener and cancels pending rAF
+- **Auto-close on navigation**: `router.afterEach()` closes sidebar on mobile
+- **SSR**: `isMobile` defaults to `false` on server; client hydration updates to correct value
+
+### EmptyState Component
+- **File**: `app/components/shared/EmptyState.vue`
+- **Pattern**: Presentational-only component — no script setup, no interactivity
+- **Visual**: Radar animation (72×72px circle with spinning sweep line) + text
+- **Animation**: CSS `@keyframes radar-spin` (2.8s linear infinite)
+- **Reduced motion**: Disabled by `prefers-reduced-motion: reduce` media query in `dashboard.css`
+
+### Dashboard CSS Conventions (M2-T2 additions)
+- **Status dot states**: `.status-dot.state-{qualityState}` — 7 quality states + default gray
+- **Client group**: `.client-group`, `.client-group-header`, `.client-count-badge`, `.chevron-icon`
+- **Monitor row**: `.monitor-row-wrapper`, `.monitor-row`, `.monitor-row.dimmed`, `.monitor-row.selected`
+- **Empty state**: `.empty-state`, `.empty-radar` with `@keyframes radar-spin`
+- **Mobile sidebar**: `.sidebar-overlay`, `.sidebar-mobile`, `.sidebar-mobile.open`, `.sidebar-mobile-close`
+- **Mobile breakpoint**: `@media (max-width: 980px)` — hides desktop sidebar, shows hamburger button
+
+### ADRs — M2-T2 Sidebar
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-044 | DashboardSidebar + SidebarContent Split | Responsive wrapper (DashboardSidebar) delegates content to shared SidebarContent component; eliminates layout duplication between desktop and mobile |
+| ADR-045 | localStorage for Monitor Toggle State | Monitor visibility preferences persisted to localStorage with SSR-safe guards; auto-shows-all on first load |
+| ADR-046 | Inline Name Editing via Events | ClientGroup emits rename events; SidebarContent owns the API call; optimistic update with rollback on failure |
+| ADR-047 | Toggle Button with Click Isolation | MonitorRow toggle uses @click.stop to prevent navigation; dimmed visual state (opacity 0.35) for hidden monitors |
+
+*Last updated: 2026-08-05 (Agent 04 — M2-T2 sidebar conventions appended)*
