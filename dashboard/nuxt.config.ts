@@ -31,7 +31,19 @@ export default defineNuxtConfig({
   },
 
   // Global CSS
-  css: ["~/assets/css/dashboard.css", "~/assets/css/charts.css"],
+  css: [
+    "uplot/dist/uPlot.min.css",
+    "~/assets/css/dashboard.css",
+    "~/assets/css/charts.css",
+  ],
+
+  // Auto-import components from all subdirectories without name prefix.
+  // Templates reference <DashboardHeader/>, <AllMonitorsChart/>, <StatusDot/>, etc.
+  // directly, so subdirs (layout/, sidebars/, shared/, charts/, clients/)
+  // must not be prepended to the component name.
+  components: [
+    { path: "~/components", pathPrefix: false },
+  ],
 
   // App head defaults
   app: {
