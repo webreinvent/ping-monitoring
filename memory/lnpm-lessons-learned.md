@@ -157,3 +157,10 @@ metadata:
 
 ### Iterating Mutable Sets — Always Copy
 - When iterating over sets that may change (like subscriber sets), always iterate a copy (`[...subSet]`).
+
+## M2-T4 Lessons
+
+### useAsyncData Key Must Use Stable Values (M2-T4)
+- **Error**: Using `fromMs.value` and `toMs.value` in the `useAsyncData` key causes infinite re-fetches — they're computed from `Date.now()` and change on every reactive update.
+- **Fix**: Use the time window preset name (e.g., `"1h"`, `"24h"`) as the key component — it only changes when the user explicitly selects a different range.
+- **Lesson**: Always use stable, user-controlled values in `useAsyncData` keys. Never use `Date.now()`-derived values.

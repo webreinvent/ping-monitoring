@@ -22,6 +22,7 @@
 - [Lessons Learned](lnpm-lessons-learned.md) — M1+M2 errors and fixes: WebSocket types, lifecycle hooks, deep watch on typed arrays, mock DB UPDATE binding, better-sqlite3 segfaults
 - [Task Complete M1-T1](lnpm-task-complete-m1-t1.md) — M1-T1 summary: agents 07-10, 115 tests, 38/38 UAT
 - [Task Complete M2 Full](lnpm-task-complete-m2-full.md) — M2 full summary: agents 00-10, 826 tests, all 7 M2 tasks complete (shell, charts, detail, WebSocket, client pages, settings)
+- [Task Complete M2-T4](lnpm-task-complete-m2-t4.md) — M2-T4 specific: detail view with chart, quality bands, metrics, 4 ADRs
 - [M1-T3 Session Context](M1-T3-session-context.md) — M1-T3 scope: 5 migration files exist (from M1-T2), F9 sync columns gap identified
 - [M1-T3 Code Analysis](M1-T3-code-analysis.md) — Code analysis: 5 existing migrations, F9 sync column gap, patterns to follow
 - [M1-T3 Implementation Plan](M1-T3-implementation-plan.md) — Implementation plan: verification sequence, file inventory, all schema verified

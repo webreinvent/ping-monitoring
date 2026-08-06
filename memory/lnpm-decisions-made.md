@@ -149,3 +149,23 @@ metadata:
 ### Sync Settings Form with Validation (M2-T6)
 - **Decision**: Client settings form validates inputs before sending PUT request. Optimistic UI update with rollback on error.
 - **Rationale**: Provides immediate feedback and handles network errors gracefully.
+
+## M2-T4 Detail View Decisions (2026-08-06)
+
+### useAsyncData Key with Time Preset (ADR-052)
+- **Decision**: The `useAsyncData` key uses the time window preset name (e.g., `"1h"`, `"24h"`) — NOT `fromMs`/`toMs` values.
+- **Rationale**: `fromMs`/`toMs` are computed from `Date.now()` and change on every reactive update, causing constant cache invalidation and re-fetches. Preset name is stable and only changes on user action.
+- **Impact**: Essential pattern for any page fetching time-windowed data.
+
+### Computed Properties with Default Values (ADR-053)
+- **Decision**: All data extraction from `HistoryResponse` uses computed properties with fallback defaults.
+- **Rationale**: Prevents null reference errors in child components when data is loading or the API returns empty results.
+- **Pattern**: `historyData.value?.series ?? []` — never access `.series[0]` directly on potentially null objects.
+
+### navigateTo() for Invalid Monitor IDs (ADR-054)
+- **Decision**: Invalid monitor IDs (≤0) redirect to home page in the script setup block.
+- **Rationale**: Simple, declarative, pre-API validation. Guards against malformed URLs before hitting the server.
+
+### Monitor Summary as 9-Card Grid (ADR-055)
+- **Decision**: Range summary metrics displayed as 9 color-coded stat cards.
+- **Rationale**: Matches the desktop app's summary panel layout. Color-coded by thresholds (packet loss: green ≤ 5% → orange, latency: green < 150ms → orange < 300ms → red).

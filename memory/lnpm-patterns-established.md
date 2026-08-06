@@ -181,3 +181,16 @@ metadata:
 ## Inline Name Editing Pattern (M2-T7)
 - **File**: `app/components/sidebars/ClientGroup.vue`
 - **Pattern**: Click-to-edit inline name field with blur/enter to save, escape to cancel. Optimistic update with rollback on error. `PUT /api/clients/[slug]/name` endpoint.
+
+## Monitor Detail View Pattern (M2-T4)
+- **File**: `app/pages/monitors/[id].vue`
+- **Reactive useAsyncData key**: Key uses `monitorId` + `timeWindow` preset name (e.g., `"1h"`) — NOT `fromMs`/`toMs` which are computed from `Date.now()` and would change on every reactive update. This prevents constant re-fetches.
+- **Computed data extraction**: All derived values (targetName, targetHost, qualityState, summary, latestLatency, lastSeenMs, thresholdMs) are computed properties with defensive null-safe access (`historyData.value?.series ?? []`).
+- **Default fallback values**: `defaultSummary` object defined inline with all-zero values — child components never receive null.
+- **404 redirect pattern**: `if (monitorId.value <= 0) { navigateTo("/") }` — validates route params in script setup block before API call.
+- **Components**: `MonitorHeader` (title bar with status/latency/last seen), `MonitorSummary` (9-card metrics grid), both presentational with no events/slots.
+
+## useAsyncData with Reactive Key (M2-T4)
+- **Pattern**: `useAsyncData(() => \`monitor-detail-${monitorId.value}-${timeWindow.value}\`, async () => ...)` — the key changes only when monitorId or time window preset changes.
+- **Why preset name not timestamps**: `fromMs` and `toMs` are computed from `Date.now()` — they change on every reactive update, invalidating the cache and causing infinite re-fetches.
+- **Applies to**: Any page fetching time-windowed data (detail view, all-monitors chart, etc.)
