@@ -2,7 +2,7 @@
 
 **File:** `app/pages/monitors/[id].vue`
 **Route:** `/monitors/:id`
-**Feature:** M2-T1 (Dashboard shell), M2-T4 (Monitor detail view)
+**Feature:** M2-T1 (Dashboard shell), M2-T4 (Monitor detail view), M2-T5 (Live WebSocket updates)
 
 ## Purpose
 
@@ -69,6 +69,46 @@ const qualityBands = computed(() => {
 });
 ```
 
+## Live WebSocket Updates (M2-T5)
+
+The detail page uses `useLiveChart()` to receive real-time samples for the specific monitor:
+
+### Subscribe on Mount
+
+```typescript
+const { subscribe, liveData } = useLiveChart();
+
+watch(monitorId, (id) => {
+  if (id > 0) subscribe(id);
+}, { immediate: true });
+```
+
+### Live + HTTP Data Merge
+
+The `chartData` computed property prefers live WebSocket data over HTTP-fetched data:
+
+```typescript
+const chartData = computed(() => {
+  const live = liveData.value.get(monitorId.value);
+  if (live && live.timestamps.length > 0) {
+    return [live.timestamps, live.values];
+  }
+  if (!historyData.value) return [new Float64Array(0)];
+  return transformToUPlotData(historyData.value);
+});
+```
+
+- **Live data takes precedence**: When WebSocket data is available (from snapshot or live samples), it replaces the HTTP-fetched data
+- **Seamless transition**: Initial load shows HTTP data; once WebSocket snapshot arrives, the chart switches to live data
+- **rAF-debounced updates**: `onUpdate(triggerChartUpdate)` ensures smooth chart updates
+
+### Update Callback
+
+```typescript
+const chartRef = ref<{ updateChart: () => void } | null>(null);
+onUpdate(() => chartRef.value?.updateChart());
+```
+
 ## Invalid Monitor Handling
 
 If the `id` parameter is invalid (≤ 0), the page redirects to `/`:
@@ -102,11 +142,15 @@ useHead({
 - **Monitor not found:** The API returns 404 — `hasError` becomes `true`, showing `EmptyState`.
 - **Quality bands not available:** Empty array — no bands are drawn on the chart.
 - **Threshold not set:** `thresholdMs` is `null` — no threshold line is drawn.
+- **WebSocket disconnected:** Live data is not updated; chart falls back to the last HTTP-fetched data.
+- **Live data exceeds MAX_POINTS (2000):** Oldest points are automatically dropped by `useLiveChart` — no action needed by the page.
+- **Sample with null latencyMs:** Stored as `NaN` — uPlot shows a gap in the line.
 
 ## Related
 
 - [Monitors History API](../../api/monitors-history.md) — Data source
 - [LatencyChart Component](../components/charts/LatencyChart.md) — Chart rendering
+- [useLiveChart Composable](../composables/useLiveChart.md) — WebSocket-to-chart bridge
 - [useChartSeries Composable](../composables/useChartSeries.md) — Data transforms
 - [quality-bands Utility](../utils/quality-bands.md) — Quality band generation
 - [useTimeWindow Composable](../composables/useTimeWindow.md) — Time window management

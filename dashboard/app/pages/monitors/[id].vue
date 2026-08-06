@@ -49,6 +49,7 @@
 import type { HistoryResponse, QualityState, RangeSummary } from "#shared/types";
 import { transformToUPlotData } from "~/composables/useChartSeries";
 import { getQualityBandPaths } from "~/utils/quality-bands";
+import { onBeforeUnmount } from "vue";
 
 const route = useRoute();
 const monitorId = computed(() => Number(route.params.id));
@@ -140,9 +141,41 @@ const qualityBands = computed(() => {
   return getQualityBandPaths(intervals);
 });
 
+// Chart data — merge HTTP history with live WebSocket data
 const chartData = computed(() => {
+  // If live data is available for this monitor, use it
+  const live = liveData.value.get(monitorId.value);
+  if (live && live.timestamps.length > 0) {
+    // uPlot format: [timeColumn, valueColumn]
+    return [live.timestamps, live.values];
+  }
+  // Fall back to HTTP-fetched data
   if (!historyData.value) return [new Float64Array(0)];
   return transformToUPlotData(historyData.value);
+});
+
+// Live chart integration
+const { subscribe, liveData, onUpdate } = useLiveChart();
+
+// Subscribe to this monitor's live feed
+watch(monitorId, (id) => {
+  if (id > 0) {
+    subscribe(id);
+  }
+}, { immediate: true });
+
+const chartRef = ref<{ updateChart: () => void } | null>(null);
+
+function triggerChartUpdate(): void {
+  if (chartRef.value) {
+    chartRef.value.updateChart();
+  }
+}
+
+onUpdate(triggerChartUpdate);
+
+onBeforeUnmount(() => {
+  // Cleanup handled by useLiveChart's onScopeDispose
 });
 
 useHead({

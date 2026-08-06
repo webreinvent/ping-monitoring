@@ -1,6 +1,6 @@
 ---
 name: lnpm-patterns-established
-description: Patterns established during M1 and M2 — Nuxt 4 + Nitro foundation, uPlot charts, WebSocket, Vue composables
+description: Patterns established during M1 and M2 — Nuxt 4 + Nitro foundation, uPlot charts, WebSocket, Vue composables, live chart bridge
 metadata:
   type: project
   agent: "12"
@@ -194,3 +194,12 @@ metadata:
 - **Pattern**: `useAsyncData(() => \`monitor-detail-${monitorId.value}-${timeWindow.value}\`, async () => ...)` — the key changes only when monitorId or time window preset changes.
 - **Why preset name not timestamps**: `fromMs` and `toMs` are computed from `Date.now()` — they change on every reactive update, invalidating the cache and causing infinite re-fetches.
 - **Applies to**: Any page fetching time-windowed data (detail view, all-monitors chart, etc.)
+
+## useLiveChart Bridge Pattern (M2-T5)
+- **File**: `app/composables/useLiveChart.ts`
+- **Pattern**: Centralized composable bridging WebSocket samples into reactive chart data. Consumes `useWebSocket()` internally, maintains `Map<monitorId, { timestamps: Float64Array; values: Float64Array }>`, bounded at 2000 points per monitor.
+- **Key methods**: `subscribe()`, `unsubscribe()`, `isSubscribed()`, `onUpdate(callback)`, `offUpdate(callback)`
+- **rAF debouncing**: `scheduleUpdate()` uses `requestAnimationFrame` with a `pendingUpdate` flag — only one rAF call per frame regardless of sample frequency
+- **Float64Array**: Uses typed arrays matching uPlot's expected format — zero-copy on `setData()`
+- **Integration**: Chart components use `useLiveChart()` to subscribe and consume `liveData`. Computed `chartData` prefers live data over HTTP-fetched data.
+- **Test pattern**: Pure function tests on the data transformation logic (snapshot, append, cap) without mocking Vue composables

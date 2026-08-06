@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-06
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T5 (WebSocket live chart updates)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -404,3 +404,89 @@ export default defineEventHandler((event) => {
 - **Utility tests**: `quality-bands.test.ts` verifies path generation for uPlot Qual plugin.
 - **Contract tests**: uPlot components require canvas DOM — test the logic contracts (threshold resolution, color mapping, visibility filtering) as pure function tests.
 - **Test fixtures**: Use `test/fixtures.ts` factory functions for consistent test data across frontend and backend tests.
+
+## Live Chart Bridge Pattern — useLiveChart (M2-T5)
+
+**Pattern:** Centralized composable that bridges WebSocket samples into reactive chart data — separating WebSocket data flow from chart rendering.
+
+### Architecture
+
+- **`useLiveChart()`**: New composable in `app/composables/useLiveChart.ts` — the single bridge between `useWebSocket()` and chart components
+- **Consumes `useWebSocket()` internally** — calls `onSample()` and `onSnapshot()` to register handlers
+- **Maintains `Map<monitorId, { timestamps: Float64Array; values: Float64Array }>`** — per-monitor live data store
+- **Bounded data**: Caps at `MAX_POINTS_PER_MONITOR` (2000) — drops oldest points when exceeded, preventing memory leak
+- **rAF-debounced updates**: Uses `requestAnimationFrame` to batch chart updates — only one rAF call per frame, regardless of sample frequency
+- **Callback registration**: `onUpdate(callback)` / `offUpdate(callback)` — parent components register `updateChart()` callbacks to push data to uPlot
+
+### Key Methods
+
+- `subscribe(monitorId)` — Subscribe to a monitor's live feed (delegates to `useWebSocket().subscribe()`)
+- `unsubscribe(monitorId)` — Unsubscribe (delegates to `useWebSocket().unsubscribe()`)
+- `isSubscribed(monitorId)` — Check subscription status
+- `onUpdate(callback)` — Register rAF callback for chart updates
+- `offUpdate(callback)` — Remove registered callback
+
+### Integration Pattern
+
+**AllMonitorsChart.vue** (multi-monitor):
+```ts
+const { subscribe, liveData, onUpdate } = useLiveChart();
+
+// Auto-subscribe to visible monitors
+watch(() => props.monitors, (m) => {
+  for (const id of m.map(m => m.id)) {
+    if (isVisible(id) && !isSubscribed(id)) subscribe(id);
+  }
+}, { immediate: true });
+
+// Merge live + HTTP data in computed
+const chartData = computed(() => {
+  const liveEntry = liveData.value.get(m.id);
+  const httpEntry = monitorData.value.get(m.id);
+  // Prefer live, fall back to HTTP
+});
+
+// Register chart update callback
+onUpdate(() => chartRef.value.updateChart());
+```
+
+**Single monitor page** (`monitors/[id].vue`):
+```ts
+const { subscribe, liveData } = useLiveChart();
+
+watch(monitorId, (id) => { if (id > 0) subscribe(id); }, { immediate: true });
+
+const chartData = computed(() => {
+  const live = liveData.value.get(monitorId.value);
+  if (live) return [live.timestamps, live.values];
+  return transformToUPlotData(historyData.value);
+});
+```
+
+### Design Decisions
+
+- **Centralized (not per-component)**: Single `useLiveChart` instance avoids duplicate WebSocket connections and subscription management
+- **Callback-based updates** (not reactive watch): `onUpdate/offUpdate` with rAF is more efficient than watching `liveData` with `deep: true` — prevents reactive system overhead
+- **Float64Array for chart data**: Uses `Float64Array` (not plain arrays) — matches uPlot's expected format, zero-copy on `setData()`
+- **Timestamps in seconds**: Converts `timestampMs / 1000` for uPlot — consistent with history API's time format
+
+### Test Pattern (M2-T5)
+
+- **Pure function tests**: Test the core data transformation logic (snapshot, append, cap) without mocking Vue composables
+- **Simulated data map**: Tests use a plain `Map<number, { timestamps, values }>` to mirror internal state
+- **No DOM dependency**: Tests verify array lengths, values, and ordering — not rendering
+
+## Sidebar WebSocket Integration (M2-T5)
+
+**Pattern:** `SidebarContent` listens for `client_name_updated` messages via `useWebSocket().onClientNameUpdated()` to update sidebar client names in real time.
+
+```ts
+const { onClientNameUpdated } = useWebSocket();
+onClientNameUpdated((clientSlug, newName) => {
+  const group = groupedByClient.value.find(g => g.clientSlug === clientSlug);
+  if (group) group.clientName = newName;
+});
+```
+
+- **Optimistic + reactive**: Directly mutates the `groupedByClient` array — Vue's reactivity propagates the change
+- **No API call needed**: The WebSocket message is the source of truth; no round-trip to the API

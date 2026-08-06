@@ -1221,3 +1221,79 @@ if (monitorId.value <= 0) {
 | ADR-055 | Monitor Summary as 9-Card Grid | Range summary metrics displayed as 9 color-coded stat cards; matches desktop app's summary panel layout |
 
 *Last updated: 2026-08-06 (Agent 04 — M2-T4 detail view conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-06, M2-T5)
+
+### Live Chart Bridge — useLiveChart (M2-T5)
+
+The `useLiveChart` composable (`app/composables/useLiveChart.ts`) is the centralized bridge between WebSocket live data and chart components. It consumes `useWebSocket()` internally and exposes reactive per-monitor time series data.
+
+#### Architecture
+
+- **Single bridge**: One composable instance manages all WebSocket-to-chart data flow — DRY across all chart components
+- **Internal `useWebSocket()`**: `useLiveChart` calls `useWebSocket()` and registers `onSample()` / `onSnapshot()` callbacks
+- **Per-monitor data store**: `Map<monitorId, { timestamps: Float64Array; values: Float64Array }>` — `Float64Array` for zero-copy uPlot integration
+- **Bounded at 2000 points**: `MAX_POINTS_PER_MONITOR = 2000` — oldest points dropped when exceeded
+- **rAF-debounced updates**: `scheduleUpdate()` uses `requestAnimationFrame` with a `pendingUpdate` flag — only one update call per frame
+
+#### API
+
+```typescript
+const {
+  liveData,              // Ref<Map<number, { timestamps: Float64Array; values: Float64Array }>>
+  subscribedMonitorIds,  // Ref<Set<number>>
+  subscribe(monitorId),  // Subscribe to live feed
+  unsubscribe(monitorId), // Unsubscribe
+  isSubscribed(monitorId), // Check subscription
+  onUpdate(callback),     // Register rAF update callback
+  offUpdate(callback),    // Remove update callback
+  connectionState,        // Delegated from useWebSocket
+} = useLiveChart();
+```
+
+#### Integration Pattern
+
+**AllMonitorsChart** (multi-monitor):
+- Auto-subscribe to visible monitors on monitor list changes
+- `chartData` computed: prefers `liveData` over HTTP-fetched data
+- `onUpdate(() => chartRef.value?.updateChart())` for rAF-debounced chart updates
+- `onBeforeUnmount(() => offUpdate(...))` for cleanup
+
+**Single monitor page** (`monitors/[id].vue`):
+- Subscribe on `monitorId` watch (immediate)
+- `chartData` computed: `liveData` if available, else `transformToUPlotData(historyData)`
+- `onUpdate(() => chartRef.value?.updateChart())` for rAF-debounced chart updates
+
+#### Key Design Decisions
+
+- **rAF callbacks over reactive watch**: `onUpdate(callback)` with `requestAnimationFrame` is used instead of `watch(liveData, ..., { deep: true })`. This batches updates to one per frame and avoids Vue reactivity overhead on high-frequency data.
+- **Float64Array for chart data**: Typed arrays match uPlot's expected format — zero-copy on `setData()`, better memory efficiency.
+- **Live data preference**: Chart computed properties check `liveData` first, then fall back to HTTP data. This provides seamless transition from initial load (HTTP) to live updates (WebSocket).
+- **Centralized bridge**: All chart components consume `useLiveChart()` — no direct `useWebSocket()` usage in chart components. This avoids duplicate connections and subscription management.
+
+### Sidebar Live Name Updates (M2-T5)
+
+`SidebarContent` listens for `client_name_updated` WebSocket messages to update sidebar client names in real time:
+
+```typescript
+const { onClientNameUpdated } = useWebSocket();
+onClientNameUpdated((clientSlug, newName) => {
+  const group = groupedByClient.value.find(g => g.clientSlug === clientSlug);
+  if (group) group.clientName = newName;
+});
+```
+
+- **Direct mutation**: Updates `groupedByClient` array directly — Vue's reactivity propagates the change
+- **No API call needed**: WebSocket message is the source of truth; server broadcasts to all connected clients
+- **Cross-tab sync**: All open browser tabs receive the update simultaneously
+
+### ADRs — M2-T5 Live Chart Updates
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-056 | Centralized useLiveChart Bridge | Single composable bridges WebSocket to all chart components; avoids duplicate connections and subscription management |
+| ADR-057 | rAF-Debounced Update Callbacks | requestAnimationFrame batches chart updates to one per frame; prevents Vue reactivity overhead on high-frequency data |
+| ADR-058 | Bounded Live Data (2000 points) | Memory-safe accumulation with oldest-point eviction on capacity; matches history API's maxPoints |
+| ADR-059 | Live-over-HTTP Data Priority | Computed properties check liveData first; HTTP data provides initial load only; seamless transition |
+
+*Last updated: 2026-08-06 (Agent 04 — M2-T5 live chart conventions appended)*

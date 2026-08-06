@@ -1,7 +1,7 @@
 # Component: AllMonitorsChart
 
 **File:** `app/components/charts/AllMonitorsChart.vue`
-**Feature:** M2-T3 (All-monitors chart)
+**Feature:** M2-T3 (All-monitors chart), M2-T5 (Live WebSocket updates)
 
 ## Purpose
 
@@ -55,6 +55,66 @@ On mount and when the monitor list or time window changes, the component fetches
 | `maxPoints` | Maximum data points per monitor (default 2000) |
 
 All fetches run in parallel via `Promise.allSettled`. Individual monitor fetch failures are silently skipped — the chart still renders with data from other monitors.
+
+## Live WebSocket Updates (M2-T5)
+
+The component uses `useLiveChart()` to receive real-time WebSocket samples and update the chart without page reload:
+
+### Auto-Subscribe
+
+When the monitor list changes, the component auto-subscribes to all visible monitors:
+
+```typescript
+watch(
+  () => props.monitors.map((m) => m.id).join(","),
+  (newIds) => {
+    const ids = newIds.split(",").map(Number);
+    for (const id of ids) {
+      if (isVisible(id) && !isSubscribed(id)) subscribe(id);
+    }
+  },
+  { immediate: true }
+);
+```
+
+### Live + HTTP Data Merge
+
+The `chartData` computed property prefers live WebSocket data over HTTP-fetched data:
+
+```typescript
+const chartData = computed(() => {
+  for (const m of props.monitors) {
+    if (!isVisible(m.id)) continue;
+    const liveEntry = liveData.value.get(m.id);
+    const httpEntry = monitorData.value.get(m.id);
+    if (liveEntry) entries.push([m.id, liveEntry]);
+    else if (httpEntry) entries.push([m.id, httpEntry]);
+  }
+  // Merge into uPlot format...
+});
+```
+
+- **Live data takes precedence**: When a monitor has WebSocket data (from snapshot or live samples), it replaces the HTTP-fetched data
+- **Seamless transition**: Initial load uses HTTP data; once WebSocket snapshot arrives, the chart switches to live data
+- **rAF-debounced updates**: `onUpdate(triggerChartUpdate)` registers a callback that fires on `requestAnimationFrame`, ensuring smooth updates even with rapid sample arrival
+
+### Update Callback Registration
+
+```typescript
+const chartRef = ref<{ updateChart: () => void } | null>(null);
+
+function triggerChartUpdate(): void {
+  if (chartRef.value) chartRef.value.updateChart();
+}
+
+onUpdate(triggerChartUpdate);
+
+onBeforeUnmount(() => {
+  offUpdate(triggerChartUpdate);
+});
+```
+
+The `onUpdate`/`offUpdate` pattern is critical — it ensures chart updates are batched to one per animation frame, preventing reactivity overhead from frequent WebSocket messages.
 
 ## Data Merging
 
@@ -118,6 +178,19 @@ The component uses `useTimeWindow()` to get the current time window (`fromMs`, `
 - **Time window change during load:** The `watch` on `selectedPreset` triggers a fresh fetch, replacing the previous data.
 - **All monitors hidden via toggle:** `chartData` returns `[new Float64Array(0)]` — uPlot renders with empty data. The `EmptyState` component is shown when `hasNoData` is `true` (but note: `hasNoData` is based on data fetch results, not toggle state). Visible legend items are dimmed with line-through styling.
 - **Hidden monitor re-shown:** Palette color is preserved (original index used) — no color flicker. The series data is available from `monitorData` map and the `chartData` computed re-includes it.
+- **WebSocket disconnected:** Live data is not updated; chart falls back to the last HTTP-fetched data. `connectionState` is exposed via `useLiveChart` for UI indicator.
+- **Live data exceeds MAX_POINTS (2000):** Oldest points are automatically dropped by `useLiveChart` — no action needed by the component.
+- **Sample with null latencyMs:** Stored as `NaN` in the values array — uPlot shows a gap in the line.
+
+## Related
+
+- [LatencyChart](./LatencyChart.md) — Underlying chart component
+- [useLiveChart Composable](../../composables/useLiveChart.md) — WebSocket-to-chart bridge
+- [useTimeWindow Composable](../../composables/useTimeWindow.md) — Time window management
+- [useDashboardPalette Composable](../../composables/useDashboardPalette.md) — Color palette
+- [useChartSeries Composable](../../composables/useChartSeries.md) — Data transforms
+- [Monitors History API](../../../api/monitors-history.md) — Data source
+- [Index Page](../pages/index.md) — Primary consumer
 
 ## Related
 

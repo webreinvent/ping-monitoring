@@ -316,3 +316,23 @@
 **Fix:** Define a `defaultSummary` object with safe default values (0 for counts, null for latency, 0 for percentages) and use `series[0]?.summary ?? defaultSummary`.
 
 **Prevention:** When extracting nested values from API responses for child components, always provide default fallback values. The `computed()` pattern with `??` is clean and reactive.
+
+## Lesson 33: Live chart updates need rAF debouncing, not reactive watch
+
+**Error:** Using `watch(liveData, handler, { deep: true })` to trigger chart updates causes Vue's reactivity system to fire on every sample append — leading to multiple `updateChart()` calls per frame and choppy rendering.
+
+**Root cause:** `liveData` is a `ref<Map<...>>` — every `set()` call triggers watchers. With samples arriving every second (or faster), the chart tries to re-render more than once per frame.
+
+**Fix:** Use `requestAnimationFrame` with a `pendingUpdate` flag to ensure only one update per frame. The `onUpdate(callback)` / `offUpdate(callback)` pattern in `useLiveChart` registers callbacks that fire once per frame regardless of how many samples arrive.
+
+**Prevention:** When updating charts from high-frequency data sources (WebSocket, timers, etc.), always debounce via `requestAnimationFrame` — not Vue watchers. rAF is the browser's native batching mechanism and aligns with the rendering pipeline.
+
+## Lesson 34: Data cap is essential for WebSocket-accumulated time series
+
+**Error:** Without a maximum point limit, the `liveData` Map grows indefinitely — memory leaks during long sessions (hours of continuous data accumulation).
+
+**Root cause:** WebSocket samples are appended without bound; unlike the history API which returns a finite set, live data has no natural stopping point.
+
+**Fix:** Implement `MAX_POINTS_PER_MONITOR = 2000` — when exceeded, drop the oldest point (shift data by 1 position before appending). This is done during the append operation, not as a separate cleanup step.
+
+**Prevention:** Any data structure that accumulates items from a continuous stream (WebSocket, polling, etc.) must have a bounded capacity. The cap should be set at the data ingestion point, not as a periodic cleanup.
