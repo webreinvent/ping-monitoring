@@ -11,13 +11,22 @@
       data-testid="monitor-row"
       @click.prevent="handleClick"
     >
-      <button
-        class="monitor-toggle"
-        :class="{ checked: visible }"
-        @click.stop="emitToggle"
-        :aria-label="visible ? 'Hide in chart' : 'Show in chart'"
-        :aria-pressed="visible"
-      />
+      <ClientOnly>
+        <button
+          class="monitor-toggle"
+          :class="{ checked: visible }"
+          @click.stop.prevent="emitToggle"
+          :aria-label="visible ? 'Hide in chart' : 'Show in chart'"
+          :aria-pressed="visible"
+        />
+        <template #fallback>
+          <button
+            class="monitor-toggle"
+            aria-label="Show in chart"
+            aria-pressed="true"
+          />
+        </template>
+      </ClientOnly>
       <StatusDot :quality-state="monitor.qualityState" />
       <div class="target-copy">
         <strong>{{ monitor.targetName }}</strong>

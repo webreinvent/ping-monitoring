@@ -19,10 +19,18 @@
         <p>Cloud Dashboard</p>
       </div>
     </div>
-    <div class="connection-status" :class="wsStateClass">
-      <span class="connection-dot" :class="wsDotClass" />
-      <span>{{ wsStateText }}</span>
-    </div>
+    <ClientOnly>
+      <div class="connection-status" :class="wsStateClass">
+        <span class="connection-dot" :class="wsDotClass" />
+        <span>{{ wsStateText }}</span>
+      </div>
+      <template #fallback>
+        <div class="connection-status ws-disconnected">
+          <span class="connection-dot ws-dot disconnected" />
+          <span>Disconnected</span>
+        </div>
+      </template>
+    </ClientOnly>
   </header>
 </template>
 
