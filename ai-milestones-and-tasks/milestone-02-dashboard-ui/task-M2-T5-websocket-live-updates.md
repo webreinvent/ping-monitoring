@@ -31,26 +31,26 @@ Build the `useWebSocket` composable that manages WebSocket connections, handles 
 
 ## Acceptance Criteria
 
-- [ ] WebSocket connection established on dashboard load
-- [ ] Subscribe/unsubscribe protocol works
-- [ ] New samples push to charts without page reload
-- [ ] Auto-reconnect with exponential backoff (1s-30s)
-- [ ] Re-subscribe to monitors on reconnect
-- [ ] Client name updates broadcast to sidebar
-- [ ] Reconnect indicator shown during disconnection
-- [ ] Connection state exposed for UI
+- [x] WebSocket connection established on dashboard load
+- [x] Subscribe/unsubscribe protocol works
+- [x] New samples push to charts without page reload
+- [x] Auto-reconnect with exponential backoff (1s-30s)
+- [x] Re-subscribe to monitors on reconnect
+- [x] Client name updates broadcast to sidebar
+- [x] Reconnect indicator shown during disconnection
+- [x] Connection state exposed for UI
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] WebSocket connects
-- [ ] Live updates work
-- [ ] Reconnect works
+- [x] WebSocket connects
+- [x] Live updates work
+- [x] Reconnect works
 
 ## Dependencies
 

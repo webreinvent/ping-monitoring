@@ -300,3 +300,30 @@
 - **Decision:** Agent 02 (Implement) was skipped for M2-T4 because the implementation was already fully complete on the `develop` branch
 - **Rationale:** All 6 acceptance criteria were met by existing code created during earlier M2 sessions (M2-T3). The detail view page, components, composables, and utilities were all functional.
 - **Impact:** Agent 02 verified completeness (typecheck clean, dev server starts, 854 tests pass) rather than implementing. This is a pattern — always check for existing implementation before coding.
+
+## M2-T5 — WebSocket Live Chart Updates
+
+### Centralized useLiveChart Bridge (Not Per-Component)
+- **Decision:** Create a single `useLiveChart` composable as the bridge between `useWebSocket` and chart components, rather than wiring WebSocket directly into each chart component
+- **Rationale:** DRY — avoids duplicating subscription management, data transforms, and rAF debouncing across components. Single point of failure, single point of test. Follows the existing composable-driven architecture (M2 pattern).
+- **Impact:** Chart components consume `liveData` via computed properties — rendering and data flow are cleanly separated
+
+### rAF-Debounced Update Callbacks (Not Reactive Watch)
+- **Decision:** Use `onUpdate(callback)` with `requestAnimationFrame` instead of `watch(liveData, ..., { deep: true })` for triggering chart updates
+- **Rationale:** rAF batches updates to one per frame — critical when samples arrive at high frequency (e.g., 1-second ping intervals). `deep: true` watch on a Map would trigger Vue's reactivity system for every sample, causing unnecessary re-renders.
+- **Impact:** Chart updates are smooth and efficient — no frame drops even with rapid sample arrival
+
+### Bounded Data at 2000 Points
+- **Decision:** Cap per-monitor data at 2000 points (`MAX_POINTS_PER_MONITOR`), dropping oldest when exceeded
+- **Rationale:** Prevents unbounded memory growth during long sessions. 2000 points = ~33 minutes at 1s intervals, which exceeds any realistic chart view. Matches the `maxPoints: 2000` used in the history API.
+- **Impact:** Memory-bounded live data; oldest points are silently dropped when cap is reached
+
+### Live Data Prefers Over HTTP Data in Computed
+- **Decision:** Chart data computed properties check `liveData` first, then fall back to HTTP-fetched data
+- **Rationale:** WebSocket data is more recent (includes the latest samples); HTTP data provides the initial full history. When live data exists, it's the source of truth.
+- **Impact:** Seamless transition from initial load (HTTP) to live updates (WebSocket) — no visual glitch
+
+### Float64Array for Chart Data
+- **Decision:** Store chart data as `Float64Array` (typed arrays) rather than plain JavaScript arrays
+- **Rationale:** uPlot expects `Float64Array` for `setData()` — using typed arrays avoids conversion overhead. Also more memory efficient.
+- **Impact:** Zero-copy data transfer to uPlot; better performance on large datasets

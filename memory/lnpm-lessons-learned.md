@@ -1,6 +1,6 @@
 ---
 name: lnpm-lessons-learned
-description: Errors encountered and lessons learned during M1 and M2 implementation
+description: Errors encountered and lessons learned during M1 and M2 implementation, including live chart updates
 metadata:
   type: project
   agent: "12"
@@ -164,3 +164,15 @@ metadata:
 - **Error**: Using `fromMs.value` and `toMs.value` in the `useAsyncData` key causes infinite re-fetches — they're computed from `Date.now()` and change on every reactive update.
 - **Fix**: Use the time window preset name (e.g., `"1h"`, `"24h"`) as the key component — it only changes when the user explicitly selects a different range.
 - **Lesson**: Always use stable, user-controlled values in `useAsyncData` keys. Never use `Date.now()`-derived values.
+
+## M2-T5 Lessons
+
+### Chart Updates Need rAF Debouncing, Not Reactive Watch (M2-T5)
+- **Error**: `watch(liveData, handler, { deep: true })` triggers on every sample append — causing multiple `updateChart()` calls per frame and choppy rendering.
+- **Fix**: Use `requestAnimationFrame` with a `pendingUpdate` flag via `onUpdate(callback)` / `offUpdate(callback)` pattern.
+- **Lesson:** High-frequency data (WebSocket samples) must be batched via rAF — not Vue watchers. rAF aligns with the browser rendering pipeline.
+
+### Bounded Data is Essential for Continuous Streams (M2-T5)
+- **Error**: Without a cap, `liveData` Map grows indefinitely — memory leaks during long sessions.
+- **Fix**: `MAX_POINTS_PER_MONITOR = 2000` — drop oldest point when exceeded during the append operation.
+- **Lesson:** Any data structure accumulating from a continuous stream (WebSocket, polling) must have a bounded capacity set at ingestion time.

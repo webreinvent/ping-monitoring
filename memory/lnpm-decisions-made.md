@@ -1,6 +1,6 @@
 ---
 name: lnpm-decisions-made
-description: Architectural and implementation decisions for LNPM Cloud Dashboard — M1 and M2
+description: Architectural and implementation decisions for LNPM Cloud Dashboard — M1 and M2, including live chart updates
 metadata:
   type: project
   agent: "12"
@@ -169,3 +169,20 @@ metadata:
 ### Monitor Summary as 9-Card Grid (ADR-055)
 - **Decision**: Range summary metrics displayed as 9 color-coded stat cards.
 - **Rationale**: Matches the desktop app's summary panel layout. Color-coded by thresholds (packet loss: green ≤ 5% → orange, latency: green < 150ms → orange < 300ms → red).
+
+## M2-T5 Live Chart Update Decisions (2026-08-06)
+
+### Centralized useLiveChart Bridge (ADR-056)
+- **Decision**: Create a single `useLiveChart` composable as the bridge between `useWebSocket` and chart components, rather than wiring WebSocket directly into each chart.
+- **Rationale:** DRY — avoids duplicating subscription management, data transforms, and update debouncing. Single point of test and failure. Follows the composable-driven M2 architecture.
+- **Impact:** Chart components consume `liveData` via computed properties — rendering and data flow are cleanly separated.
+
+### rAF-Debounced Update Callbacks (ADR-057)
+- **Decision**: Use `onUpdate(callback)` with `requestAnimationFrame` instead of `watch(liveData, ..., { deep: true })` for chart updates.
+- **Rationale:** rAF batches to one update per frame — critical at high sample frequency. `deep: true` watch on a Map triggers Vue reactivity for every sample, causing unnecessary re-renders.
+- **Impact:** Smooth chart updates even with rapid sample arrival.
+
+### Bounded Live Data at 2000 Points (ADR-058)
+- **Decision**: Cap per-monitor data at 2000 points (`MAX_POINTS_PER_MONITOR`), dropping oldest when exceeded.
+- **Rationale:** Prevents unbounded memory growth. 2000 points = ~33 minutes at 1s intervals, exceeds any realistic chart view. Matches `maxPoints: 2000` in the history API.
+- **Impact:** Memory-bounded live data; oldest points silently dropped when cap reached.

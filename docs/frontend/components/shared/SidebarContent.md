@@ -1,7 +1,7 @@
 # Component: SidebarContent
 
 **File:** `app/components/shared/SidebarContent.vue`
-**Feature:** M2-T2 (Monitors list composable and sidebar components)
+**Feature:** M2-T2 (Monitors list composable and sidebar components), M2-T5 (Live client name updates)
 
 ## Purpose
 
@@ -84,6 +84,26 @@ async function handleRename(slug: string, newName: string): Promise<void> {
 
 Calls `PUT /api/clients/:slug/name` to persist the name change. On success, updates the local `groupedByClient` state. On failure, the original name is preserved (rollback).
 
+### Live Client Name Updates (M2-T5)
+
+The component listens for `client_name_updated` WebSocket messages via `useWebSocket().onClientNameUpdated()`:
+
+```typescript
+const { onClientNameUpdated } = useWebSocket();
+onClientNameUpdated((clientSlug: string, newName: string) => {
+  const groups = groupedByClient.value;
+  const group = groups.find((g) => g.clientSlug === clientSlug);
+  if (group) {
+    group.clientName = newName;
+  }
+});
+```
+
+- **Source of truth**: The WebSocket message is the authoritative source — no API round-trip needed
+- **Direct mutation**: Updates `group.clientName` directly; Vue's reactivity propagates the change to the DOM
+- **No API call needed**: The server broadcasts the name change to all connected clients
+- **Works across tabs**: All open browser tabs receive the update simultaneously
+
 ## Data Attributes
 
 No direct test IDs — relies on child component test IDs (`data-testid="client-group"`, `data-testid="monitor-row"`, `data-testid="empty-state"`).
@@ -102,3 +122,4 @@ No direct test IDs — relies on child component test IDs (`data-testid="client-
 - [MonitorRow](../components/MonitorRow.md) — Renders individual monitor rows
 - [EmptyState](../components/EmptyState.md) — Shown when no monitors exist
 - [useMonitors](../composables/useMonitors.md) — Data source and toggle state
+- [useWebSocket](../composables/useWebSocket.md) — WebSocket connection for live name updates

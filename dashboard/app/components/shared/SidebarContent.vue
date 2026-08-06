@@ -33,6 +33,16 @@
 <script setup lang="ts">
 const { monitors, groupedByClient, isVisible, toggleMonitor } = useMonitors();
 
+// Listen for client name updates via WebSocket
+const { onClientNameUpdated } = useWebSocket();
+onClientNameUpdated((clientSlug: string, newName: string) => {
+  const groups = groupedByClient.value;
+  const group = groups.find((g) => g.clientSlug === clientSlug);
+  if (group) {
+    group.clientName = newName;
+  }
+});
+
 const route = useRoute();
 const selectedMonitorId = computed(() => {
   const match = route.path.match(/^\/monitors\/(\d+)$/);

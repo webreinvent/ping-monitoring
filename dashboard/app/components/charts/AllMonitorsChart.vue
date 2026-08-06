@@ -34,6 +34,7 @@
 import type { MonitorListItem, HistoryResponse } from "#shared/types";
 import { getPaletteColor } from "~/composables/useDashboardPalette";
 import { transformPointsToUPlotSeries } from "~/composables/useChartSeries";
+import { onBeforeUnmount } from "vue";
 
 interface Props {
   /** Monitors to display on the chart */
@@ -44,6 +45,9 @@ const props = defineProps<Props>();
 
 // Monitor visibility toggle state
 const { toggleMonitor, isVisible } = useMonitors();
+
+// Live chart integration
+const { subscribe, unsubscribe, isSubscribed, liveData, onUpdate, offUpdate } = useLiveChart();
 
 // Fetch history for each monitor
 const monitorData = ref<Map<number, { timestamps: Float64Array; values: Float64Array }>>(new Map());
@@ -118,8 +122,22 @@ async function fetchAllHistory(): Promise<void> {
 const { fromMs, toMs, selectedPreset } = useTimeWindow();
 
 // Combine all monitor data into uPlot format — only include visible monitors
+// For each monitor, use live WebSocket data if available, otherwise fall back to HTTP-fetched data
 const chartData = computed(() => {
-  const entries = [...monitorData.value.entries()].filter(([id]) => isVisible(id));
+  const entries: [number, { timestamps: Float64Array; values: Float64Array }][] = [];
+
+  for (const m of props.monitors) {
+    if (!isVisible(m.id)) continue;
+    // Prefer live data over HTTP data for this monitor
+    const liveEntry = liveData.value.get(m.id);
+    const httpEntry = monitorData.value.get(m.id);
+    if (liveEntry) {
+      entries.push([m.id, liveEntry]);
+    } else if (httpEntry) {
+      entries.push([m.id, httpEntry]);
+    }
+  }
+
   if (entries.length === 0) return [new Float64Array(0)];
 
   // Merge all timestamps into a single time axis
@@ -170,5 +188,33 @@ watch(
   { immediate: true },
 );
 
-const chartRef = ref<null | unknown>(null);
+// Auto-subscribe to visible monitors when monitor list changes
+watch(
+  () => props.monitors.map((m) => m.id).join(","),
+  (newIds) => {
+    const ids = newIds.split(",").map(Number);
+    for (const id of ids) {
+      if (isVisible(id) && !isSubscribed(id)) {
+        subscribe(id);
+      }
+    }
+  },
+  { immediate: true },
+);
+
+// Register the update callback to push live data into the chart
+const chartRef = ref<{ updateChart: () => void } | null>(null);
+
+function triggerChartUpdate(): void {
+  if (chartRef.value) {
+    chartRef.value.updateChart();
+  }
+}
+
+onUpdate(triggerChartUpdate);
+
+// Cleanup on unmount
+onBeforeUnmount(() => {
+  offUpdate(triggerChartUpdate);
+});
 </script>
