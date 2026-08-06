@@ -121,57 +121,56 @@ async function fetchAllHistory(): Promise<void> {
 
 const { fromMs, toMs, selectedPreset } = useTimeWindow();
 
-// Combine all monitor data into uPlot format — only include visible monitors
-// For each monitor, use live WebSocket data if available, otherwise fall back to HTTP-fetched data
+// Combine all monitor data into uPlot format — one column per visible monitor.
+// Column count MUST match `seriesConfig.length`; monitors with no data get a
+// NaN-filled column. NaN values are ignored by uPlot's auto-scaler and the
+// series is still drawn (a flat invisible line, which is fine).
 const chartData = computed(() => {
-  const entries: [number, { timestamps: Float64Array; values: Float64Array }][] = [];
+  const visible = props.monitors.filter((m) => isVisible(m.id));
+  if (visible.length === 0) return [new Float64Array(0)];
 
-  for (const m of props.monitors) {
-    if (!isVisible(m.id)) continue;
-    // Prefer live data over HTTP data for this monitor
-    const liveEntry = liveData.value.get(m.id);
-    const httpEntry = monitorData.value.get(m.id);
-    if (liveEntry) {
-      entries.push([m.id, liveEntry]);
-    } else if (httpEntry) {
-      entries.push([m.id, httpEntry]);
-    }
+  type Entry = { timestamps: Float64Array; values: Float64Array };
+  const dataByMonitor = new Map<number, Entry>();
+  for (const m of visible) {
+    const entry = liveData.value.get(m.id) ?? monitorData.value.get(m.id);
+    if (entry) dataByMonitor.set(m.id, entry);
   }
-
-  if (entries.length === 0) return [new Float64Array(0)];
 
   // Merge all timestamps into a single time axis
   const allTimestampsSet = new Set<number>();
-  for (const [, { timestamps }] of entries) {
-    for (let i = 0; i < timestamps.length; i++) {
-      allTimestampsSet.add(timestamps[i] as number);
+  for (const entry of dataByMonitor.values()) {
+    for (let i = 0; i < entry.timestamps.length; i++) {
+      allTimestampsSet.add(entry.timestamps[i] as number);
     }
   }
 
-  // Sort timestamps
+  if (allTimestampsSet.size === 0) return [new Float64Array(0)];
+
   const sortedTimestamps = [...allTimestampsSet].sort((a, b) => a - b);
   const len = sortedTimestamps.length;
 
-  // Build merged time column
   const mergedTime = new Float64Array(len);
   for (let i = 0; i < len; i++) {
     mergedTime[i] = sortedTimestamps[i] as number;
   }
 
-  // Build series columns — order must match seriesConfig
+  // Build one column per visible monitor — always aligned with seriesConfig
   const seriesColumns: Float64Array[] = [];
-  for (const [id, { timestamps, values }] of entries) {
-    // Build lookup: timestamp -> index in original arrays
-    const timeIndex = new Map<number, number>();
-    for (let i = 0; i < timestamps.length; i++) {
-      timeIndex.set(timestamps[i] as number, i);
+  for (const m of visible) {
+    const entry = dataByMonitor.get(m.id);
+    if (!entry) {
+      seriesColumns.push(new Float64Array(len).fill(NaN));
+      continue;
     }
-
+    const timeIndex = new Map<number, number>();
+    for (let i = 0; i < entry.timestamps.length; i++) {
+      timeIndex.set(entry.timestamps[i] as number, i);
+    }
     const col = new Float64Array(len);
     for (let i = 0; i < len; i++) {
       const ts = sortedTimestamps[i] as number;
       const idx = timeIndex.get(ts);
-      col[i] = idx !== undefined ? (values[idx] as number) : NaN;
+      col[i] = idx !== undefined ? (entry.values[idx] as number) : NaN;
     }
     seriesColumns.push(col);
   }
@@ -212,6 +211,12 @@ function triggerChartUpdate(): void {
 }
 
 onUpdate(triggerChartUpdate);
+
+// Also push chart updates whenever computed data changes — covers the case
+// where HTTP history loads asynchronously after the chart was first created.
+watch(chartData, () => {
+  triggerChartUpdate();
+}, { flush: "post" });
 
 // Cleanup on unmount
 onBeforeUnmount(() => {
