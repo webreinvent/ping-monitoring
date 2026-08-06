@@ -11,6 +11,7 @@ use crate::{
     },
     monitor::{MonitorError, MonitorService},
     storage::{Database, StorageError},
+    sync::{SyncEvent, SyncResult, SyncService},
     tray::{refresh_tray, show_main_window},
 };
 
@@ -58,6 +59,7 @@ impl From<MonitorError> for CommandError {
 pub struct AppState {
     pub monitor: Arc<MonitorService>,
     pub database: Database,
+    pub sync_service: Arc<SyncService>,
 }
 
 #[tauri::command]
@@ -122,11 +124,16 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, CommandEr
 }
 
 #[tauri::command]
-pub fn save_settings(
+pub async fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: AppSettings,
 ) -> Result<AppSettings, CommandError> {
+    // Validate ingest URL if present
+    if let Err(e) = settings.validate_ingest_url() {
+        return Err(CommandError::new(e.code(), e));
+    }
+
     let autolaunch = app.autolaunch();
     let currently_enabled = autolaunch
         .is_enabled()
@@ -145,6 +152,10 @@ pub fn save_settings(
     state.database.save_settings(&settings)?;
     refresh_tray(&app, &settings, &state.monitor.snapshot())
         .map_err(|error| CommandError::new("monitoring", error))?;
+
+    // Apply sync settings (spawn/cancel background task as needed)
+    state.sync_service.apply_settings(&settings).await;
+
     let _ = app.emit("settings-updated", &settings);
     Ok(settings)
 }
@@ -194,4 +205,20 @@ pub fn quit_app(app: AppHandle) -> Result<(), CommandError> {
     }
     app.exit(0);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_sync_status(state: State<'_, AppState>) -> SyncEvent {
+    state.sync_service.status().await
+}
+
+#[tauri::command]
+pub async fn trigger_sync_now(
+    state: State<'_, AppState>,
+) -> Result<SyncResult, CommandError> {
+    state
+        .sync_service
+        .trigger_now()
+        .await
+        .map_err(|error| CommandError::new("sync", error))
 }

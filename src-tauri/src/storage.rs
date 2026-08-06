@@ -9,7 +9,7 @@ use crate::domain::{
     Target, unix_time_ms,
 };
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Error)]
 pub enum StorageError {
@@ -123,6 +123,20 @@ impl Database {
                 return Err(StorageError::InvalidData(format!(
                     "database schema {version} is newer than supported schema {SCHEMA_VERSION}"
                 )));
+            }
+            Some(version) if version < 2 => {
+                connection.execute(
+                    "ALTER TABLE ping_samples ADD COLUMN cloud_synced_at_ms INTEGER",
+                    [],
+                )?;
+                connection.execute(
+                    "CREATE INDEX idx_ping_samples_unsynced ON ping_samples(cloud_synced_at_ms, timestamp_ms)",
+                    [],
+                )?;
+                connection.execute(
+                    "UPDATE schema_info SET version = 2",
+                    [],
+                )?;
             }
             _ => {}
         }
@@ -413,6 +427,48 @@ impl Database {
         })
     }
 
+    /// Returns ping samples that have not been synced to the cloud dashboard.
+    pub fn unsynced_samples(&self, since_ms: i64) -> StorageResult<Vec<PingSample>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(
+            "SELECT target_id, timestamp_ms, latency_ms, status, resolved_address, error
+             FROM ping_samples
+             WHERE cloud_synced_at_ms IS NULL AND timestamp_ms >= ?1
+             ORDER BY timestamp_ms",
+        )?;
+        let rows = statement.query_map([since_ms], |row| {
+            Ok(PingSample {
+                target_id: row.get(0)?,
+                timestamp_ms: row.get(1)?,
+                latency_ms: row.get(2)?,
+                status: probe_status_from_i64(row.get(4)?)?,
+                resolved_address: row.get(5)?,
+                error: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Marks a set of samples as synced. Uses target_id + timestamp_ms range to identify samples.
+    pub fn mark_samples_synced(
+        &self,
+        target_ids: &[String],
+        from_ms: i64,
+        to_ms: i64,
+        synced_at_ms: i64,
+    ) -> StorageResult<()> {
+        let connection = self.open()?;
+        for target_id in target_ids {
+            connection.execute(
+                "UPDATE ping_samples SET cloud_synced_at_ms = ?1
+                 WHERE target_id = ?2 AND timestamp_ms >= ?3 AND timestamp_ms <= ?4
+                 AND cloud_synced_at_ms IS NULL",
+                params![synced_at_ms, target_id, from_ms, to_ms],
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn backup_to(&self, destination: &PathBuf) -> StorageResult<()> {
         let source = self.open()?;
         let mut destination_connection = Connection::open(destination)?;
@@ -663,6 +719,20 @@ fn probe_status_to_i64(value: ProbeStatus) -> i64 {
         ProbeStatus::DnsError => 3,
         ProbeStatus::PermissionDenied => 4,
         ProbeStatus::Error => 5,
+    }
+}
+
+fn probe_status_from_i64(value: i64) -> Result<ProbeStatus, StorageError> {
+    match value {
+        0 => Ok(ProbeStatus::Success),
+        1 => Ok(ProbeStatus::Timeout),
+        2 => Ok(ProbeStatus::Unreachable),
+        3 => Ok(ProbeStatus::DnsError),
+        4 => Ok(ProbeStatus::PermissionDenied),
+        5 => Ok(ProbeStatus::Error),
+        _ => Err(StorageError::InvalidData(format!(
+            "unknown probe status {value}"
+        ))),
     }
 }
 
