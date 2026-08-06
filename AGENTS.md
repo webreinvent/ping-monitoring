@@ -1522,3 +1522,106 @@ The dashboard header now displays the Nitro ingest endpoint URL (`POST /api/ping
 | ADR-071 | ClientOnly with Static Fallback for URLs | Prevents hydration mismatch — SSR doesn't know the client request URL; static fallback matches SSR output structure |
 
 *Last updated: 2026-08-06 (Agent 04 — M2-T8 API endpoint display conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-06, M2-T9)
+
+### Tauri App — Cloud Sync Service (M2-T9 / F4)
+
+The LNPM Tauri desktop app now supports forwarding local ping samples to a self-hosted LNPM Cloud Dashboard ingest endpoint. This section documents the Tauri app-side conventions (not the dashboard server-side patterns).
+
+#### SyncService — Async Background Task with tokio::spawn
+
+- **File**: `src-tauri/src/sync.rs`
+- **Pattern**: Service struct with `Arc<Database>`, `AppHandle` (for event emission), `RwLock<Option<SyncConfig>>`, `Mutex<Option<JoinHandle>>`, `RwLock<SyncStatus>`
+- **Background loop**: `tokio::spawn` with batch timer + periodic sweep; `JoinHandle::abort()` for cancellation
+- **Event emission**: `app.emit("sync-status-changed", &SyncEvent)` — Tauri event to frontend
+- **`apply_settings()` method**: Central lifecycle controller — spawns/cancels/restarts task based on URL + pause state
+- **State machine**: 6 states — Off, Paused, Idle, Syncing, Success, Error
+- **Key**: Background task is NOT a Tauri plugin — it's a spawned tokio task managed by the service struct. This avoids Nitro plugin lifecycle confusion and keeps the Tauri app's async runtime in control.
+
+#### Schema Migration — Version-Gated ALTER TABLE (Rust/Tauri)
+
+- **File**: `src-tauri/src/storage.rs`
+- **Pattern**: `SCHEMA_VERSION` constant + versioned migration blocks in `initialize()`
+- **Migration check**: `SELECT version FROM schema_info LIMIT 1` — if `None` → new DB (insert current version), if `< N` → run migration N
+- **Idempotent**: `ALTER TABLE ... ADD COLUMN` only runs when column is missing (version gate ensures this)
+- **Index**: `idx_ping_samples_unsynced` on `(cloud_synced_at_ms, timestamp_ms)` — composite index for "unsynced + ordered by time" queries
+- **Convention**: Bump `SCHEMA_VERSION` for every migration; add a version-gated block before the `_ => {}` fallback
+
+#### ClientIdentity — Lazy Discovery with Slug Generation
+
+- **File**: `src-tauri/src/sync.rs`
+- **Dependencies**: `whoami` (username/hostname), `mac_address` (best-effort MAC)
+- **Slug format**: `<username>-<hostname>-<5-char-mac-suffix>` — last 5 chars of MAC address
+- **MAC fallback**: If `mac_address::get_mac_address()` fails, use `format!("{:x}", timestamp_ms % 0xFFFFFF)`
+- **Cached**: `Mutex<Option<ClientIdentity>>` — discovered once, reused for all sync batches
+- **Convention**: Best-effort discovery — MAC failure must not block sync. Log but proceed.
+
+#### SyncStatus — 6-State Enum
+
+```rust
+pub enum SyncStatus { Off, Paused, Idle, Syncing, Success, Error }
+```
+
+- **Frontend icons**: Off → ⊘ (dimmed), Paused → ⏸, Idle → ☁, Syncing → ↻ (spin), Success → ✓ (auto-revert 3s), Error → ✗
+- **Event shape**: `SyncEvent { status, message, lastSyncedAtMs, pendingCount }`
+- **Result shape**: `SyncResult { accepted, duplicate, rejected }` — matches dashboard ingest response
+- **Convention**: Status transitions are emitted as events — frontend listens to `sync-status-changed` and updates UI reactively. No polling needed.
+
+#### AppSettings Extension — Backward-Compatible with #[serde(default)]
+
+- **File**: `src-tauri/src/domain.rs`
+- **Pattern**: New fields use `#[serde(default)]` — old saved JSON loads with default values (no migration needed)
+- **`validate_ingest_url()` method**: On `AppSettings` — checks http/https scheme, max 2048 chars, has host
+- **`SettingsValidationError` enum**: `InvalidScheme`, `InvalidUrl`, `UrlTooLong` — with `.code()` method for IPC error mapping
+- **Test**: `deserializes_settings_saved_before_cloud_sync()` — verifies old JSON (without sync fields) loads with correct defaults
+- **Convention**: Always use `#[serde(default)]` for new optional fields in AppSettings — backward compat is non-negotiable
+
+#### Tauri IPC Command Pattern — Sync Commands
+
+- **File**: `src-tauri/src/commands.rs`
+- **`get_sync_status`** → `SyncService::status()` — returns current `SyncEvent`
+- **`trigger_sync_now`** → `SyncService::trigger_now()` — immediate one-shot sync; returns `SyncResult`
+- **`save_settings`** → Extended to call `sync_service.apply_settings(&settings)` after persisting
+- **Convention**: Async commands use `pub async fn` in `commands.rs`; the `#[tauri::command]` macro handles async correctly
+- **Error mapping**: `CommandError::new("sync", error.to_string())` — consistent error code for sync-related failures
+
+#### Tauri App Startup Pattern — Conditional Task Spawn
+
+- **File**: `src-tauri/src/lib.rs`
+- **Pattern**: After `AppState` is built, construct `Arc<SyncService>`, add to state, then conditionally start:
+  ```rust
+  if settings.dashboard_ingest_url.is_some() && !settings.cloud_sync_paused {
+      tauri::async_runtime::spawn(async move { sync_service.start(config).await; });
+  }
+  ```
+- **Convention**: Conditional startup — don't spawn background tasks for features the user hasn't enabled. The `apply_settings()` method handles dynamic changes at runtime.
+
+#### Tauri App — Cargo Dependencies
+
+- **`reqwest`**: `{ version = "0.12", default-features = false, features = ["json", "rustls-tls"] }` — avoids OpenSSL dependency
+- **`whoami`**: `"1"` — cross-platform username/hostname discovery
+- **`mac_address`**: `"1"` — best-effort MAC address discovery
+- **Convention**: Always use `rustls-tls` (not `native-tls`) for reqwest in Tauri apps — avoids bundling OpenSSL, works across platforms.
+
+#### Tauri App — Frontend Sync UI Patterns
+
+- **URL validation**: Uses `new URL()` browser API — consistent validation between frontend and Rust backend
+- **Success auto-revert**: `setTimeout(() => setIcon("idle"), 3000)` — prevents icon from being stuck on success state
+- **"Sync now" disabled when paused**: UX decision — users must unpause before triggering manual sync
+- **6-state icon mapping**: `SYNC_STATE_ICONS` record with fallback to `⊘` — tested in `sync-icon.test.ts`
+- **Convention**: Frontend validates URL before saving; backend validates on `save_settings` IPC call. Double validation prevents invalid URLs from reaching the sync service.
+
+### ADRs — M2-T9 Cloud Sync Service
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-072 | tokio::spawn for Background Sync (Not Tauri Plugin) | SyncService manages its own async lifecycle via JoinHandle; Tauri plugin pattern is for per-request middleware, not long-running background tasks |
+| ADR-073 | reqwest with rustls-tls (Not native-tls) | Avoids OpenSSL dependency in Tauri bundle; works across all platforms without native library linking |
+| ADR-074 | Exponential Backoff 1s/2s/4s (3 Attempts) | Balanced retry strategy per F4 spec; failed samples remain unsynced for next cycle — no data loss |
+| ADR-075 | cloud_synced_at_ms IS NULL for Unsynced Query | Nullable timestamp column; NULL = not synced, timestamp = synced time. Composite index on (cloud_synced_at_ms, timestamp_ms) for efficient queries |
+| ADR-076 | ApplySettings as Central Lifecycle Controller | Single method handles spawn/cancel/restart based on URL + pause state; eliminates race conditions between settings changes and task state |
+| ADR-077 | Best-Effort MAC Discovery | mac_address failure doesn't block sync; slug uses timestamp-based fallback; logged but not fatal |
+| ADR-078 | #[serde(default)] for AppSettings Backward Compat | Old saved JSON loads without new fields; no migration or manual upgrade needed; tested with deserialization test |
+
+*Last updated: 2026-08-06 (Agent 04 — M2-T9 cloud sync service conventions appended)*

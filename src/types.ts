@@ -153,6 +153,9 @@ export interface AppSettings {
   updateDeferredVersion: string | null;
   updateDeferredUntilMs: number | null;
   skippedUpdateVersion: string | null;
+  dashboardIngestUrl: string | null;
+  cloudSyncPaused: boolean;
+  syncIntervalMin: number;
 }
 
 export interface UpdateInfo {
@@ -183,4 +186,19 @@ export interface StorageInfo {
   dataDirectory: string;
   databasePath: string;
   databaseSizeBytes: number;
+}
+
+export type SyncStatus = "off" | "paused" | "idle" | "syncing" | "success" | "error";
+
+export interface SyncEvent {
+  status: SyncStatus;
+  message: string | null;
+  lastSyncedAtMs: number | null;
+  pendingCount: number;
+}
+
+export interface SyncResult {
+  accepted: number;
+  duplicate: number;
+  rejected: number;
 }

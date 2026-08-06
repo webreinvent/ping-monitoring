@@ -5,6 +5,8 @@ import type {
   HistoryResponse,
   PingSample,
   StorageInfo,
+  SyncEvent,
+  SyncResult,
   Target,
   UpdateInfo,
 } from "./types";
@@ -45,4 +47,6 @@ export const api = {
   skipUpdate: (version: string) =>
     invoke<AppSettings>("skip_update", { version }),
   installUpdate: () => invoke<void>("install_update"),
+  getSyncStatus: () => invoke<SyncEvent>("get_sync_status"),
+  triggerSyncNow: () => invoke<SyncResult>("trigger_sync_now"),
 };

@@ -19,6 +19,7 @@ import {
   stateLabel,
   t,
   type Language,
+  type MessageKey,
 } from "./i18n";
 import type {
   AppSettings,
@@ -28,6 +29,7 @@ import type {
   QualityState,
   QualityThresholds,
   QualityTransitionEvent,
+  SyncEvent,
   Target,
   UserErrorPayload,
   UpdateErrorEvent,
@@ -56,6 +58,9 @@ let settings: AppSettings = {
   updateDeferredVersion: null,
   updateDeferredUntilMs: null,
   skippedUpdateVersion: null,
+  dashboardIngestUrl: null,
+  cloudSyncPaused: false,
+  syncIntervalMin: 5,
 };
 let language: Language = resolveLanguage(settings.language);
 let dashboard: DashboardSnapshot = { nowMs: Date.now(), paused: false, targets: [] };
@@ -67,6 +72,7 @@ let currentRange = { fromMs: Date.now() - 60_000, toMs: Date.now() };
 let followLive = true;
 let updateUiState: UpdateUiState = initialUpdateUiState;
 let currentAppVersion: string | null = null;
+let syncStatus: SyncEvent = { status: "off", message: null, lastSyncedAtMs: null, pendingCount: 0 };
 
 void bootstrap();
 
@@ -123,6 +129,18 @@ async function bootstrap(): Promise<void> {
   if (!isPopup) {
     const pendingUpdate = await api.pendingUpdate().catch(() => null);
     if (pendingUpdate) await showAvailableUpdate(pendingUpdate);
+
+    // Seed initial sync status
+    await api.getSyncStatus().then((status) => {
+      syncStatus = status;
+      updateSyncIcon(status.status, status.message ?? null);
+    }).catch(() => {});
+
+    // Listen for sync status changes
+    await listen<SyncEvent>("sync-status-changed", (event) => {
+      syncStatus = event.payload;
+      updateSyncIcon(event.payload.status, event.payload.message ?? null);
+    });
   }
 }
 
@@ -137,6 +155,7 @@ async function initMain(): Promise<void> {
       <div class="header-actions">
         <button id="follow-live" class="button ghost active">● ${t("action.live")}</button>
         <button id="pause-monitoring" class="button ghost"></button>
+        <button id="sync-status-icon" class="button icon-button sync-status-icon" data-sync-state="off" aria-label="${t("action.syncStatus")}">⊘</button>
         <button id="open-settings" class="button icon-button" aria-label="${t("action.settings")}">⚙</button>
       </div>
     </header>
@@ -282,6 +301,9 @@ function bindMainEvents(): void {
   root.querySelector('[data-action="add-target"]')?.addEventListener("click", () => openTargetDialog());
   byId("open-settings").addEventListener("click", () => {
     void openSettingsDialog().catch((error) => showToast(formatError(error), "error"));
+  });
+  byId("sync-status-icon").addEventListener("click", () => {
+    void openSettingsDialog("cloudSync").catch((error) => showToast(formatError(error), "error"));
   });
   byId("pause-monitoring").addEventListener("click", () => void api.pause(!dashboard.paused));
   byId("follow-live").addEventListener("click", () => {
@@ -694,7 +716,7 @@ async function removeTarget(target: Target, dialog: HTMLDialogElement): Promise<
   }
 }
 
-async function openSettingsDialog(): Promise<void> {
+async function openSettingsDialog(focusSection?: string): Promise<void> {
   const dialog = byId<HTMLDialogElement>("settings-dialog");
   const storage = await api.storageInfo();
   const retentionOptions = [7, 30, 90, 180, 365]
@@ -703,7 +725,7 @@ async function openSettingsDialog(): Promise<void> {
   dialog.innerHTML = `
     <form id="settings-form" class="settings-form">
       <header><div><span class="eyebrow">LNPM</span><h3>${t("action.settings")}</h3></div><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
-      <div class="settings-scroll-area">
+      <div class="settings-scroll-area" id="settings-scroll-area">
         <section class="settings-section"><h4>${t("section.monitoring")}</h4>
           <label>${t("settings.rawRetention")}<select id="retention-days">${retentionOptions}<option value="unlimited">${t("settings.unlimited")}</option></select></label>
           <label class="toggle-row"><input id="notifications-enabled" type="checkbox" ${settings.notificationsEnabled ? "checked" : ""}/><span><strong>${t("settings.notifications")}</strong><small>${t("settings.notificationsDescription")}</small></span></label>
@@ -711,6 +733,11 @@ async function openSettingsDialog(): Promise<void> {
         </section>
         <section class="settings-section"><h4>${t("section.appearance")}</h4><label>${t("settings.language")}<select id="language"><option value="auto">${t("settings.systemDefault")}</option><option value="en">English</option><option value="ko">한국어</option><option value="ja">日本語</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option></select></label></section>
         <section class="settings-section data-section"><h4>${t("section.data")}</h4><div><span>${formatBytes(storage.databaseSizeBytes)}</span><small>${escapeHtml(storage.databasePath)}</small></div><div class="inline-actions"><button id="open-data" type="button" class="button ghost">${t("action.openFolder")}</button><button id="backup-data" type="button" class="button ghost">${t("action.createBackup")}</button><button id="cleanup-data" type="button" class="button ghost">${t("action.cleanNow")}</button></div></section>
+        <section class="settings-section cloud-sync-section" id="cloud-sync-section"><h4>${t("section.cloudSync")}</h4>
+          <label>${t("cloudSync.endpoint")}<input id="dashboard-ingest-url" type="url" value="${escapeHtml(settings.dashboardIngestUrl ?? "")}" placeholder="http://localhost:3000/api/ping/ingest" /><small>${t("cloudSync.endpointHint")}</small><div id="ingest-url-error" class="inline-error hidden"></div></label>
+          <label class="toggle-row"><input id="cloud-sync-paused" type="checkbox" ${settings.cloudSyncPaused ? "checked" : ""}/><span><strong>${t("cloudSync.pause")}</strong><small>${t("cloudSync.pauseHint")}</small></span></label>
+          <div class="inline-actions"><button id="sync-now" type="button" class="button ghost" ${!settings.dashboardIngestUrl || settings.cloudSyncPaused ? "disabled" : ""}>${t("cloudSync.syncNow")}</button><span id="sync-status-text" class="sync-status-text" data-sync-state="${syncStatus.status}">${formatSyncStatus(syncStatus.status)}</span></div>
+        </section>
       </div>
       <footer><span>v${await getVersion()}</span><div><button type="button" class="button ghost modal-close">${t("action.cancel")}</button><button class="button primary">${t("action.save")}</button></div></footer>
     </form>`;
@@ -736,9 +763,62 @@ async function openSettingsDialog(): Promise<void> {
       showToast(formatError(error), "error");
     }
   });
+
+  // Cloud sync section handlers
+  const syncNowButton = byId<HTMLButtonElement>("sync-now");
+  const ingestUrlInput = byId<HTMLInputElement>("dashboard-ingest-url");
+  const ingestUrlError = byId<HTMLDivElement>("ingest-url-error");
+  const syncPausedCheckbox = byId<HTMLInputElement>("cloud-sync-paused");
+
+  // Validate URL on input
+  ingestUrlInput.addEventListener("input", () => {
+    const result = validateIngestUrl(ingestUrlInput.value);
+    if (result.ok) {
+      ingestUrlError.classList.add("hidden");
+      ingestUrlError.textContent = "";
+    } else {
+      ingestUrlError.textContent = result.reason;
+      ingestUrlError.classList.remove("hidden");
+    }
+  });
+
+  // Sync now button
+  syncNowButton.addEventListener("click", async () => {
+    syncNowButton.disabled = true;
+    syncNowButton.textContent = t("cloudSync.syncing");
+    try {
+      const result = await api.triggerSyncNow();
+      showToast(
+        t("toast.syncSuccess", {
+          accepted: result.accepted,
+          duplicate: result.duplicate,
+        }),
+        "success",
+      );
+    } catch (error) {
+      showToast(t("toast.syncError", { message: formatError(error) }), "error");
+    } finally {
+      syncNowButton.disabled = false;
+      syncNowButton.textContent = t("cloudSync.syncNow");
+    }
+  });
+
+  // Update sync now button enabled state when pause checkbox changes
+  syncPausedCheckbox.addEventListener("change", () => {
+    const disabled = !settings.dashboardIngestUrl || syncPausedCheckbox.checked;
+    syncNowButton.disabled = disabled;
+  });
   byId<HTMLFormElement>("settings-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
+      // Validate URL before saving
+      const urlResult = validateIngestUrl(ingestUrlInput.value);
+      if (!urlResult.ok) {
+        ingestUrlError.textContent = urlResult.reason;
+        ingestUrlError.classList.remove("hidden");
+        return;
+      }
+
       const retention = byId<HTMLSelectElement>("retention-days").value;
       settings = await api.saveSettings({
         ...settings,
@@ -747,6 +827,8 @@ async function openSettingsDialog(): Promise<void> {
         startAtLogin: byId<HTMLInputElement>("start-at-login").checked,
         language: byId<HTMLSelectElement>("language").value as AppSettings["language"],
         firstRun: false,
+        dashboardIngestUrl: urlResult.ok ? (urlResult.url === "" ? null : urlResult.url) : null,
+        cloudSyncPaused: syncPausedCheckbox.checked,
       });
       dialog.close();
       if (language === resolveLanguage(settings.language)) {
@@ -757,6 +839,14 @@ async function openSettingsDialog(): Promise<void> {
     }
   });
   dialog.showModal();
+
+  // Scroll to section if requested (e.g. clicking sync icon)
+  if (focusSection) {
+    const section = document.getElementById(`${focusSection}-section`);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
 }
 
 async function initPopup(): Promise<void> {
@@ -1046,10 +1136,62 @@ function showToast(message: string, kind: string): void {
   }, 4_500);
 }
 
+const SYNC_STATE_ICONS: Record<string, string> = {
+  off: "⊘",    // ⊘
+  paused: "⏸", // ⏸
+  idle: "☁",   // ☁
+  syncing: "↻", // ↻
+  success: "✓", // ✓
+  error: "✗",   // ✗
+};
+
+let syncRevertTimer: ReturnType<typeof setTimeout> | null = null;
+
+function updateSyncIcon(status: string, message: string | null): void {
+  const icon = document.getElementById("sync-status-icon");
+  if (!icon) return;
+  icon.dataset.syncState = status;
+  icon.textContent = SYNC_STATE_ICONS[status] ?? "⊘";
+  const statusLabel = t(`cloudSync.status.${status}` as MessageKey) ?? status;
+  const tooltip = message ? `${statusLabel}: ${message}` : statusLabel;
+  icon.setAttribute("aria-label", tooltip);
+  icon.title = tooltip;
+
+  // Auto-revert success to idle after 3s
+  if (status === "success") {
+    if (syncRevertTimer) clearTimeout(syncRevertTimer);
+    syncRevertTimer = setTimeout(() => {
+      syncRevertTimer = null;
+      updateSyncIcon("idle", null);
+    }, 3_000);
+  }
+}
+
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing element #${id}`);
   return element as T;
+}
+
+/** Validates a dashboard ingest URL. Returns { ok: true, url } or { ok: false, reason }. */
+function validateIngestUrl(raw: string): { ok: true; url: string } | { ok: false; reason: string } {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { ok: true, url: "" };
+  if (trimmed.length > 2048) return { ok: false, reason: t("validation.urlTooLong") };
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { ok: false, reason: t("validation.invalidScheme") };
+    }
+    return { ok: true, url: trimmed };
+  } catch {
+    return { ok: false, reason: t("validation.invalidUrl") };
+  }
+}
+
+/** Format sync status for display in settings. */
+function formatSyncStatus(status: string): string {
+  return t(`cloudSync.status.${status}` as MessageKey) ?? status;
 }
 
 function setText(id: string, value: string): void {

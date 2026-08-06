@@ -1783,3 +1783,85 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Sync status icon */
+.sync-status-icon[data-sync-state="off"] {
+  opacity: 0.4;
+  color: var(--muted);
+}
+
+.sync-status-icon[data-sync-state="paused"] {
+  opacity: 0.6;
+  color: var(--muted-strong);
+}
+
+.sync-status-icon[data-sync-state="idle"] {
+  color: var(--blue);
+}
+
+.sync-status-icon[data-sync-state="syncing"] {
+  color: var(--accent);
+  animation: sync-spin 1s linear infinite;
+}
+
+.sync-status-icon[data-sync-state="success"] {
+  color: var(--accent-bright);
+}
+
+.sync-status-icon[data-sync-state="error"] {
+  color: var(--danger);
+}
+
+@keyframes sync-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Sync status text in settings */
+.sync-status-text {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sync-status-text[data-sync-state="syncing"] {
+  color: var(--accent);
+}
+
+.sync-status-text[data-sync-state="success"] {
+  color: var(--accent-bright);
+}
+
+.sync-status-text[data-sync-state="error"] {
+  color: var(--danger);
+}
+
+/* Inline error message */
+.inline-error {
+  color: var(--danger);
+  font-size: 9px;
+  font-weight: 600;
+  min-height: 12px;
+}
+
+.inline-error.hidden {
+  display: none;
+}
+
+/* Cloud sync section */
+.cloud-sync-section {
+  border-color: rgba(96, 165, 250, 0.15);
+}
+
+.cloud-sync-section h4 {
+  color: var(--blue);
+}
+
+.cloud-sync-section small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.cloud-sync-section .inline-actions {
+  gap: 10px;
+}
