@@ -247,6 +247,50 @@ export function getSubscriberCount(monitorId: number): number {
   return subscriptions.get(monitorId)?.size ?? 0;
 }
 
+/**
+ * Broadcast a client_settings_updated message to all connected WebSocket peers.
+ * Called from the PUT /api/clients/[slug]/settings endpoint when settings change.
+ *
+ * @param slug - The client slug
+ * @param settings - The updated settings payload
+ */
+export function broadcastSettingsUpdate(
+  slug: string,
+  settings: {
+    sync_enabled: boolean;
+    sync_interval_min: number;
+    backend_url: string;
+  },
+): void {
+  const message = {
+    type: "client_settings_updated",
+    slug,
+    sync_enabled: settings.sync_enabled,
+    sync_interval_min: settings.sync_interval_min,
+    backend_url: settings.backend_url,
+  };
+  const payload = JSON.stringify(message);
+
+  // Broadcast to all connected WebSocket peers
+  for (const monitorId of subscriptions.keys()) {
+    const subSet = subscriptions.get(monitorId);
+    if (!subSet || subSet.size === 0) {
+      continue;
+    }
+    for (const ws of [...subSet]) {
+      try {
+        if (ws.readyState === 1) {
+          // 1 = OPEN
+          ws.send(payload);
+        }
+      } catch (err) {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        warn(`Settings broadcast failed: ${errMessage}`);
+      }
+    }
+  }
+}
+
 // ============================================================================
 // WebSocket Handler
 // ============================================================================

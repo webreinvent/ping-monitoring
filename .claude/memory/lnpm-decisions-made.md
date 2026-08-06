@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
 > Saved: 2026-08-06
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T6 (client settings page)
 
 ## Technology Stack Decisions
 
@@ -327,3 +327,40 @@
 - **Decision:** Store chart data as `Float64Array` (typed arrays) rather than plain JavaScript arrays
 - **Rationale:** uPlot expects `Float64Array` for `setData()` — using typed arrays avoids conversion overhead. Also more memory efficient.
 - **Impact:** Zero-copy data transfer to uPlot; better performance on large datasets
+
+## M2-T6 — Client Settings Page
+
+### GET Settings Endpoint with Computed sync_status
+- **Decision:** Create a dedicated GET endpoint (`GET /api/clients/:slug/settings`) that returns the full `ClientSettings` object with a computed `sync_status` field
+- **Rationale:** The existing `GET /api/clients/:slug` endpoint returns `ClientResponse` (which excludes internal sync fields). A separate settings endpoint provides the complete configuration needed by the settings page, including `sync_status` derived from `last_synced_at_ms` and `sync_interval_min`. This follows the established pattern of separate API shapes for different consumers.
+- **Impact:** Settings page has a single-source-of-truth endpoint; status computation is server-side (consistent across tabs/clients)
+
+### Sync Status as 5-State Enum
+- **Decision:** Define `SyncStatus` as a 5-state union type: `"connected" | "disconnected" | "syncing" | "disabled" | "not_configured"`
+- **Rationale:** F9 spec requires these 5 states for comprehensive sync state representation. `not_configured` distinguishes "never synced" from "connected but no data"; `syncing` is a transient UI state
+- **Impact:** `SyncStatus` type in `shared/types.ts`; `computeSyncStatus()` pure function in the GET endpoint; 5-state component in `SyncStatusIndicator.vue`
+
+### computeSyncStatus as Pure Function
+- **Decision:** Extract `computeSyncStatus()` as a standalone pure function — not embedded in the route handler
+- **Rationale:** The computation (enabled? → null check? → threshold comparison?) is testable in isolation. The same logic is used by both the GET endpoint and the settings page's computed property. Having it as a pure function enables unit testing and reuse.
+- **Impact:** `computeSyncStatus(syncEnabled, lastSyncedAtMs, syncIntervalMin)` returns `SyncStatus` — no side effects, fully testable
+
+### Threshold: 2 × sync_interval_min × 60000 ms
+- **Decision:** Use `2 * sync_interval_min * 60000` as the disconnect threshold — client is "disconnected" if no data received within 2× the configured interval
+- **Rationale:** 2× interval provides a reasonable grace period — one missed sync cycle before declaring disconnected. This matches the F9 spec and is intuitive for users.
+- **Impact:** A client with 5-minute interval is disconnected after 10 minutes of silence; 60-minute interval after 120 minutes
+
+### Settings Broadcast to All WebSocket Peers
+- **Decision:** `broadcastSettingsUpdate()` broadcasts to ALL connected WebSocket peers (not just subscribers of a specific monitor)
+- **Rationale:** Settings changes are globally relevant — any connected dashboard tab should reflect the updated configuration. Unlike sample broadcasts (which are per-monitor), settings are cross-cutting.
+- **Impact:** New WebSocket message type `client_settings_updated` with global broadcast scope; iterates all subscription sets
+
+### Optimistic Update with Rollback in useClientSettings
+- **Decision:** `useClientSettings` composable uses optimistic UI updates — apply changes immediately, rollback on error
+- **Rationale:** Follows the established pattern (inline name editing, settings form) — improves perceived responsiveness. The rollback ensures data consistency on failure.
+- **Impact:** Settings form shows updated values immediately; if PUT fails, UI reverts to previous state with error message
+
+### HTTP Allowed for Localhost URLs
+- **Decision:** Backend URL validation allows HTTP for localhost/127.0.0.1/::1 URLs (dev convenience)
+- **Rationale:** Local development environments use `http://localhost:3000` — requiring HTTPS would block local testing. This is a pragmatic exception with clear boundaries.
+- **Impact:** Both frontend (`SyncSettingsForm.vue`) and backend (`[slug].settings.put.ts`) implement identical localhost exception logic

@@ -1297,3 +1297,90 @@ onClientNameUpdated((clientSlug, newName) => {
 | ADR-059 | Live-over-HTTP Data Priority | Computed properties check liveData first; HTTP data provides initial load only; seamless transition |
 
 *Last updated: 2026-08-06 (Agent 04 — M2-T5 live chart conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-06, M2-T6)
+
+### Client Settings API — GET Endpoint (M2-T6 / F9)
+
+The `GET /api/clients/:slug/settings` endpoint returns the full `ClientSettings` object with identity fields, sync configuration, and a computed `sync_status`.
+
+#### GET Settings Endpoint Pattern
+- **File**: `server/api/clients/[slug].settings.get.ts`
+- **Pattern**: Parse slug → `getClientBySlug()` → compute `sync_status` → return `ClientSettings` object
+- **`computeSyncStatus(syncEnabled, lastSyncedAtMs, syncIntervalMin)`**: Pure function returning one of `"connected"`, `"disconnected"`, `"syncing"`, `"disabled"`, `"not_configured"`
+- **Threshold**: `2 * sync_interval_min * 60000` ms — if `now - lastSyncedAtMs > threshold`, status is `"disconnected"`
+- **Status computation logic**: `disabled` (if not enabled) → `not_configured` (if never synced) → `disconnected` (if beyond threshold) → `connected` (default)
+- **Returns**: Full `ClientSettings` interface with all identity fields, sync config, computed status, and ISO 8601 timestamps (`created_at`, `updated_at`)
+- **404 handling**: Returns 404 if client not found (via `getClientBySlug()` returning null)
+
+#### SyncStatus Type (shared/types.ts)
+- **`SyncStatus`**: `"connected" | "disconnected" | "syncing" | "disabled" | "not_configured"`
+- **`ClientSettings`**: Full settings interface with `clientId`, `slug`, `name`, `username`, `hostname`, `mac_address`, `sync_enabled`, `sync_interval_min`, `backend_url`, `last_synced_at_ms` (nullable), `sync_status`, `created_at`, `updated_at`
+- **Location**: `shared/types.ts` — shared between server and client
+
+#### PUT Settings Endpoint — WebSocket Broadcast
+- **File**: `server/api/clients/[slug].settings.put.ts`
+- **After successful update**: Calls `broadcastSettingsUpdate(slug, settings)` to notify all connected WebSocket peers
+- **Fixed allowed intervals**: `[1, 5, 10, 15, 30, 60]` — per F9 spec (no `2` minute option)
+- **Localhost HTTP exception**: `backend_url` validation allows HTTP for `localhost`, `127.0.0.1`, `::1`, `[::1]` — development convenience
+
+#### WebSocket Settings Broadcast
+- **File**: `server/ws/ping.ts` → `export function broadcastSettingsUpdate(slug, settings)`
+- **Message shape**: `{ type: "client_settings_updated", slug, sync_enabled, sync_interval_min, backend_url }`
+- **Broadcast scope**: Global — iterates ALL monitor subscription sets (not just one monitor)
+- **Safe iteration**: `[...subscriptions.keys()]` (copy of keys) and `[...subSet]` (copy of set) to avoid concurrent modification
+- **Pattern**: Exported function for cross-module import — same pattern as `broadcastSample()`
+
+### useClientSettings Composable (M2-T6)
+- **File**: `app/composables/useClientSettings.ts`
+- **API**: Returns `{ settings, loading, error, fetchSettings, updateSettings }`
+- **`fetchSettings(slug)`**: GET endpoint call with `loading`/`error` state management
+- **`updateSettings(slug, data)`**: PUT with **optimistic update** → server response merge → **rollback on error**
+- **Optimistic update**: Sets `sync_status` to `"syncing"` immediately, resets to `"connected"`/`"disabled"` after 2s delay
+- **Error handling**: If `settings` is null (not loaded), returns `false` with error message "Settings not loaded. Call fetchSettings first."
+- **Pattern**: Centralized composable — parent components bind to reactive refs and call methods
+
+### ClientIdentity Component (M2-T6)
+- **File**: `app/components/clients/ClientIdentity.vue`
+- **Props**: `client: { slug, name, username, hostname, mac_address }`
+- **Pattern**: Read-only display, no events/slots, pure presentational component
+- **Uses existing CSS**: `.client-info-card` and `.client-info-field` classes from `dashboard.css`
+- **data-testid**: `data-testid="client-identity"` for E2E testing
+
+### SyncStatusIndicator — 5-State Pattern (M2-T6)
+- **File**: `app/components/clients/SyncStatusIndicator.vue`
+- **5 states**: `connected` (green), `disconnected` (red), `syncing` (yellow, pulsing), `disabled` (gray), `not_configured` (gray)
+- **Uses shared `SyncStatus` type** from `shared/types.ts`
+- **Computed**: `statusText` (human-readable label), `statusClass` (CSS class)
+- **Pulsing animation**: `.pulsing` class on dot only for `syncing` state
+
+### SyncSettingsForm — URL Validation with Localhost Exception (M2-T6)
+- **File**: `app/components/clients/SyncSettingsForm.vue`
+- **URL validation**: `new URL(url)` parse → protocol check → localhost exception for HTTP
+- **Localhost hosts**: `localhost`, `127.0.0.1`, `::1`, `[::1]` — these allow HTTP URLs
+- **Allowed intervals**: `[1, 5, 10, 15, 30, 60]` (F9 spec)
+- **Emit pattern**: Emits `saved` event on successful form submission for parent to refresh data
+- **Validation matches backend**: Frontend and backend use identical validation logic for URL and intervals
+
+### Settings Page — Data Flow Pattern (M2-T6)
+- **File**: `app/pages/clients/[slug]/settings.vue`
+- **Data source**: `useAsyncData` fetches from `GET /api/clients/:slug` (not the dedicated GET settings endpoint)
+- **syncStatus computed**: Derives 5-state status inline (same logic as the GET endpoint)
+- **identityData computed**: Extracts read-only identity fields for `ClientIdentity` component
+- **initialSettings computed**: Transforms API response into form-friendly values
+- **Refresh on save**: `handleSettingsSaved()` calls `refreshNuxtData()` to re-fetch data
+- **Key pattern**: `` `client-settings-${slug.value}` `` — stable key for `useAsyncData`/`refreshNuxtData`
+
+### ADRs — M2-T6 Client Settings Page
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-060 | GET Settings Endpoint with Computed sync_status | Dedicated endpoint returns full ClientSettings with server-side status computation; status is consistent across all clients and tabs |
+| ADR-061 | 5-State Sync Status Enum | connected/disconnected/syncing/disabled/not_configured — comprehensive state coverage per F9 spec |
+| ADR-062 | computeSyncStatus as Pure Function | Standalone function with no side effects; threshold-based disconnect detection (2× interval); testable in isolation |
+| ADR-063 | Global WebSocket Settings Broadcast | Settings changes broadcast to ALL connected peers (not per-monitor); settings updates are cross-cutting concerns |
+| ADR-064 | Optimistic Updates with Rollback | useClientSettings composable applies changes immediately; rollback on error ensures data consistency |
+| ADR-065 | ClientIdentity as Read-Only Display | Dedicated component for identity fields; reuses existing CSS classes; no interactivity |
+| ADR-066 | HTTP Allowed for Localhost URLs | Pragmatic exception for development; identical validation in frontend and backend |
+
+*Last updated: 2026-08-06 (Agent 04 — M2-T6 client settings conventions appended)*

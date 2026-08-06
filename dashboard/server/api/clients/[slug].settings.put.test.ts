@@ -41,7 +41,7 @@ describe("PUT /api/clients/[slug]/settings — handler logic", () => {
 
   describe("validate sync_interval_min", () => {
     it("accepts valid sync_interval_min values", () => {
-      const allowedIntervals = [1, 2, 5, 10, 15, 30, 60];
+      const allowedIntervals = [1, 5, 10, 15, 30, 60];
       for (const interval of allowedIntervals) {
         // The validation logic: allowedIntervals.includes(body.sync_interval_min)
         const isValid = allowedIntervals.includes(interval);
@@ -50,8 +50,8 @@ describe("PUT /api/clients/[slug]/settings — handler logic", () => {
     });
 
     it("rejects invalid sync_interval_min values", () => {
-      const allowedIntervals = [1, 2, 5, 10, 15, 30, 60];
-      const invalidValues = [0, 3, 7, 45, 120, -1];
+      const allowedIntervals = [1, 5, 10, 15, 30, 60];
+      const invalidValues = [0, 2, 3, 7, 45, 120, -1];
       for (const val of invalidValues) {
         const isValid = allowedIntervals.includes(val);
         expect(isValid).toBe(false);
@@ -72,11 +72,36 @@ describe("PUT /api/clients/[slug]/settings — handler logic", () => {
       }
     });
 
-    it("rejects non-HTTPS URLs", () => {
+    it("accepts HTTP URLs for localhost", () => {
+      const localhostUrls = [
+        "http://localhost:3000",
+        "http://127.0.0.1:8080/api",
+        "http://[::1]:3000",
+      ];
+      for (const url of localhostUrls) {
+        const parsed = new URL(url);
+        const isHttp = parsed.protocol === "http:";
+        // Note: new URL("http://[::1]:3000").hostname returns "[::1]" with brackets
+        const isLocalhost =
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "::1" ||
+          parsed.hostname === "[::1]";
+        expect(isHttp && isLocalhost).toBe(true);
+      }
+    });
+
+    it("rejects non-HTTPS URLs for non-localhost", () => {
       const invalidUrls = ["http://example.com", "ftp://example.com", "ws://example.com"];
       for (const url of invalidUrls) {
         const parsed = new URL(url);
-        expect(parsed.protocol).not.toBe("https:");
+        const isHttp = parsed.protocol === "http:";
+        const isLocalhost =
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "::1";
+        // Should be rejected: not HTTPS and not localhost
+        expect(parsed.protocol === "https:" || (isHttp && isLocalhost)).toBe(false);
       }
     });
 

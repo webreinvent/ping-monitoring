@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-06
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T5 (WebSocket live chart updates)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T5 (WebSocket live chart updates), M2-T6 (client settings page)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -490,3 +490,55 @@ onClientNameUpdated((clientSlug, newName) => {
 
 - **Optimistic + reactive**: Directly mutates the `groupedByClient` array — Vue's reactivity propagates the change
 - **No API call needed**: The WebSocket message is the source of truth; no round-trip to the API
+
+## Client Settings Page Patterns (M2-T6 / F9)
+
+### GET Settings Endpoint Pattern
+- **File**: `server/api/clients/[slug].settings.get.ts`
+- **Pattern**: Derives `sync_status` from `last_synced_at_ms` and `sync_interval_min` using a threshold computation
+- **Status computation**: `computeSyncStatus(syncEnabled, lastSyncedAtMs, syncIntervalMin)` — pure function returning one of: `connected`, `disconnected`, `syncing`, `disabled`, `not_configured`
+- **Threshold**: `2 * sync_interval_min * 60000` ms — if `now - lastSyncedAtMs > threshold`, client is `disconnected`
+- **Returns**: Full `ClientSettings` interface with identity fields, sync config, computed status, and ISO 8601 timestamps
+- **404 handling**: Returns 404 if client not found (same as `GET /api/clients/:slug`)
+
+### ClientSettings Composable Pattern (useClientSettings)
+- **File**: `app/composables/useClientSettings.ts`
+- **Pattern**: Centralized composable for settings fetch/update with optimistic UI and rollback
+- **`fetchSettings(slug)`**: GET endpoint call with `loading`/`error` state management
+- **`updateSettings(slug, data)`**: PUT with optimistic update → server response merge → rollback on error
+- **Optimistic update**: Sets `sync_status` to `"syncing"` immediately, then resets to `"connected"`/`"disabled"` after 2s delay
+- **Reactive state**: `settings` (ref), `loading` (ref), `error` (ref) — parent components bind directly
+- **Returns**: `{ settings, loading, error, fetchSettings, updateSettings }` — standard composable API
+
+### ClientIdentity Component Pattern
+- **File**: `app/components/clients/ClientIdentity.vue`
+- **Pattern**: Read-only display component for client identity fields
+- **Props**: `client: { slug, name, username, hostname, mac_address }`
+- **Uses existing CSS**: `.client-info-card` and `.client-info-field` classes (reuses existing styling)
+- **No events/slots**: Pure presentational component — no interactivity
+- **data-testid**: `data-testid="client-identity"` for E2E testing
+
+### SyncStatusIndicator — 5-State Pattern
+- **File**: `app/components/clients/SyncStatusIndicator.vue`
+- **Pattern**: Color-coded status indicator with 5 states matching F9 spec
+- **States**: `connected` (green), `disconnected` (red), `syncing` (yellow, pulsing), `disabled` (gray), `not_configured` (gray)
+- **Props**: `status: SyncStatus` — uses shared `SyncStatus` type from `shared/types.ts`
+- **Computed**: `statusText` (human-readable label), `statusClass` (CSS class)
+- **Pulsing animation**: `.pulsing` class on dot for `syncing` state
+
+### WebSocket Settings Broadcast Pattern
+- **File**: `server/ws/ping.ts` → `broadcastSettingsUpdate(slug, settings)`
+- **Pattern**: Exported function broadcasts `client_settings_updated` message to ALL connected WebSocket peers
+- **Message shape**: `{ type: "client_settings_updated", slug, sync_enabled, sync_interval_min, backend_url }`
+- **Broadcast scope**: Iterates over all monitor subscription sets (not just one monitor) — settings update is global
+- **Safe iteration**: Iterates `[...subscriptions.keys()]` (copy) and `[...subSet]` (copy) to avoid concurrent modification issues
+- **Called from**: `PUT /api/clients/[slug]/settings` endpoint after successful DB update
+- **Non-blocking**: Broadcast doesn't affect PUT response time
+
+### SyncSettingsForm — Localhost HTTP Exception
+- **File**: `app/components/clients/SyncSettingsForm.vue`
+- **Pattern**: URL validation allowing HTTP for localhost URLs (dev convenience)
+- **Validation**: `new URL(url)` parse → check `protocol !== "https:"` → exception for `localhost`, `127.0.0.1`, `::1`, `[::1]`
+- **Same validation on backend**: `server/api/clients/[slug].settings.put.ts` uses identical logic
+- **Allowed intervals**: `[1, 5, 10, 15, 30, 60]` — per F9 spec (no `2` minute option)
+- **Emit pattern**: Emits `saved` event on successful form submission for parent to refresh data

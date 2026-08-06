@@ -61,8 +61,12 @@ interface Props {
 
 const props = defineProps<Props>();
 
-/** Allowed sync intervals in minutes (per spec) */
-const allowedIntervals = [1, 2, 5, 10, 15, 30, 60];
+const emit = defineEmits<{
+  (e: "saved"): void;
+}>();
+
+/** Allowed sync intervals in minutes (per F9 spec) */
+const allowedIntervals = [1, 5, 10, 15, 30, 60];
 
 // Form state
 const form = ref({ ...props.initialSettings });
@@ -70,14 +74,22 @@ const saving = ref(false);
 const success = ref(false);
 const error = ref<string | null>(null);
 
-/** Validate the backend URL */
+/** Validate the backend URL — allows HTTPS or HTTP for localhost */
 const urlError = computed(() => {
   const url = form.value.backend_url.trim();
   if (!form.value.sync_enabled) return null;
   if (!url) return "Backend URL is required";
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return "Backend URL must use HTTPS";
+    const isHttp = parsed.protocol === "http:";
+    const isLocalhost =
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "::1" ||
+      parsed.hostname === "[::1]";
+    if (parsed.protocol !== "https:" && !(isHttp && isLocalhost)) {
+      return "Backend URL must use HTTPS";
+    }
   } catch {
     return "Invalid URL format";
   }
@@ -101,6 +113,7 @@ async function handleSubmit(): Promise<void> {
       },
     });
     success.value = true;
+    emit("saved");
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to save settings";
   } finally {

@@ -6,7 +6,12 @@
 </template>
 
 <script setup lang="ts">
-type SyncStatus = "connected" | "syncing" | "error" | "disabled";
+type SyncStatus =
+  | "connected"
+  | "disconnected"
+  | "syncing"
+  | "disabled"
+  | "not_configured";
 
 const props = defineProps<{
   status: SyncStatus;
@@ -16,10 +21,11 @@ const statusClass = computed(() => props.status);
 
 const statusText = computed(() => {
   const map: Record<SyncStatus, string> = {
-    connected: "Synced",
+    connected: "Connected",
+    disconnected: "Disconnected",
     syncing: "Syncing...",
-    error: "Sync Error",
-    disabled: "Sync Disabled",
+    disabled: "Disabled",
+    not_configured: "Not configured",
   };
   return map[props.status];
 });

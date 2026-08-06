@@ -1,5 +1,9 @@
 import { getClientBySlug } from "../../utils/client";
 import { getDb } from "../../utils/db";
+import { broadcastSettingsUpdate } from "../../ws/ping";
+
+/** Allowed sync interval values in minutes (per F9 spec) */
+const ALLOWED_INTERVALS = [1, 5, 10, 15, 30, 60];
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -14,25 +18,31 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "sync_enabled is required" });
   }
 
-  // Validate sync_interval_min if sync is enabled
-  if (body.sync_enabled && body.sync_interval_min != null) {
-    const allowedIntervals = [1, 2, 5, 10, 15, 30, 60];
-    if (!allowedIntervals.includes(body.sync_interval_min)) {
+  // Validate sync_interval_min if provided
+  if (body.sync_interval_min != null) {
+    if (!ALLOWED_INTERVALS.includes(body.sync_interval_min)) {
       throw createError({
         statusCode: 400,
-        message: `sync_interval_min must be one of: ${allowedIntervals.join(", ")}`,
+        message: `Invalid sync_interval_min. Must be one of: ${ALLOWED_INTERVALS.join(", ")}`,
       });
     }
   }
 
-  // Validate backend_url if provided and sync is enabled
-  if (body.sync_enabled && body.backend_url) {
+  // Validate backend_url if provided
+  if (body.backend_url) {
     try {
       const url = new URL(body.backend_url);
-      if (url.protocol !== "https:") {
+      // Allow HTTPS for any host, or HTTP for localhost/127.0.0.1
+      const isHttp = url.protocol === "http:";
+      const isLocalhost =
+        url.hostname === "localhost" ||
+        url.hostname === "127.0.0.1" ||
+        url.hostname === "::1" ||
+        url.hostname === "[::1]";
+      if (url.protocol !== "https:" && !(isHttp && isLocalhost)) {
         throw createError({
           statusCode: 400,
-          message: "backend_url must use HTTPS",
+          message: "Invalid backend_url. Must be a valid HTTPS URL",
         });
       }
     } catch (err) {
@@ -40,7 +50,7 @@ export default defineEventHandler(async (event) => {
       if (error.statusCode === 400) throw err;
       throw createError({
         statusCode: 400,
-        message: "backend_url must be a valid URL",
+        message: "Invalid backend_url. Must be a valid HTTPS URL",
       });
     }
   }
@@ -65,15 +75,28 @@ export default defineEventHandler(async (event) => {
   ).run(
     body.sync_enabled ? 1 : 0,
     body.sync_interval_min ?? client.sync_interval_min,
-    body.backend_url ?? "",
+    body.backend_url ?? client.backend_url,
     now,
     slug,
   );
 
-  return {
-    success: true,
+  const updatedSyncInterval = body.sync_interval_min ?? client.sync_interval_min;
+  const updatedBackendUrl = body.backend_url ?? client.backend_url;
+
+  // Broadcast settings update via WebSocket
+  broadcastSettingsUpdate(slug, {
     sync_enabled: body.sync_enabled,
-    sync_interval_min: body.sync_interval_min ?? client.sync_interval_min,
-    backend_url: body.backend_url ?? "",
+    sync_interval_min: updatedSyncInterval,
+    backend_url: updatedBackendUrl,
+  });
+
+  return {
+    clientId: client.id,
+    slug: client.slug,
+    sync_enabled: body.sync_enabled,
+    sync_interval_min: updatedSyncInterval,
+    backend_url: updatedBackendUrl,
+    last_synced_at_ms: client.last_synced_at_ms,
+    updated_at: new Date(now).toISOString(),
   };
 });

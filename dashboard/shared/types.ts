@@ -385,3 +385,66 @@ export interface HistoryResponse {
   series: HistorySeries[];
 }
 
+// ============================================================================
+// F9: Client Settings — Settings types
+// ============================================================================
+
+/**
+ * Sync status states as defined by F9 spec.
+ * - connected: client actively sending data
+ * - disconnected: no data received in last 2 * sync_interval_min
+ * - syncing: transient state while a batch is in transit
+ * - disabled: sync explicitly disabled by user
+ * - not_configured: no sync has ever occurred
+ */
+export type SyncStatus =
+  | "connected"
+  | "disconnected"
+  | "syncing"
+  | "disabled"
+  | "not_configured";
+
+/**
+ * Full client settings object returned by GET /api/clients/:slug/settings.
+ */
+export interface ClientSettings {
+  /** Unique client database ID */
+  clientId: number;
+
+  /** Unique slug derived from identity fields */
+  slug: string;
+
+  /** Human-readable display name */
+  name: string;
+
+  /** System username */
+  username: string;
+
+  /** Hostname of the client machine */
+  hostname: string;
+
+  /** MAC address of the network interface */
+  mac_address: string;
+
+  /** Whether cloud sync is enabled */
+  sync_enabled: boolean;
+
+  /** Sync interval in minutes (1, 5, 10, 15, 30, 60) */
+  sync_interval_min: number;
+
+  /** Backend API URL */
+  backend_url: string;
+
+  /** Epoch ms of last successful sync (null if never synced) */
+  last_synced_at_ms: number | null;
+
+  /** Computed sync status based on last_synced_at_ms and sync_interval_min */
+  sync_status: SyncStatus;
+
+  /** ISO 8601 creation timestamp */
+  created_at: string;
+
+  /** ISO 8601 last update timestamp */
+  updated_at: string;
+}
+
