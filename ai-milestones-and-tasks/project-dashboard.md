@@ -12,7 +12,7 @@ lastUpdated: "2026-08-06"
 | ID | Title | Status | Priority | Estimated Effort | Tasks Complete | Dependencies |
 |----|-------|--------|----------|-----------------|----------------|--------------|
 | M1 | [Backend Platform](./milestone-01-backend-platform/README.md) | 🟢 Complete | Critical | 12-15 days | 11/12 | None |
-| M2 | [Dashboard UI](./milestone-02-dashboard-ui/README.md) | 🔵 In Progress | High | 5-7 days | 7/8 | M1 |
+| M2 | [Dashboard UI](./milestone-02-dashboard-ui/README.md) | 🟢 Complete | High | 5-7 days | 8/8 | M1 |
 
 ## Tasks
 
@@ -37,7 +37,7 @@ lastUpdated: "2026-08-06"
 | M2-T5 | Implement WebSocket composable with live chart updates | 🟢 Complete | High | 3-4 hours | M2 | M2-T3, M1-T9 |
 | M2-T6 | Add client settings page with sync controls and status indicator | 🟢 Complete | High | 3-4 hours | M2 | M2-T2, M1-T5 |
 | M2-T7 | Implement inline client name editing with WebSocket broadcast | 🟢 Complete | Medium | 1-2 hours | M2 | M2-T2, M1-T5, M2-T5 |
-| M2-T8 | Display Nitro API endpoint in dashboard header for Tauri client setup | ⚪ Not Started | Medium | 2-3 hours | M2 | M2-T1, M1-T6 |
+| M2-T8 | Display Nitro API endpoint in dashboard header for Tauri client setup | 🟢 Complete | Medium | 2-3 hours | M2 | M2-T1, M1-T6 |
 
 ## Features Coverage
 
@@ -60,9 +60,9 @@ lastUpdated: "2026-08-06"
 
 ## Progress
 
-- **Overall:** 18/20 tasks complete (90%)
+- **Overall:** 19/20 tasks complete (95%)
 - **M1 Backend Platform:** 11/12 tasks complete (92%)
-- **M2 Dashboard UI:** 7/8 tasks complete (88%)
+- **M2 Dashboard UI:** 8/8 tasks complete (100%)
 - **Total Estimated Effort:** 17-22 days
 
 ## Execution Order

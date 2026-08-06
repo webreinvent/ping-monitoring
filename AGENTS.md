@@ -1471,3 +1471,54 @@ return toClientResponse(row);
 | ADR-068 | client_name_updated WebSocket Message Type | New message type in `WsOutboundType` union; `{ clientSlug, newName }` shape; enables real-time sidebar name updates across all tabs |
 
 *Last updated: 2026-08-06 (Agent 04 — M2-T7 inline client name edit conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-06, M2-T8)
+
+### API Endpoint Display in Dashboard Header (M2-T8)
+
+The dashboard header now displays the Nitro ingest endpoint URL (`POST /api/ping/ingest`) with a one-click copy-to-clipboard button. This surfaces the URL operators need to configure LNPM Tauri clients on remote computers.
+
+#### useRequestURL() for Dynamic URL Construction
+
+- **File**: `app/components/layout/DashboardHeader.vue`
+- **Pattern**: `useRequestURL()` returns `{ protocol, host, path }` of the current request — use it to construct endpoint URLs that work across any deployment without env vars or runtime config
+- **Usage**: `const u = useRequestURL(); return \`${u.protocol}//${u.host}/api/ping/ingest\`;`
+- **Works on**: localhost (`http://localhost:3000`), LAN IP (`http://192.168.1.50:3000`), reverse-proxy domain (`https://dashboard.example.com`) — no configuration needed
+- **Safe in computed**: `useRequestURL()` returns immediately — safe inside `computed()` without async wrapping
+
+#### Clipboard API with Fallback Pattern
+
+- **Primary**: `navigator.clipboard.writeText(url)` — works in secure contexts (HTTPS, localhost)
+- **Fallback**: `textarea + document.execCommand("copy")` — for non-secure contexts where Clipboard API throws
+- **Pattern**: `try { clipboard API } catch { textarea fallback } catch { console.warn + return }`
+- **Important**: On localhost without HTTPS, `navigator.clipboard.writeText()` throws — the fallback path is essential for local development
+
+#### ClientOnly with Static Fallback for Dynamic URLs
+
+- **Pattern**: Same as connection-status pill — wrap client-side-only content in `<ClientOnly>` with a `#fallback` slot containing static HTML
+- **Why**: The URL is request-dependent — SSR output doesn't know the client's request URL. Without `<ClientOnly>`, Vue hydration mismatches occur
+- **Fallback**: Static "API endpoint" label only — no URL, no button. Matches the SSR output structure
+
+#### Visual Feedback with Auto-Reset
+
+- **Pattern**: `ref(false)` + `setTimeout(() => ref.value = false, 1500)` for temporary visual feedback states
+- **Usage**: Copy button icon changes 📋 → ✓ for 1.5s, then resets
+- **Screen reader**: `aria-live="polite"` region announces "Copied!" text, resets after same delay
+
+#### CSS Conventions
+
+- **`.api-endpoint`**: Pill-shaped container (border, rounded corners, subtle background) with `max-width: 480px`
+- **`.api-endpoint-url`**: Monospace `<code>` with `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` for long URL truncation
+- **`.copy-btn`**: 30×30px button with `aria-pressed` state styling, hover/focus transitions
+- **`.sr-only`**: Standard screen-reader-only utility class (1px × 1px, clip, overflow hidden)
+- **Mobile breakpoint**: `@media (max-width: 767px)` hides `.api-endpoint-label` (keep URL + button visible)
+
+### ADRs — M2-T8 API Endpoint Display
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-069 | useRequestURL() for Endpoint URL | Auto-detects protocol/host from current request — no env vars or runtime config needed; works on any deployment |
+| ADR-070 | Clipboard API with execCommand Fallback | navigator.clipboard.writeText() for secure contexts; textarea fallback for non-secure; two-layer error handling |
+| ADR-071 | ClientOnly with Static Fallback for URLs | Prevents hydration mismatch — SSR doesn't know the client request URL; static fallback matches SSR output structure |
+
+*Last updated: 2026-08-06 (Agent 04 — M2-T8 API endpoint display conventions appended)*

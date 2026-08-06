@@ -20,6 +20,22 @@
       </div>
     </div>
     <ClientOnly>
+      <div class="api-endpoint">
+        <span class="api-endpoint-label">API endpoint</span>
+        <code class="api-endpoint-url" :title="ingestUrl">{{ ingestUrl }}</code>
+        <button class="copy-btn" @click="copyIngestUrl" :aria-label="copied ? 'Copied' : 'Copy API endpoint URL'" :aria-pressed="copied">
+          <span class="copy-btn-icon" v-if="!copied">📋</span>
+          <span class="copy-btn-icon" v-else>✓</span>
+        </button>
+        <span class="sr-only" aria-live="polite">{{ copyStatusText }}</span>
+      </div>
+      <template #fallback>
+        <div class="api-endpoint">
+          <span class="api-endpoint-label">API endpoint</span>
+        </div>
+      </template>
+    </ClientOnly>
+    <ClientOnly>
       <div class="connection-status" :class="wsStateClass">
         <span class="connection-dot" :class="wsDotClass" />
         <span>{{ wsStateText }}</span>
@@ -35,8 +51,46 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from "vue";
+
 const { toggle } = useResponsiveSidebar();
 const { connectionState } = useWebSocket();
+
+// API endpoint display
+const ingestUrl = computed(() => {
+	const u = useRequestURL();
+	return `${u.protocol}//${u.host}/api/ping/ingest`;
+});
+
+const copied = ref(false);
+const copyStatusText = ref("");
+
+async function copyIngestUrl() {
+	try {
+		await navigator.clipboard.writeText(ingestUrl.value);
+	} catch {
+		// Fallback for non-secure contexts
+		try {
+			const textarea = document.createElement("textarea");
+			textarea.value = ingestUrl.value;
+			textarea.style.position = "fixed";
+			textarea.style.opacity = "0";
+			document.body.appendChild(textarea);
+			textarea.select();
+			document.execCommand("copy");
+			document.body.removeChild(textarea);
+		} catch (err) {
+			console.warn("[DashboardHeader] Could not copy to clipboard", err);
+			return;
+		}
+	}
+	copied.value = true;
+	copyStatusText.value = "Copied!";
+	setTimeout(() => {
+		copied.value = false;
+		copyStatusText.value = "";
+	}, 1500);
+}
 
 const wsStateClass = computed(() => {
   switch (connectionState.value) {

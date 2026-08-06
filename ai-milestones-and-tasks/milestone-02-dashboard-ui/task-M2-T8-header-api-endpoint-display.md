@@ -3,7 +3,7 @@ taskId: M2-T8
 milestone: M2
 title: Display Nitro API endpoint in dashboard header for Tauri client setup
 priority: Medium
-status: "⚪ Not Started"
+status: "🟢 Complete"
 estimatedEffort: "2-3 hours"
 features:
   - F8
@@ -13,7 +13,7 @@ features:
 
 > **Milestone:** M2 (Dashboard UI)
 > **Priority:** Medium
-> **Status:** ⚪ Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 2-3 hours
 
 ## Description
@@ -71,31 +71,31 @@ Surface the single ingest endpoint URL (`POST /api/ping/ingest`) prominently in 
 
 ## Acceptance Criteria
 
-- [ ] Dashboard header shows the ingest URL between the brand block and the connection-status pill
-- [ ] URL is auto-detected via `useRequestURL()` — no env var or runtime config required
-- [ ] URL matches the browser's address bar in every deployment scenario (localhost, LAN IP, reverse-proxy)
-- [ ] Copy button copies the full URL to the clipboard on click
-- [ ] "Copied" feedback appears for 1.5 s after a successful copy (visual + screen-reader live region)
-- [ ] Disclosure is wrapped in `<ClientOnly>` with a static fallback — no Vue hydration mismatch warnings in dev console
-- [ ] `npx nuxi typecheck` passes with zero errors
-- [ ] Mobile viewport (`< 768px`) shows a compact icon-only label, the URL, and the copy button without overflow
+- [x] Dashboard header shows the ingest URL between the brand block and the connection-status pill
+- [x] URL is auto-detected via `useRequestURL()` — no env var or runtime config required
+- [x] URL matches the browser's address bar in every deployment scenario (localhost, LAN IP, reverse-proxy)
+- [x] Copy button copies the full URL to the clipboard on click
+- [x] "Copied" feedback appears for 1.5 s after a successful copy (visual + screen-reader live region)
+- [x] Disclosure is wrapped in `<ClientOnly>` with a static fallback — no Vue hydration mismatch warnings in dev console
+- [x] `npx nuxi typecheck` passes with zero errors
+- [x] Mobile viewport (`< 768px`) shows a compact icon-only label, the URL, and the copy button without overflow
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `cd dashboard && npx nuxi typecheck` passes with zero errors
-- [ ] `cd dashboard && npm run dev` starts without errors and `/api/health` returns 200
-- [ ] Manual smoke test: paste the copied URL into a curl command targeting a sample payload shape (see `docs/api/ping-ingest.md`) and confirm a `201` response with `accepted: 1`
+- [x] All acceptance criteria above pass
+- [x] `cd dashboard && npx nuxi typecheck` passes with zero errors
+- [x] `cd dashboard && npm run dev` starts without errors and `/api/health` returns 200
+- [x] Manual smoke test: paste the copied URL into a curl command targeting a sample payload shape (see `docs/api/ping-ingest.md`) and confirm a `201` response with `accepted: 1`
 
 ## Testing Checklist
 
-- [ ] Header renders the URL on desktop and mobile
-- [ ] Copy button works (clipboard contains the full URL)
-- [ ] "Copied" feedback visible and announced to screen readers
-- [ ] Page source contains the static fallback (not the live URL) — confirms SSR-safe
-- [ ] No Vue hydration mismatch warnings appear in dev console
-- [ ] Curl POST against the copied URL returns 201 with accepted samples
-- [ ] New client + monitor appears in the dashboard sidebar within ~1 s of the curl POST (via WebSocket broadcast, M1-T9)
+- [x] Header renders the URL on desktop and mobile
+- [x] Copy button works (clipboard contains the full URL)
+- [x] "Copied" feedback visible and announced to screen readers
+- [x] Page source contains the static fallback (not the live URL) — confirms SSR-safe
+- [x] No Vue hydration mismatch warnings appear in dev console
+- [x] Curl POST against the copied URL returns 201 with accepted samples
+- [x] New client + monitor appears in the dashboard sidebar within ~1 s of the curl POST (via WebSocket broadcast, M1-T9)
 
 ## Dependencies
 
