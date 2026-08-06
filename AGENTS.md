@@ -1384,3 +1384,90 @@ The `GET /api/clients/:slug/settings` endpoint returns the full `ClientSettings`
 | ADR-066 | HTTP Allowed for Localhost URLs | Pragmatic exception for development; identical validation in frontend and backend |
 
 *Last updated: 2026-08-06 (Agent 04 — M2-T6 client settings conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-06, M2-T7)
+
+### Global WebSocket Peer Tracking — allPeers Set (F11)
+
+The WebSocket handler (`server/ws/ping.ts`) now maintains two peer tracking structures:
+
+1. **Per-monitor subscription map** (`Map<number, Set<WebSocket>>`) — for monitor-scoped broadcasts (`broadcastSample`)
+2. **Global peer set** (`Set<WebSocket>` as `allPeers`) — for global broadcasts (`broadcastClientNameUpdated`, `broadcastSettingsUpdate`)
+
+```typescript
+// Global peer set — tracks ALL connected WebSocket peers
+const allPeers = new Set<WebSocketType>();
+
+// In open():
+const ws: WebSocketType = (peer as any).ws;
+allPeers.add(ws);
+
+// In close():
+allPeers.delete(ws);
+```
+
+- **Populated on `open()`**: Same WebSocket extraction (`(peer as any).ws`) as the monitor subscription map
+- **Cleaned up on `close()`**: Same cleanup path — `allPeers.delete(ws)` before iterating subscription sets
+- **Broadcast function**: `broadcastClientNameUpdated(clientSlug, newName)` iterates `[...allPeers]` (copy) to send to every connected peer
+- **Why separate from subscription map**: Client name changes are globally relevant — every connected dashboard tab should reflect the change, not just tabs subscribed to specific monitors. The per-monitor subscription map cannot iterate "all unique peers" without de-duplication.
+
+### Global Broadcast Pattern
+
+```typescript
+export function broadcastClientNameUpdated(clientSlug: string, newName: string): void {
+  const message = { type: "client_name_updated", clientSlug, newName };
+  const payload = JSON.stringify(message);
+
+  // Iterate a copy — the set may change during iteration
+  for (const ws of [...allPeers]) {
+    try {
+      if (ws.readyState === 1) { // OPEN
+        ws.send(payload);
+      }
+    } catch (err) {
+      warn(`Broadcast client_name_updated failed: ${errMessage}`);
+    }
+  }
+}
+```
+
+- **Exported function**: Same pattern as `broadcastSample()` — exported from `server/ws/ping.ts`, imported by API endpoints
+- **Safe iteration**: `[...allPeers]` copy avoids concurrent modification if a peer disconnects mid-broadcast
+- **ReadyState check**: `ws.readyState === 1` (OPEN) before sending
+- **Error handling**: Per-peer try/catch — one failure doesn't stop the broadcast
+
+### New WebSocket Message Type: client_name_updated
+
+- **`WsOutboundType`** now includes `"client_name_updated"` in `shared/types.ts`
+- **Message shape**: `{ type: "client_name_updated", clientSlug: string, newName: string }`
+- **Frontend handler**: `useWebSocket()` exposes `onClientNameUpdated(callback)` — called by `SidebarContent.vue` to update sidebar names reactively
+- **Cross-tab sync**: All open browser tabs receive the update simultaneously via WebSocket
+
+### Endpoint Broadcast Integration Pattern
+
+```typescript
+// server/api/clients/[slug].name.put.ts
+import { broadcastClientNameUpdated } from "../../ws/ping";
+
+// ... after successful update:
+const row = updateClientName(slug, trimmed);
+if (!row) throw createError({ statusCode: 404, message: "Client not found" });
+
+broadcastClientNameUpdated(row.slug, row.name);
+
+return toClientResponse(row);
+```
+
+- **Direct import**: `import { broadcastClientNameUpdated } from "../../ws/ping"` — no dynamic import needed (unlike `broadcastSample` which uses dynamic import to avoid circular dependencies)
+- **After DB update**: Broadcast only fires after `updateClientName()` succeeds — no broadcast for failed operations
+- **Non-blocking**: Broadcast is fire-and-forget; failure doesn't affect API response
+- **Uses updated row**: Passes `row.slug` and `row.name` from the database — the source of truth
+
+### ADRs — M2-T7
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-067 | Global allPeers Set for Non-Monitor Broadcasts | Separate `Set<WebSocket>` tracks all connected peers; enables global broadcasts (name updates, settings) independent of monitor subscriptions |
+| ADR-068 | client_name_updated WebSocket Message Type | New message type in `WsOutboundType` union; `{ clientSlug, newName }` shape; enables real-time sidebar name updates across all tabs |
+
+*Last updated: 2026-08-06 (Agent 04 — M2-T7 inline client name edit conventions appended)*

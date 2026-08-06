@@ -29,25 +29,25 @@ Add inline editing capability for client names in the sidebar. Click edit icon t
 
 ## Acceptance Criteria
 
-- [ ] Edit icon in sidebar client group header
-- [ ] Inline text input with Save/Cancel buttons
-- [ ] Name saved via API, sidebar updates immediately
-- [ ] All connected clients receive name update via WebSocket
-- [ ] Cancel/Escape reverts to original name
-- [ ] Validation: rejects empty, whitespace, >100 chars
-- [ ] Optimistic UI update
+- [x] Edit icon in sidebar client group header
+- [x] Inline text input with Save/Cancel buttons
+- [x] Name saved via API, sidebar updates immediately
+- [x] All connected clients receive name update via WebSocket
+- [x] Cancel/Escape reverts to original name
+- [x] Validation: rejects empty, whitespace, >100 chars
+- [x] Optimistic UI update
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Inline edit works
-- [ ] WebSocket broadcast works
-- [ ] Validation correct
+- [x] Inline edit works
+- [x] WebSocket broadcast works
+- [x] Validation correct
 
 ## Dependencies
 

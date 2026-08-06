@@ -1,4 +1,5 @@
 import { updateClientName, toClientResponse } from "../../utils/client";
+import { broadcastClientNameUpdated } from "../../ws/ping";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -30,6 +31,9 @@ export default defineEventHandler(async (event) => {
   if (!row) {
     throw createError({ statusCode: 404, message: "Client not found" });
   }
+
+  // Broadcast to all connected WebSocket clients
+  broadcastClientNameUpdated(row.slug, row.name);
 
   return toClientResponse(row);
 });

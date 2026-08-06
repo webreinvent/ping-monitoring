@@ -185,12 +185,25 @@ interface ClientResponse {
 - The `slug` column is `UNIQUE` with an implicit index, making lookups O(log N).
 - Response time target: under 50ms.
 
+## WebSocket Broadcast Integration (F11)
+
+After a successful name update, the endpoint calls `broadcastClientNameUpdated(row.slug, row.name)` to notify all connected WebSocket clients. This means:
+
+- **All open dashboard tabs** see the new name immediately without page refresh
+- **The broadcast is non-blocking** — broadcast failure does not affect the API response
+- **Message type:** `client_name_updated` with `{ clientSlug, newName }` payload
+- **Frontend handler:** `SidebarContent.vue` calls `useWebSocket().onClientNameUpdated((slug, newName) => { ... })` to update sidebar client names reactively
+
+See [WebSocket Broadcast API](../websocket/broadcast.md) for the `broadcastClientNameUpdated` function documentation and [WebSocket Protocol](../websocket/protocol.md) for the `client_name_updated` message format.
+
 ## Related
 
 - [Client Utility Documentation](../utils/client.md) — `generateSlug()`, `upsertClient()`, `getClientBySlug()`, `updateClientName()`
 - [Database Schema: clients table](../database/clients-table.md) — Table definition and constraints
 - [Shared Types](../shared/types.md) — `ClientIdentity` type
 - [Client Settings API](./clients-settings.md) — `PUT /api/clients/:slug/settings` endpoint
+- [WebSocket Broadcast API](../websocket/broadcast.md) — `broadcastClientNameUpdated()` function
+- [WebSocket Protocol](../websocket/protocol.md) — `client_name_updated` message type
 - [Feature F2 Specification](../../requirements/features/feature-0002-client-identity.md) — Client registration & identity requirements
 - [Feature F9 Specification](../../requirements/features/feature-0009-client-settings.md) — Client sync settings requirements
 - [Feature F11 Specification](../../requirements/features/feature-00011-edit-client-name.md) — Dashboard client name editing requirements

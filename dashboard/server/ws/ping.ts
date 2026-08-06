@@ -78,12 +78,19 @@ interface ErrorMessage {
   message: string;
 }
 
+interface ClientNameUpdatedMessage {
+  type: "client_name_updated";
+  clientSlug: string;
+  newName: string;
+}
+
 type OutboundMessage =
   | SubscribedMessage
   | UnsubscribedMessage
   | SnapshotMessage
   | SampleMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ClientNameUpdatedMessage;
 
 // ============================================================================
 // Subscription Map
@@ -96,6 +103,12 @@ type OutboundMessage =
  * We store the raw WebSocket to support broadcasting from outside the handler.
  */
 const subscriptions = new Map<number, Set<WebSocketType>>();
+
+/**
+ * Global collection of ALL connected WebSocket peers.
+ * Used for non-monitor-scoped broadcasts (e.g., client_name_updated).
+ */
+const allPeers = new Set<WebSocketType>();
 
 /**
  * Get or create the subscriber set for a monitor.
@@ -248,6 +261,38 @@ export function getSubscriberCount(monitorId: number): number {
 }
 
 /**
+ * Broadcast a client name update to ALL connected WebSocket clients.
+ * Called from the PUT /api/clients/:slug/name endpoint after a successful update.
+ *
+ * Unlike broadcastSample (which targets monitor subscribers), this reaches
+ * every connected peer so all dashboards see the rename immediately.
+ *
+ * @param clientSlug - The slug of the renamed client
+ * @param newName - The new display name
+ */
+export function broadcastClientNameUpdated(clientSlug: string, newName: string): void {
+  const message: ClientNameUpdatedMessage = {
+    type: "client_name_updated",
+    clientSlug,
+    newName,
+  };
+  const payload = JSON.stringify(message);
+
+  // Iterate a copy — the set may change during iteration
+  for (const ws of [...allPeers]) {
+    try {
+      if (ws.readyState === 1) {
+        // 1 = OPEN
+        ws.send(payload);
+      }
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      warn(`Broadcast client_name_updated failed: ${errMessage}`);
+    }
+  }
+}
+
+/**
  * Broadcast a client_settings_updated message to all connected WebSocket peers.
  * Called from the PUT /api/clients/[slug]/settings endpoint when settings change.
  *
@@ -297,6 +342,10 @@ export function broadcastSettingsUpdate(
 
 export default defineWebSocketHandler({
   open(peer) {
+    // Track this peer in the global set for non-monitor-scoped broadcasts
+    const ws: WebSocketType = (peer as any).ws;
+    allPeers.add(ws);
+
     // Send connected acknowledgment (matches existing behavior, retained for backward compat)
     peer.send(
       JSON.stringify({
@@ -356,6 +405,9 @@ export default defineWebSocketHandler({
   close(peer) {
     // Remove this peer's WebSocket from all subscription sets
     const ws: WebSocketType = (peer as any).ws;
+
+    // Remove from global peer set
+    allPeers.delete(ws);
 
     // Iterate over a copy of keys — the map may change during iteration
     const monitorIds = [...subscriptions.keys()];

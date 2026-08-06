@@ -220,4 +220,96 @@ describe("WebSocket ping handler", () => {
       ).not.toThrow();
     });
   });
+
+  describe("broadcastClientNameUpdated", () => {
+    test("broadcastClientNameUpdated is exported from the module", async () => {
+      const mod = await import("./ping");
+      expect(typeof mod.broadcastClientNameUpdated).toBe("function");
+    });
+
+    test("broadcastClientNameUpdated sends correct message shape", async () => {
+      const mod = await import("./ping");
+      // Call with no peers — should not throw
+      expect(() =>
+        mod.broadcastClientNameUpdated("test-slug", "New Name"),
+      ).not.toThrow();
+    });
+
+    test("broadcastClientNameUpdated sends to all connected peers", async () => {
+      // Create mock WebSocket peers
+      const peer1 = { readyState: 1, send: vi.fn() };
+      const peer2 = { readyState: 1, send: vi.fn() };
+
+      const mod = await import("./ping");
+      const handler = mod.default;
+
+      // Simulate two peers connecting by calling open
+      const mockPeer1 = { send: vi.fn(), ws: peer1 };
+      const mockPeer2 = { send: vi.fn(), ws: peer2 };
+      handler.open(mockPeer1);
+      handler.open(mockPeer2);
+
+      // Broadcast
+      mod.broadcastClientNameUpdated("test-client", "New Client Name");
+
+      // Verify both peers received the message
+      expect(peer1.send).toHaveBeenCalledTimes(1);
+      expect(peer2.send).toHaveBeenCalledTimes(1);
+
+      // Verify message shape
+      const sent1 = JSON.parse(peer1.send.mock.calls[0][0]);
+      const sent2 = JSON.parse(peer2.send.mock.calls[0][0]);
+      expect(sent1.type).toBe("client_name_updated");
+      expect(sent1.clientSlug).toBe("test-client");
+      expect(sent1.newName).toBe("New Client Name");
+      expect(sent2.type).toBe("client_name_updated");
+      expect(sent2.clientSlug).toBe("test-client");
+      expect(sent2.newName).toBe("New Client Name");
+
+      // Clean up: disconnect both
+      handler.close(mockPeer1);
+      handler.close(mockPeer2);
+    });
+
+    test("broadcastClientNameUpdated skips closed peers", async () => {
+      // Peer with readyState !== 1 should not receive the message
+      const closedPeer = { readyState: 3, send: vi.fn() };
+
+      const mod = await import("./ping");
+      const handler = mod.default;
+
+      const mockPeer = { send: vi.fn(), ws: closedPeer };
+      handler.open(mockPeer);
+
+      mod.broadcastClientNameUpdated("test-slug", "New Name");
+
+      // Closed peer should not have received the message
+      expect(closedPeer.send).not.toHaveBeenCalled();
+
+      // Clean up
+      handler.close(mockPeer);
+    });
+
+    test("broadcastClientNameUpdated handles send errors gracefully", async () => {
+      // Peer that throws on send should not crash the broadcast
+      const badPeer = {
+        readyState: 1,
+        send: vi.fn(() => { throw new Error("connection reset"); }),
+      };
+
+      const mod = await import("./ping");
+      const handler = mod.default;
+
+      const mockPeer = { send: vi.fn(), ws: badPeer };
+      handler.open(mockPeer);
+
+      // Should not throw
+      expect(() =>
+        mod.broadcastClientNameUpdated("test-slug", "New Name"),
+      ).not.toThrow();
+
+      // Clean up
+      handler.close(mockPeer);
+    });
+  });
 });

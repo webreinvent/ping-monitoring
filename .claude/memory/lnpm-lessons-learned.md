@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
 > Saved: 2026-08-06
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T6 (client settings page)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T6 (client settings page), M2-T7 (inline client name edit with WS broadcast)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -336,3 +336,29 @@
 **Fix:** Implement `MAX_POINTS_PER_MONITOR = 2000` — when exceeded, drop the oldest point (shift data by 1 position before appending). This is done during the append operation, not as a separate cleanup step.
 
 **Prevention:** Any data structure that accumulates items from a continuous stream (WebSocket, polling, etc.) must have a bounded capacity. The cap should be set at the data ingestion point, not as a periodic cleanup.
+
+## Lesson 35: M2-T7 was substantially pre-implemented
+
+**Error:** No error — this is a pattern awareness lesson.
+
+**Finding:** The M2-T7 task (inline client name editing with WebSocket broadcast) was substantially implemented by earlier tasks:
+- `ClientGroup.vue` inline edit UI was created during M2-T2 (sidebar components)
+- `PUT /api/clients/:slug/name` endpoint was created during M1-T5 (client identity)
+- `SidebarContent.vue` WebSocket listener was wired during M2-T5 (live chart updates)
+- `useWebSocket()` composable already had `onClientNameUpdated()` callback registration
+
+The only missing piece was `broadcastClientNameUpdated()` in `server/ws/ping.ts` and the `allPeers` Set for global peer tracking.
+
+**Key insight:** When a task's acceptance criteria span multiple subsystems, earlier tasks often implement parts of later tasks. The inline edit UI is a sidebar component (M2-T2), the name API is a client endpoint (M1-T5), and the WebSocket handling is a broadcast mechanism (M2-T5). The task completion is about wiring the final broadcast link.
+
+**Prevention:** Agent 02 (Understand Task Scope) should always check which acceptance criteria are already met by existing code. `git diff --stat` and reading the relevant files reveals what's implemented vs. what's missing.
+
+## Lesson 36: Global broadcast requires separate peer tracking
+
+**Error:** The per-monitor subscription map (`Map<monitorId, Set<ws>>`) cannot support global broadcasts — there's no way to iterate "all peers" without iterating through all monitor subscriptions and de-duplicating.
+
+**Root cause:** The WebSocket handler was designed for monitor-scoped messages (samples). Client name changes and settings changes need to reach ALL connected peers regardless of subscription.
+
+**Fix:** Added `allPeers` Set — populated on `open()`, cleaned up on `close()`. `broadcastClientNameUpdated()` iterates this Set directly. This is a simpler and more correct approach than iterating all subscription sets.
+
+**Prevention:** When designing a WebSocket handler, consider whether the application needs both per-topic and global broadcasts. If so, maintain both a subscription map (for targeted messages) and a global peer set (for broadcast messages). The `allPeers` Set pattern is lightweight (just a Set with add/delete on connect/disconnect).

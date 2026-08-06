@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
 > Saved: 2026-08-06
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T6 (client settings page)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T6 (client settings page), M2-T7 (inline client name edit with WS broadcast)
 
 ## Technology Stack Decisions
 
@@ -364,3 +364,30 @@
 - **Decision:** Backend URL validation allows HTTP for localhost/127.0.0.1/::1 URLs (dev convenience)
 - **Rationale:** Local development environments use `http://localhost:3000` — requiring HTTPS would block local testing. This is a pragmatic exception with clear boundaries.
 - **Impact:** Both frontend (`SyncSettingsForm.vue`) and backend (`[slug].settings.put.ts`) implement identical localhost exception logic
+
+## M2-T7 — Inline Client Name Editing with WebSocket Broadcast (F11)
+
+### Global allPeers Set for Non-Monitor-Scoped Broadcasts
+- **Decision:** Track all connected WebSocket peers in a global `Set<WebSocketType>` (named `allPeers`) separate from the per-monitor subscription map
+- **Rationale:** Client name changes are globally relevant — every connected dashboard client should see the update, not just clients subscribed to specific monitors. The per-monitor subscription map (`Map<monitorId, Set<ws>>`) is insufficient for this use case.
+- **Impact:** `broadcastClientNameUpdated()` reaches ALL connected peers; `allPeers` is populated on `open()` and cleaned up on `close()`. This pattern is reusable for any global broadcast (settings, alerts, etc.).
+
+### client_name_updated as New WebSocket Message Type
+- **Decision:** Add `client_name_updated` to `WsOutboundType` union and create a dedicated `ClientNameUpdatedMessage` interface
+- **Rationale:** Clean separation from sample/settings messages; the message shape (slug + newName) is specific to name updates. The type is added to `shared/types.ts` for client-server contract consistency.
+- **Impact:** Frontend `useWebSocket()` composable already handles this message type via `onClientNameUpdated()` callback — the implementation was already partially wired (SidebarContent listener), Agent 02 completed the server-side broadcast.
+
+### Broadcast After Successful DB Update (Not Before)
+- **Decision:** Call `broadcastClientNameUpdated()` after `updateClientName()` returns a valid row
+- **Rationale:** The DB update must succeed before broadcasting — otherwise clients would receive a name update for a change that didn't persist. The endpoint returns 404 if client not found; broadcast only fires on success.
+- **Impact:** The PUT endpoint flow is: validate → `updateClientName()` → `broadcastClientNameUpdated()` → `return toClientResponse()`. No race condition — broadcast always reflects the committed state.
+
+### Feature Was Substantially Pre-Implemented
+- **Decision:** The UI (`ClientGroup.vue`), API endpoint (`[slug].name.put.ts`), and frontend listener (`SidebarContent.vue`) were already implemented. The only gap was the server-side WebSocket broadcast function.
+- **Rationale:** The inline edit UI was created as part of M2-T2 (sidebar components), and the API endpoint was created as part of M1-T5 (client identity). The WebSocket composable already had `onClientNameUpdated()` handler registration. The missing piece was the `broadcastClientNameUpdated()` function and the `allPeers` tracking.
+- **Impact:** Agent 02 added 3 key changes: (1) `allPeers` Set with open/close tracking, (2) `broadcastClientNameUpdated()` function, (3) import + call in the PUT endpoint. Plus 8 new tests. This is a pattern — check for existing implementation before writing new code.
+
+### client_name_updated Added to WsOutboundType
+- **Decision:** Extend `WsOutboundType` in `shared/types.ts` to include `"client_name_updated"`
+- **Rationale:** The shared types define the WebSocket protocol contract; adding the new type ensures TypeScript type-checking catches missing handlers on both sides.
+- **Impact:** `WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample" | "client_name_updated"` — type safety across the WebSocket boundary.

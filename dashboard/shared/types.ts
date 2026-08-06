@@ -110,7 +110,7 @@ export type WsInboundType = "subscribe" | "unsubscribe";
 /**
  * Outbound message types (server → client).
  */
-export type WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample";
+export type WsOutboundType = "subscribed" | "unsubscribed" | "snapshot" | "sample" | "client_name_updated";
 
 /**
  * A single ping sample in the WebSocket broadcast.

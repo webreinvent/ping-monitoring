@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Patterns Established
 
 > Saved: 2026-08-06
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T5 (WebSocket live chart updates), M2-T6 (client settings page)
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T5 (WebSocket live chart updates), M2-T6 (client settings page), M2-T7 (inline client name edit with WS broadcast)
 
 ## Nuxt 4 + Nitro Route Handler Pattern
 
@@ -542,3 +542,54 @@ onClientNameUpdated((clientSlug, newName) => {
 - **Same validation on backend**: `server/api/clients/[slug].settings.put.ts` uses identical logic
 - **Allowed intervals**: `[1, 5, 10, 15, 30, 60]` — per F9 spec (no `2` minute option)
 - **Emit pattern**: Emits `saved` event on successful form submission for parent to refresh data
+
+## Global Peer Set Pattern — allPeers (M2-T7 / F11)
+
+**Pattern:** A `Set<WebSocketType>` tracking ALL connected WebSocket peers, independent of monitor subscriptions. Used for global broadcasts (messages not scoped to a specific monitor).
+
+### Architecture
+
+- **`allPeers`**: `Set<WebSocketType>` — raw WebSocket objects from every connected peer
+- **Population**: `open()` handler calls `allPeers.add(ws)` — same extraction as monitor subscription
+- **Cleanup**: `close()` handler calls `allPeers.delete(ws)` — same cleanup path as monitor subscriptions
+- **Broadcast**: `broadcastClientNameUpdated(clientSlug, newName)` iterates `[...allPeers]` (copy) sending to every connected peer
+- **Safe iteration**: Spread copy (`[...allPeers]`) avoids concurrent modification if a peer disconnects mid-broadcast
+
+### Why Global vs. Per-Monitor
+
+- **Per-monitor broadcast** (`broadcastSample`): Targeted to subscribers of a specific monitor — uses `Map<monitorId, Set<ws>>`
+- **Global broadcast** (`broadcastClientNameUpdated`, `broadcastSettingsUpdate`): Reaches ALL connected peers regardless of monitor subscriptions — uses `allPeers` Set
+- **Rationale**: Client name changes and settings changes are globally relevant — every connected dashboard tab should reflect the change, not just tabs viewing specific monitors
+
+### Message Shape
+
+```typescript
+interface ClientNameUpdatedMessage {
+  type: "client_name_updated";
+  clientSlug: string;
+  newName: string;
+}
+```
+
+- Added to `WsOutboundType` union in `shared/types.ts`
+- Local type defined in `server/ws/ping.ts` as `ClientNameUpdatedMessage`
+
+### Endpoint Integration
+
+- **`PUT /api/clients/:slug/name`** imports `broadcastClientNameUpdated` from `server/ws/ping`
+- Called AFTER `updateClientName()` succeeds (row returned from DB)
+- Passes `row.slug` and `row.name` (the updated values)
+- Non-blocking: broadcast failure doesn't affect API response
+
+### Frontend Consumption
+
+- **`useWebSocket()`** exposes `onClientNameUpdated(callback)` — registers handler for `client_name_updated` messages
+- **`SidebarContent.vue`** calls `onClientNameUpdated((clientSlug, newName) => { ... })` in `onMounted`
+- Directly mutates `groupedByClient` array — Vue reactivity propagates the change to `ClientGroup` headers
+- No API re-fetch needed — WebSocket message IS the source of truth
+
+### Test Pattern
+
+- **Unit tests** (`ping.test.ts`): Verify `broadcastClientNameUpdated` is exported, sends correct message shape, iterates all peers, skips closed peers (readyState !== 1), handles send errors gracefully
+- **Integration tests** (`[slug].name.put.integration.test.ts`): Mock `broadcastClientNameUpdated` via `vi.mock("../../ws/ping")`, verify it's called with correct args after successful update
+- **Peer simulation**: Create mock peers with `handler.open(mockPeer)` to populate `allPeers`, then verify broadcast reaches all of them
