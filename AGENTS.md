@@ -1115,3 +1115,109 @@ uPlot components require a canvas DOM context — testing rendering directly in 
 | ADR-051 | Legend Toggle via useMonitors Integration | AllMonitorsChart wires into useMonitors() composable for toggle state; clickable legend items with full accessibility (role, aria-pressed, keyboard) |
 
 *Last updated: 2026-08-05 (Agent 04 — M2-T3 chart conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-08-06, M2-T4)
+
+### Detail View Pattern — useAsyncData with Reactive Key (M2-T4)
+
+The monitor detail view (`app/pages/monitors/[id].vue`) demonstrates the reactive `useAsyncData` pattern for time-windowed data.
+
+#### Reactive Key Pattern
+
+```typescript
+const route = useRoute();
+const monitorId = computed(() => Number(route.params.id));
+const { selectedPreset: timeWindow, fromMs, toMs } = useTimeWindow();
+
+const { data: historyData, status } = useAsyncData<HistoryResponse>(
+  () => `monitor-detail-${monitorId.value}-${timeWindow.value}`,
+  async () => {
+    return await $fetch<HistoryResponse>(`/api/monitors/${monitorId.value}`, {
+      query: { fromMs: fromMs.value, toMs: toMs.value, maxPoints: 2000 },
+    });
+  },
+);
+```
+
+**Key insight:** The async data key uses the **time window preset name** (e.g., `"1h"`, `"24h"`) — NOT `fromMs`/`toMs` values. This is critical because:
+- `fromMs` and `toMs` are computed from `Date.now()` — they change on every reactive update, which would invalidate the cache and cause constant re-fetches
+- The preset name is stable — it only changes when the user explicitly selects a different time range
+- This pattern is essential for any page that fetches time-windowed data
+
+#### Data Extraction via Computed Properties
+
+```typescript
+const targetName = computed(() => {
+  const seriesArr = historyData.value?.series ?? [];
+  return seriesArr[0]?.target?.name ?? "Unknown";
+});
+
+const defaultSummary: RangeSummary = {
+  sampleCount: 0, successCount: 0, failureCount: 0, packetLossPercent: 0,
+  averageLatencyMs: null, minimumLatencyMs: null, maximumLatencyMs: null, p95LatencyMs: null,
+  stableMs: 0, unstableMs: 0, disconnectedMs: 0,
+  stablePercent: 0, unstablePercent: 0, disconnectedPercent: 0,
+};
+
+const summary = computed<RangeSummary>(() => {
+  const seriesArr = historyData.value?.series ?? [];
+  return seriesArr[0]?.summary ?? defaultSummary;
+});
+```
+
+**Key patterns:**
+- All derived values are **computed properties** — cached, reactive, null-safe
+- **Default fallback values** prevent child component errors when data is loading or empty
+- The `defaultSummary` object is defined inline (not imported) to avoid circular dependencies
+- **Defensive optional chaining**: `historyData.value?.series ?? []` — never access `.series[0]` directly on a potentially null object
+
+#### 404 Redirect Pattern
+
+```typescript
+if (monitorId.value <= 0) {
+  navigateTo("/");
+}
+```
+
+**Pattern:** Validate the route parameter in the script setup block and redirect to the home page if invalid. This guards against malformed URLs (non-numeric IDs, negative numbers) before the API is called.
+
+### MonitorHeader Component Pattern (M2-T4)
+
+- **File**: `app/components/charts/MonitorHeader.vue`
+- **Props**: `targetName`, `targetHost`, `qualityState`, `latestLatency`, `lastSeenMs`
+- **Computed**: `qualityStateLabel` (human-readable), `latencyColor` (accent/warning/danger), `lastSeenRelative` (relative time string)
+- **Pattern**: Presentational component — no events, no slots, no interactivity. Takes raw data and formats it for display.
+- **Relative time**: Computed `lastSeenRelative` converts epoch-ms to human-readable relative time (`"5s ago"`, `"3m ago"`, `"2h ago"`)
+- **Latency color thresholds**: `< 50ms` → accent, `< 150ms` → warning, `≥ 150ms` → danger
+
+### MonitorSummary Component Pattern (M2-T4)
+
+- **File**: `app/components/charts/MonitorSummary.vue`
+- **Props**: `summary: RangeSummary` — single prop containing all metrics
+- **Pattern**: 9-card grid layout with color-coded values based on metric thresholds
+- **Color coding**:
+  - Packet loss: 0% → accent, ≤5% → warning, >5% → danger
+  - P95 latency: <150ms → accent, <300ms → warning, ≥300ms → danger
+  - Max latency: >300ms → danger
+  - Stable: always accent (green)
+  - Unstable: warning when >0%, Disconnected: danger when >0%
+- **Null-safe**: Shows "—" for null values (latency fields are nullable)
+- **Data attributes**: `data-testid="monitor-summary"` for E2E testing
+
+### Shared Types — RangeSummary (M2-T4)
+
+- **`RangeSummary`**: `sampleCount`, `successCount`, `failureCount`, `packetLossPercent`, `averageLatencyMs` (nullable), `minimumLatencyMs` (nullable), `maximumLatencyMs` (nullable), `p95LatencyMs` (nullable), `stableMs`, `unstableMs`, `disconnectedMs`, `stablePercent`, `unstablePercent`, `disconnectedPercent`
+- Nullable latency fields (avg, min, max, p95) — the API returns `null` when no successful samples exist in the range
+- Percentages are always numbers (0 default) — never null
+- **Location**: `shared/types.ts`
+
+### ADRs — M2-T4 Detail View
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-052 | useAsyncData Key with Time Preset | Key uses the preset name (e.g., "1h") not Date.now()-based values — prevents constant re-fetches on every render |
+| ADR-053 | Computed Properties with Default Values | All data extraction uses computed properties with fallback defaults — prevents null errors in child components |
+| ADR-054 | navigateTo() for Invalid Monitor IDs | Invalid IDs (≤0) redirect to home in the script setup block — simple, declarative, pre-API validation |
+| ADR-055 | Monitor Summary as 9-Card Grid | Range summary metrics displayed as 9 color-coded stat cards; matches desktop app's summary panel layout |
+
+*Last updated: 2026-08-06 (Agent 04 — M2-T4 detail view conventions appended)*

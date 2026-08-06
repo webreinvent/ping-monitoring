@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Lessons Learned
 
-> Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting)
+> Saved: 2026-08-06
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view)
 
 ## Lesson 1: Database field naming mismatch in HealthResponse
 
@@ -286,3 +286,33 @@
 **Fix:** No fix needed — `getRequestIP` is available through the Nitro/h3 chain and works correctly. The import works because Nitro re-exports h3 types.
 
 **Prevention:** When using Nitro/h3 utilities (like `getRequestIP`, `setHeader`, `setResponseStatus`), the imports work through the Nitro dependency chain. This is expected and documented behavior.
+
+## Lesson 30: M2-T4 was already fully implemented on develop
+
+**Error:** M2-T4 (per-monitor detail view) was listed as "Not Started" in the project dashboard, but all code (detail page, components, composables, utilities) was already fully implemented on the `develop` branch from the M2-T3 session.
+
+**Root cause:** The detail view components (`MonitorHeader.vue`, `MonitorSummary.vue`, `LatencyChart.vue`, `TimeRangeSelector.vue`, `NavigationBreadcrumb.vue`) and composables (`useMonitorHistory.ts`, `useTimeWindow.ts`) were created during M2-T3 (all-monitors chart) as shared components. The detail view page (`monitors/[id].vue`) was also implemented at that time.
+
+**Key insight:** Shared components created for one task can fulfill acceptance criteria for subsequent tasks. The detail view reuses `LatencyChart`, `TimeRangeSelector`, `MonitorHeader`, `MonitorSummary`, and `EmptyState` — all created during M2-T3.
+
+**Prevention:** When a task depends on components that are likely shared with earlier tasks in the same milestone, check if those components already exist. Agent 01's audit correctly identified this — M2-T4 was genuinely complete.
+
+## Lesson 31: useAsyncData key must be stable for caching
+
+**Error:** Using `Date.now()`-based values in `useAsyncData` keys would cause constant re-fetches (the key changes on every render).
+
+**Root cause:** `fromMs` and `toMs` are computed from `Date.now()` — if used as part of the key, the data fetch would re-trigger on every reactive update.
+
+**Fix:** Use the time window preset name (e.g., `"1h"`) as part of the key: `` `monitor-detail-${monitorId}-${timeWindow}` ``. The key only changes when the user explicitly selects a different time range.
+
+**Prevention:** When using `useAsyncData` with time-range params, use the preset identifier (not the computed epoch values) as the key. This is stable, semantic, and only triggers re-fetches on actual user actions.
+
+## Lesson 32: Default values prevent null errors in child components
+
+**Error:** Without a `defaultSummary` object, `MonitorSummary` component would receive `undefined` when `historyData` is loading or empty — causing null property access errors.
+
+**Root cause:** `series[0]?.summary` returns `undefined` when no data exists, but the `MonitorSummary` component expects a `RangeSummary` object.
+
+**Fix:** Define a `defaultSummary` object with safe default values (0 for counts, null for latency, 0 for percentages) and use `series[0]?.summary ?? defaultSummary`.
+
+**Prevention:** When extracting nested values from API responses for child components, always provide default fallback values. The `computed()` pattern with `??` is clean and reactive.

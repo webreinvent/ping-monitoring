@@ -1,7 +1,7 @@
 # LNPM Cloud Dashboard — Decisions Made
 
-> Saved: 2026-08-03
-> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting)
+> Saved: 2026-08-06
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view)
 
 ## Technology Stack Decisions
 
@@ -266,3 +266,37 @@
 - **Decision:** `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS` env vars override defaults
 - **Rationale:** Allows easy tuning for testing and deployment without code changes
 - **Impact:** Defaults match F13 spec (60s window, 100/60 max); env vars allow operator override.
+
+## Frontend Decisions (M2-T4)
+
+### Detail View Data Strategy — useAsyncData with Reactive Key
+- **Decision:** Use `useAsyncData()` with a key that includes the time window preset (not `Date.now()` values) to make re-fetches reactive
+- **Rationale:** `fromMs`/`toMs` are computed from `Date.now()` and would change on every render, invalidating the cache. Using the preset name as the key is stable and only changes when the user selects a different time range.
+- **Impact:** Key pattern: `` `monitor-detail-${monitorId}-${timeWindow}` `` — reactive, cacheable, efficient.
+
+### Data Extraction via Computed Properties
+- **Decision:** Extract all data fields (targetName, qualityState, summary, etc.) from `historyData.value?.series[0]` via computed properties
+- **Rationale:** Keeps the template clean and avoids deep optional chaining. Computed properties are cached and reactive — when `historyData` changes, all derived values update automatically.
+- **Impact:** Default fallback values (e.g., `defaultSummary`) prevent null errors in child components.
+
+### 404 Handling via navigateTo() Redirect
+- **Decision:** Use `navigateTo("/")` in the script setup block for invalid monitor IDs (≤0)
+- **Rationale:** Simple, declarative, and happens before rendering — no need for a separate API call to check existence. The history API already returns 404 for non-existent monitors, but this guards against malformed URLs.
+- **Impact:** Users with invalid URLs are redirected to the dashboard home without seeing a broken page.
+
+### Monitor Summary as 9-Card Grid
+- **Decision:** Display range summary metrics as a 9-card grid (packet loss, avg latency, min latency, max latency, p95 latency, samples, stable %, unstable %, disconnected %)
+- **Rationale:** Matches the desktop app's summary panel layout; provides at-a-glance view of key metrics
+- **Impact:** `MonitorSummary.vue` is a self-contained presentational component with color-coded values (accent/warning/danger)
+
+### Threshold from Target Configuration
+- **Decision:** Read `thresholdMs` from `series[0].target.thresholds.p95LatencyMs` — uses the monitor's configured threshold
+- **Rationale:** Each monitor can have different thresholds (matching the desktop app's per-target configuration)
+- **Impact:** Chart threshold line is dynamic per monitor, not hardcoded
+
+## Agent 02 Skip Decision (M2-T4)
+
+### Task Already Complete — No Implementation Needed
+- **Decision:** Agent 02 (Implement) was skipped for M2-T4 because the implementation was already fully complete on the `develop` branch
+- **Rationale:** All 6 acceptance criteria were met by existing code created during earlier M2 sessions (M2-T3). The detail view page, components, composables, and utilities were all functional.
+- **Impact:** Agent 02 verified completeness (typecheck clean, dev server starts, 854 tests pass) rather than implementing. This is a pattern — always check for existing implementation before coding.

@@ -29,24 +29,24 @@ Build the per-monitor detail view page with dedicated uPlot chart, quality inter
 
 ## Acceptance Criteria
 
-- [ ] Per-monitor detail page loads with chart and metrics
-- [ ] uPlot chart renders with quality interval bands
-- [ ] Range summary shows all metrics (packet loss, latency, stability)
-- [ ] Monitor header shows current state
-- [ ] Time range controls work
-- [ ] 404 redirect to all-monitors view for unknown monitor
+- [x] Per-monitor detail page loads with chart and metrics
+- [x] uPlot chart renders with quality interval bands
+- [x] Range summary shows all metrics (packet loss, latency, stability)
+- [x] Monitor header shows current state
+- [x] Time range controls work
+- [x] 404 redirect to all-monitors view for unknown monitor
 
 ## Completion Criteria
 
-- [ ] All acceptance criteria above pass
-- [ ] `npx nuxi typecheck` passes with no errors
-- [ ] `npx nuxi dev` starts without errors
+- [x] All acceptance criteria above pass
+- [x] `npx nuxi typecheck` passes with no errors
+- [x] `npx nuxi dev` starts without errors
 
 ## Testing Checklist
 
-- [ ] Detail view renders
-- [ ] Chart with intervals
-- [ ] Metrics correct
+- [x] Detail view renders
+- [x] Chart with intervals
+- [x] Metrics correct
 
 ## Dependencies
 
