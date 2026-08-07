@@ -35,6 +35,29 @@
       <span v-if="monitor.latencyMs != null" class="target-latency">
         {{ monitor.latencyMs }} ms
       </span>
+      <button
+        class="monitor-delete-btn"
+        @click.stop.prevent="emitDelete"
+        aria-label="Delete monitor"
+        title="Delete monitor"
+        data-testid="monitor-delete-btn"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          <path d="M10 11v6M14 11v6" />
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+        </svg>
+      </button>
     </NuxtLink>
   </div>
 </template>
@@ -54,6 +77,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: "toggle"): void;
+  (e: "delete"): void;
 }>();
 
 const route = useRoute();
@@ -61,6 +85,10 @@ const selected = computed(() => route.path.startsWith(`/monitors/${props.monitor
 
 function emitToggle(): void {
   emit("toggle");
+}
+
+function emitDelete(): void {
+  emit("delete");
 }
 
 function handleClick(): void {
@@ -87,7 +115,7 @@ function handleClick(): void {
   border: 1px solid transparent;
   border-radius: 10px;
   padding: 8px 10px;
-  grid-template-columns: 16px 12px minmax(0, 1fr) auto;
+  grid-template-columns: 16px 12px minmax(0, 1fr) auto auto;
   gap: 8px;
   color: var(--text);
   background: transparent;
@@ -109,5 +137,36 @@ function handleClick(): void {
 .monitor-row.selected {
   border-color: rgba(69, 223, 194, 0.18);
   background: linear-gradient(90deg, rgba(69, 223, 194, 0.12), rgba(69, 223, 194, 0.025));
+}
+
+/* Delete (trash) button — hidden until row hover or focus-within,
+   to keep the sidebar visually clean. Mirrors the pencil-button pattern
+   on ClientGroup.vue. */
+.monitor-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+.monitor-row:hover .monitor-delete-btn,
+.monitor-row:focus-within .monitor-delete-btn {
+  opacity: 1;
+}
+
+.monitor-delete-btn:hover,
+.monitor-delete-btn:focus-visible {
+  color: var(--danger);
+  background: var(--danger-soft);
+  outline: none;
 }
 </style>
