@@ -208,8 +208,8 @@ pub fn quit_app(app: AppHandle) -> Result<(), CommandError> {
 }
 
 #[tauri::command]
-pub async fn get_sync_status(state: State<'_, AppState>) -> SyncEvent {
-    state.sync_service.status().await
+pub async fn get_sync_status(state: State<'_, AppState>) -> Result<SyncEvent, CommandError> {
+    Ok(state.sync_service.status().await)
 }
 
 #[tauri::command]

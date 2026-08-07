@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
 
-use crate::domain::PingSample;
+use crate::domain::{PingSample, ProbeStatus};
 use crate::storage::Database;
 
 /// Current status of the sync service.
@@ -66,12 +64,21 @@ impl Default for SyncConfig {
 }
 
 /// The JSON payload sent to the ingest endpoint.
+///
+/// Field names match the dashboard's `IngestPayload` contract verbatim
+/// (see `dashboard/server/utils/ping-types.ts`). The struct uses
+/// `rename_all = "camelCase"` so `client_slug` → `clientSlug`, but
+/// `mac_address` is explicitly renamed back to snake_case — the
+/// dashboard's `client.ts` reads `body.mac_address` directly, not
+/// `body.macAddress`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IngestPayload {
     client_slug: String,
     username: String,
     hostname: String,
+    /// Dashboard reads `mac_address` (snake_case) on the top-level body.
+    #[serde(rename = "mac_address")]
     mac_address: Option<String>,
     samples: Vec<IngestSample>,
 }
@@ -79,21 +86,52 @@ struct IngestPayload {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IngestSample {
-    target_id: String,
+    /// Dashboard expects `targetHost` — the human-meaningful hostname/IP
+    /// of the target, not the internal Tauri UUID. The dashboard's
+    /// `INSERT OR IGNORE ON CONFLICT(client_id, target_host)` uses this
+    /// string as the dedup key when auto-creating monitors, so sending
+    /// the UUID would create one orphan monitor per Tauri target.
+    /// The host string is looked up from the `targets` table at sync
+    /// time (see `unsynced_samples_with_host`).
+    target_host: String,
     timestamp_ms: i64,
     latency_ms: Option<f64>,
-    status: String,
+    /// Dashboard's `validateSample` requires status to be one of the
+    /// literal strings "success" | "timeout" | "error" (see
+    /// `dashboard/server/utils/ping-validation.ts::VALID_STATUSES`).
+    /// Rust's `ProbeStatus` has 6 variants with camelCase serialization
+    /// (`"success"`, `"timeout"`, `"unreachable"`, `"dnsError"`,
+    /// `"permissionDenied"`, `"error"`), so we project to the literal
+    /// in `From<&PingSample>` below.
+    status: &'static str,
     resolved_address: Option<String>,
     error: Option<String>,
 }
 
-impl From<&PingSample> for IngestSample {
-    fn from(sample: &PingSample) -> Self {
+/// Map a `ProbeStatus` to the dashboard's literal-string contract.
+fn ingest_status(status: ProbeStatus) -> &'static str {
+    match status {
+        ProbeStatus::Success => "success",
+        ProbeStatus::Timeout => "timeout",
+        // All other terminal failure modes collapse to "error" because
+        // the dashboard only distinguishes success / timeout / error.
+        ProbeStatus::Unreachable
+        | ProbeStatus::DnsError
+        | ProbeStatus::PermissionDenied
+        | ProbeStatus::Error => "error",
+    }
+}
+
+impl IngestSample {
+    /// Build an `IngestSample` from a `PingSample` plus the looked-up
+    /// host string. The host has to come from the `targets` table
+    /// because `PingSample` only carries the internal target UUID.
+    fn from_sample_and_host(sample: &PingSample, host: &str) -> Self {
         Self {
-            target_id: sample.target_id.clone(),
+            target_host: host.to_string(),
             timestamp_ms: sample.timestamp_ms,
             latency_ms: sample.latency_ms,
-            status: serde_json::to_string(&sample.status).unwrap_or_default(),
+            status: ingest_status(sample.status),
             resolved_address: sample.resolved_address.clone(),
             error: sample.error.clone(),
         }
@@ -112,7 +150,7 @@ struct ClientIdentity {
 impl ClientIdentity {
     fn discover() -> Self {
         let username = whoami::username();
-        let hostname = whoami::hostname();
+        let hostname = whoami::fallible::hostname().unwrap_or_else(|_| String::from("unknown"));
         let mac_address = mac_address::get_mac_address()
             .ok()
             .and_then(|m| m)
@@ -201,9 +239,14 @@ impl SyncService {
         // Cancel any existing task
         self.stop().await;
 
+        // Respect explicit Pause — but DO NOT bail on the default `Off`
+        // status, because that's also the value the service has at boot
+        // time before any task has run. Bailing on `Off` here meant the
+        // sync loop never started when the user already had a dashboard
+        // URL configured on first launch; they'd have to open settings
+        // and re-save to kick it off. `Paused` is a real user intent.
         let status = *self.status.read().await;
-        if status == SyncStatus::Paused || status == SyncStatus::Off {
-            // Don't override paused/off state
+        if status == SyncStatus::Paused {
             return;
         }
 
@@ -213,7 +256,6 @@ impl SyncService {
         let database = self.database.clone();
         let app = self.app.clone();
         let endpoint = config.endpoint.clone();
-        let batch_threshold = config.batch_threshold;
         let batch_timeout_ms = config.batch_timeout_ms;
         let max_batch_size = config.max_batch_size;
         let retry_attempts = config.retry_attempts;
@@ -257,7 +299,7 @@ impl SyncService {
                     (now_ms as i64) - 3_600_000 // last hour
                 };
 
-                let samples = match database.unsynced_samples(since_ms) {
+                let samples = match database.unsynced_samples_with_host(since_ms) {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("sync: failed to query unsynced samples: {e}");
@@ -275,11 +317,11 @@ impl SyncService {
                 let batch: Vec<IngestSample> = samples
                     .iter()
                     .take(max_batch_size)
-                    .map(|s| s.into())
+                    .map(|(sample, host)| IngestSample::from_sample_and_host(sample, host))
                     .collect();
 
                 // Collect unique target_ids for marking synced later
-                let target_ids: Vec<String> = samples.iter().map(|s| s.target_id.clone()).collect();
+                let target_ids: Vec<String> = samples.iter().map(|(s, _)| s.target_id.clone()).collect();
                 let from_ms = batch.first().map(|s| s.timestamp_ms).unwrap_or(0);
                 let to_ms = batch.last().map(|s| s.timestamp_ms).unwrap_or(0);
 
@@ -294,9 +336,6 @@ impl SyncService {
                 // Try to POST with retries
                 let mut last_error = String::new();
                 let mut success = false;
-                let mut accepted = 0u32;
-                let mut duplicate = 0u32;
-                let mut rejected = 0u32;
 
                 for attempt in 0..retry_attempts {
                     if attempt > 0 {
@@ -316,11 +355,12 @@ impl SyncService {
                         Ok(response) => {
                             let status = response.status();
                             if status.is_success() {
-                                // Parse response for counts
+                                // Parse response for counts so we surface them in logs
                                 if let Ok(result) = response.json::<SyncResult>().await {
-                                    accepted = result.accepted;
-                                    duplicate = result.duplicate;
-                                    rejected = result.rejected;
+                                    eprintln!(
+                                        "sync: accepted={} duplicate={} rejected={}",
+                                        result.accepted, result.duplicate, result.rejected
+                                    );
                                 }
 
                                 // Mark samples as synced
@@ -405,10 +445,11 @@ impl SyncService {
 
         let identity = self.get_identity().await;
 
-        // Get all unsynced samples
+        // Get all unsynced samples (joined with host so the dashboard sees a
+        // human-meaningful `targetHost` instead of the internal UUID).
         let samples = self
             .database
-            .unsynced_samples(0)
+            .unsynced_samples_with_host(0)
             .map_err(|e| e.to_string())?;
 
         if samples.is_empty() {
@@ -432,8 +473,25 @@ impl SyncService {
         let batch: Vec<IngestSample> = samples
             .iter()
             .take(config.max_batch_size)
-            .map(|s| s.into())
+            .map(|(sample, host)| IngestSample::from_sample_and_host(sample, host))
             .collect();
+
+        // Capture metadata before moving `batch` into the payload so we can
+        // still reference its length / contents below (and so the fallback
+        // path on a malformed response can report how many samples we sent).
+        let batch_len = batch.len();
+        let target_ids: Vec<String> = samples
+            .iter()
+            .take(config.max_batch_size)
+            .map(|(sample, _)| sample.target_id.clone())
+            .collect();
+        let unique_ids: Vec<String> = target_ids
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        let from_ms = batch.first().map(|s| s.timestamp_ms).unwrap_or(0);
+        let to_ms = batch.last().map(|s| s.timestamp_ms).unwrap_or(0);
 
         let payload = IngestPayload {
             client_slug: identity.slug,
@@ -461,21 +519,13 @@ impl SyncService {
             .json::<SyncResult>()
             .await
             .unwrap_or(SyncResult {
-                accepted: batch.len() as u32,
+                accepted: batch_len as u32,
                 duplicate: 0,
                 rejected: 0,
             });
 
         // Mark samples as synced
         let now_ms = crate::domain::unix_time_ms();
-        let target_ids: Vec<String> = batch.iter().map(|s| s.target_id.clone()).collect();
-        let unique_ids: Vec<String> = target_ids
-            .into_iter()
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        let from_ms = batch.first().map(|s| s.timestamp_ms).unwrap_or(0);
-        let to_ms = batch.last().map(|s| s.timestamp_ms).unwrap_or(0);
         let _ = self.database.mark_samples_synced(&unique_ids, from_ms, to_ms, now_ms);
 
         // Emit success
@@ -493,12 +543,12 @@ impl SyncService {
     /// Get current sync status.
     pub async fn status(&self) -> SyncEvent {
         let status = *self.status.read().await;
-        let pending = self.count_pending().await;
+        let pending_count = self.count_pending().await;
         SyncEvent {
             status,
             message: None,
             last_synced_at_ms: None,
-            pending,
+            pending_count,
         }
     }
 
@@ -568,5 +618,66 @@ mod tests {
             let json = serde_json::to_string(&status).unwrap();
             assert!(!json.is_empty());
         }
+    }
+
+    /// Lock the wire format against the dashboard's ingest contract.
+    /// If anyone changes `IngestSample`, `IngestPayload`, or the
+    /// `ingest_status` mapping, this test breaks before the dashboard
+    /// can silently start rejecting every batch.
+    #[test]
+    fn ingest_payload_matches_dashboard_contract() {
+        use crate::domain::ProbeStatus;
+
+        // --- Sample-level: field names + status literal ---
+        let s = IngestSample::from_sample_and_host(
+            &PingSample {
+                target_id: "tauri-internal-uuid".into(),
+                timestamp_ms: 1786102269039,
+                latency_ms: Some(12.5),
+                status: ProbeStatus::Success,
+                resolved_address: Some("1.1.1.1".into()),
+                error: None,
+            },
+            "1.1.1.1",
+        );
+        let json: serde_json::Value = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["targetHost"], "1.1.1.1", "samples[].targetHost");
+        assert_eq!(json["timestampMs"], 1786102269039_i64, "samples[].timestampMs");
+        assert_eq!(json["latencyMs"], 12.5, "samples[].latencyMs");
+        assert_eq!(json["status"], "success", "samples[].status must be a literal string");
+        assert_eq!(json["resolvedAddress"], "1.1.1.1", "samples[].resolvedAddress");
+        assert!(json.get("target_id").is_none(), "target_id must be renamed to targetHost");
+        assert!(json.get("resolved_address").is_none(), "resolvedAddress, not resolved_address");
+
+        // --- Status mapping: each ProbeStatus must collapse to one of
+        //     the dashboard's three valid values. ---
+        for (input, expected) in [
+            (ProbeStatus::Success, "success"),
+            (ProbeStatus::Timeout, "timeout"),
+            (ProbeStatus::Unreachable, "error"),
+            (ProbeStatus::DnsError, "error"),
+            (ProbeStatus::PermissionDenied, "error"),
+            (ProbeStatus::Error, "error"),
+        ] {
+            assert_eq!(
+                ingest_status(input),
+                expected,
+                "ProbeStatus::{input:?} -> ingest_status"
+            );
+        }
+
+        // --- Top-level payload: mac_address must be snake_case ---
+        let payload = IngestPayload {
+            client_slug: "pk-mac-abc12345".into(),
+            username: "pk".into(),
+            hostname: "mac".into(),
+            mac_address: Some("aa:bb:cc:dd:ee:ff".into()),
+            samples: vec![s],
+        };
+        let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["clientSlug"], "pk-mac-abc12345", "payload.clientSlug");
+        assert_eq!(json["mac_address"], "aa:bb:cc:dd:ee:ff", "payload.mac_address must be snake_case");
+        assert!(json.get("macAddress").is_none(), "macAddress (camelCase) breaks the dashboard client upsert");
+        assert!(json["samples"].is_array(), "payload.samples");
     }
 }

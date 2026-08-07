@@ -437,14 +437,61 @@ impl Database {
              ORDER BY timestamp_ms",
         )?;
         let rows = statement.query_map([since_ms], |row| {
+            let status = probe_status_from_i64(row.get(3)?)
+                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                    3,
+                    rusqlite::types::Type::Integer,
+                    Box::new(e),
+                ))?;
             Ok(PingSample {
                 target_id: row.get(0)?,
                 timestamp_ms: row.get(1)?,
                 latency_ms: row.get(2)?,
-                status: probe_status_from_i64(row.get(4)?)?,
-                resolved_address: row.get(5)?,
-                error: row.get(6)?,
+                status,
+                resolved_address: row.get(4)?,
+                error: row.get(5)?,
             })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Like `unsynced_samples`, but also returns the host string for each
+    /// sample (looked up from the `targets` table). The dashboard's
+    /// `INSERT OR IGNORE ON CONFLICT(client_id, target_host)` uses host
+    /// as the dedup key when auto-creating monitors — sending the
+    /// internal Tauri UUID would create an orphan monitor per target,
+    /// each named after the UUID instead of "1.1.1.1" or "google.com".
+    /// Samples whose target has been deleted are skipped.
+    pub fn unsynced_samples_with_host(
+        &self,
+        since_ms: i64,
+    ) -> StorageResult<Vec<(PingSample, String)>> {
+        let connection = self.open()?;
+        let mut statement = connection.prepare(
+            "SELECT ps.target_id, ps.timestamp_ms, ps.latency_ms, ps.status,
+                    ps.resolved_address, ps.error, t.host
+             FROM ping_samples ps
+             INNER JOIN targets t ON t.id = ps.target_id
+             WHERE ps.cloud_synced_at_ms IS NULL AND ps.timestamp_ms >= ?1
+             ORDER BY ps.timestamp_ms",
+        )?;
+        let rows = statement.query_map([since_ms], |row| {
+            let status = probe_status_from_i64(row.get(3)?)
+                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                    3,
+                    rusqlite::types::Type::Integer,
+                    Box::new(e),
+                ))?;
+            let sample = PingSample {
+                target_id: row.get(0)?,
+                timestamp_ms: row.get(1)?,
+                latency_ms: row.get(2)?,
+                status,
+                resolved_address: row.get(4)?,
+                error: row.get(5)?,
+            };
+            let host: String = row.get(6)?;
+            Ok((sample, host))
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }

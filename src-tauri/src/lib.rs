@@ -48,16 +48,25 @@ pub fn run() {
             let event_sink = TauriEventSink::new(app.handle().clone(), database.clone());
             let monitor = MonitorService::new(database.clone(), probe, event_sink);
             monitor.start_all()?;
+
+            // Build the sync service BEFORE registering AppState so it can be
+            // stored in the state object (commands like `get_sync_status`
+            // need to read it from `State<'_, AppState>`).
+            let sync_service = Arc::new(SyncService::new(database.clone(), app.handle().clone()));
+
             app.manage(AppState {
                 monitor: Arc::clone(&monitor),
                 database: database.clone(),
+                sync_service: sync_service.clone(),
             });
             let update_manager = UpdateManager::new(app.handle().clone(), database.clone());
             app.manage(update_manager.clone());
             update_manager.start();
 
-            // Build and register sync service
-            let sync_service = Arc::new(SyncService::new(database.clone(), app.handle().clone()));
+            // Re-register the sync service so other code paths can still
+            // grab it directly via `app.state::<Arc<SyncService>>` if they
+            // need to. (Already in AppState above, but kept here for any
+            // caller that depends on the standalone registration.)
             app.manage(sync_service.clone());
 
             // Start sync if configured
