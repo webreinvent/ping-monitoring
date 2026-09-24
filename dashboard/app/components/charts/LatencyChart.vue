@@ -27,6 +27,8 @@ interface Props {
   thresholdValue?: number | null;
   /** Multiple horizontal threshold lines Y values (in ms) — takes precedence over thresholdValue */
   thresholdValues?: number[];
+  /** Index of the series column that represents packet loss % (rendered on secondary axis) */
+  packetLossColumnIndex?: number | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -34,6 +36,7 @@ const props = withDefaults(defineProps<Props>(), {
   qualityBands: () => [],
   thresholdValue: null,
   thresholdValues: () => [],
+  packetLossColumnIndex: null,
 });
 
 const wrapperRef = ref<HTMLDivElement>();
@@ -95,6 +98,9 @@ function buildOptions(): Record<string, unknown> {
   const threshold = props.thresholdValue;
   const thresholds = props.thresholdValues.length > 0 ? props.thresholdValues : (threshold != null ? [threshold] : []);
 
+  // Determine if packet loss series is present
+  const hasPacketLoss = props.packetLossColumnIndex !== null && props.packetLossColumnIndex >= 2;
+
   // Threshold color mapping — matching desktop app and design tokens
   const THRESHOLD_COLORS: Record<number, string> = {
     50: "rgba(69, 223, 194, 0.45)",    // --accent (green) — good
@@ -107,66 +113,108 @@ function buildOptions(): Record<string, unknown> {
   // For each non-time series, force spanGaps so NaN holes don't break the line
   // (uPlot's auto-scaler treats a fully-NaN column as having no range; spanning
   // ensures adjacent valid points still connect).
+  // The packet-loss column (if present) is assigned to the secondary y2 scale.
   const series: uPlot.Series[] = [
     { label: "Time" },
-    ...seriesConfig.map((s) => ({ ...s, spanGaps: true })),
+    ...seriesConfig.map((s, i) => {
+      const colIdx = i + 2; // column index in data (0=time, 1=first data)
+      const isLoss = hasPacketLoss && colIdx === props.packetLossColumnIndex;
+      return {
+        ...s,
+        spanGaps: true,
+        ...(isLoss ? { scale: "y2" } : {}),
+      };
+    }),
   ];
+
+  // Scales: always include x + y (latency). Add y2 (packet loss %) if present.
+  const scales: Record<string, unknown> = {
+    x: computeXScale(props.data),
+    y: {
+      auto: true,
+      min: 0,
+    },
+  };
+  if (hasPacketLoss) {
+    scales.y2 = {
+      auto: false,
+      min: 0,
+      max: 100,
+      range: (_self: unknown, min: number | null, max: number | null) => [0, 100],
+    };
+  }
+
+  // Axes: x-axis + left y-axis (latency ms) + optional right y2-axis (packet loss %)
+  const axes: Array<Record<string, unknown>> = [
+    {
+      // x-axis
+      stroke: "rgba(148, 176, 194, 0.36)",
+      font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
+      ticks: { stroke: "rgba(148, 176, 194, 0.25)", size: 4 },
+      grid: { stroke: "rgba(148, 176, 194, 0.07)", width: 1 },
+      values: (
+        _self: uPlot,
+        splits: number[],
+        _axisIdx: number,
+      ) => {
+        const max = splits[splits.length - 1] ?? 0;
+        const min = splits[0] ?? 0;
+        return splits.map((s) => formatXAxisTick(s, max - min));
+      },
+    },
+    {
+      // y-axis (left) — latency in ms
+      stroke: "rgba(148, 176, 194, 0.36)",
+      font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
+      label: "ms",
+      labelFont: "11px Inter, ui-sans-serif, system-ui, sans-serif",
+      labelSize: 16,
+      size: 56,
+      side: 3,
+      ticks: { stroke: "rgba(148, 176, 194, 0.25)", size: 4 },
+      grid: { stroke: "rgba(148, 176, 194, 0.07)", width: 1 },
+      incrs: [5, 10, 25, 50, 100, 200, 500, 1000],
+      values: (
+        _self: uPlot,
+        splits: number[],
+        _axisIdx: number,
+      ) => {
+        const max = splits[splits.length - 1] ?? 50;
+        return splits.map((s) => formatYAxisTick(s, max));
+      },
+    },
+  ];
+
+  if (hasPacketLoss) {
+    axes.push({
+      // y2-axis (right) — packet loss %
+      scale: "y2",
+      stroke: "rgba(255, 107, 120, 0.36)",
+      font: "10px Inter, ui-sans-serif, system-ui, sans-serif",
+      label: "loss %",
+      labelFont: "10px Inter, ui-sans-serif, system-ui, sans-serif",
+      labelSize: 14,
+      size: 44,
+      side: 1,
+      ticks: { stroke: "rgba(255, 107, 120, 0.25)", size: 3 },
+      grid: { stroke: "rgba(255, 107, 120, 0.06)", width: 1 },
+      incrs: [0, 25, 50, 75, 100],
+      values: (
+        _self: uPlot,
+        splits: number[],
+        _axisIdx: number,
+      ) => splits.map((s) => `${Math.round(s)}%`),
+    });
+  }
 
   const opts: Record<string, unknown> = {
     title: "",
     // Padding matches the desktop chart so axis labels have breathing room.
-    padding: [16, 24, 8, 12],
-    scales: {
-      // Explicit x-range from the data: uPlot's auto-resolver does not always
-      // run reliably when the chart is constructed with an empty/just-loaded
-      // dataset (especially under SSR/hydration timing). Passing min/max
-      // directly guarantees the x-axis is well-defined from the start.
-      x: computeXScale(props.data),
-      y: {
-        auto: true,
-        min: 0,
-      },
-    },
+    // Extra right padding when packet-loss axis is present.
+    padding: [16, hasPacketLoss ? 56 : 24, 8, 12],
+    scales,
     series,
-    axes: [
-      {
-        // x-axis
-        stroke: "rgba(148, 176, 194, 0.36)",
-        font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
-        ticks: { stroke: "rgba(148, 176, 194, 0.25)", size: 4 },
-        grid: { stroke: "rgba(148, 176, 194, 0.07)", width: 1 },
-        values: (
-          _self: uPlot,
-          splits: number[],
-          _axisIdx: number,
-        ) => {
-          const max = splits[splits.length - 1] ?? 0;
-          const min = splits[0] ?? 0;
-          return splits.map((s) => formatXAxisTick(s, max - min));
-        },
-      },
-      {
-        // y-axis — uPlot's side enum: 0=top, 1=right, 2=bottom, 3=left
-        stroke: "rgba(148, 176, 194, 0.36)",
-        font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
-        label: "ms",
-        labelFont: "11px Inter, ui-sans-serif, system-ui, sans-serif",
-        labelSize: 16,
-        size: 56,
-        side: 3,
-        ticks: { stroke: "rgba(148, 176, 194, 0.25)", size: 4 },
-        grid: { stroke: "rgba(148, 176, 194, 0.07)", width: 1 },
-        incrs: [5, 10, 25, 50, 100, 200, 500, 1000],
-        values: (
-          _self: uPlot,
-          splits: number[],
-          _axisIdx: number,
-        ) => {
-          const max = splits[splits.length - 1] ?? 50;
-          return splits.map((s) => formatYAxisTick(s, max));
-        },
-      },
-    ],
+    axes,
     cursor: {
       x: true,
       y: true,
@@ -407,15 +455,16 @@ function ensureScalesResolved(): void {
     }
   }
 
-  // Y scale: compute min/max from all data series (skip time column).
+  // Y scale: compute min/max from the latency series only (column 1).
+  // The packet-loss column (if present) lives on the y2 scale (0-100%) and
+  // must NOT influence the latency auto-scale.
   if (chart.scales.y.min == null || chart.scales.y.max == null) {
     let yMin = Infinity;
     let yMax = -Infinity;
-    for (let s = 1; s < props.data.length; s++) {
-      const col = props.data[s];
-      if (!col) continue;
-      for (let i = 0; i < col.length; i++) {
-        const v = col[i]!;
+    const latencyCol = props.data[1];
+    if (latencyCol) {
+      for (let i = 0; i < latencyCol.length; i++) {
+        const v = latencyCol[i]!;
         if (!Number.isNaN(v) && v != null && v > 0) {
           if (v < yMin) yMin = v;
           if (v > yMax) yMax = v;
@@ -431,6 +480,15 @@ function ensureScalesResolved(): void {
       chart.scales.y._max = max;
       mutated = true;
     }
+  }
+
+  // Y2 scale (packet loss %): fixed 0-100 range.
+  if (chart.scales.y2 && (chart.scales.y2.min == null || chart.scales.y2.max == null)) {
+    chart.scales.y2.min = 0;
+    chart.scales.y2.max = 100;
+    chart.scales.y2._min = 0;
+    chart.scales.y2._max = 100;
+    mutated = true;
   }
 
   if (mutated) {

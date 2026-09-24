@@ -10,22 +10,19 @@
       ref="chartRef"
     />
     <div v-if="monitorLabels.length > 0" class="chart-legend">
-      <div
+      <button
         v-for="item in monitorLabels"
         :key="item.id"
+        type="button"
         class="chart-legend-item"
         :class="{ 'chart-legend-item--hidden': !isVisible(item.id) }"
-        role="button"
-        tabindex="0"
         :aria-pressed="isVisible(item.id) ? 'true' : 'false'"
         :aria-label="'Toggle ' + item.name"
         @click="toggleMonitor(item.id)"
-        @keydown.enter.prevent="toggleMonitor(item.id)"
-        @keydown.space.prevent="toggleMonitor(item.id)"
       >
         <span class="legend-color" :style="{ background: item.color }" />
         <span>{{ item.name }}</span>
-      </div>
+      </button>
     </div>
   </div>
 </template>

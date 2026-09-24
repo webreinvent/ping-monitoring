@@ -4,10 +4,15 @@ import { ref, computed, watch } from "vue";
  * Time window preset definitions.
  */
 const TIME_WINDOW_PRESETS: Record<string, number> = {
+  "5m": 300_000,
+  "10m": 600_000,
+  "30m": 1_800_000,
   "1h": 3_600_000,
   "6h": 21_600_000,
+  "12h": 43_200_000,
   "24h": 86_400_000,
   "7d": 604_800_000,
+  "30d": 2_592_000_000,
 };
 
 /**
@@ -15,7 +20,7 @@ const TIME_WINDOW_PRESETS: Record<string, number> = {
  * Persists selection to localStorage so it survives page navigation.
  */
 export function useTimeWindow() {
-  const STORAGE_KEY = "lnpm-chart-time-window";
+  const STORAGE_KEY = "lnpm-chart-time-window-v2";
 
   const selectedPreset = ref<string>("1h");
 

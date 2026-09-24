@@ -708,3 +708,119 @@ body {
     display: none;
   }
 }
+
+/* ========================================================================
+   Loading skeleton — monitor detail page
+   ======================================================================== */
+.detail-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.skeleton-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-line--title {
+  width: 200px;
+  height: 20px;
+}
+
+.skeleton-line--short {
+  width: 120px;
+}
+
+.skeleton-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skeleton-pill {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-chart {
+  height: 320px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.skeleton-card {
+  height: 72px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-pill,
+  .skeleton-chart,
+  .skeleton-card {
+    animation: none;
+    background: rgba(255,255,255,0.05);
+  }
+}
+
+.detail-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.retry-btn {
+  padding: 8px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.retry-btn:hover {
+  border-color: rgba(69, 223, 194, 0.4);
+  background: rgba(69, 223, 194, 0.06);
+}
+
+.retry-btn:focus-visible {
+  outline: 2px solid rgba(69, 223, 194, 0.55);
+  outline-offset: 2px;
+}

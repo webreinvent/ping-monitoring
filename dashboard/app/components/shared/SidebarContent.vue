@@ -237,7 +237,8 @@ async function confirmDeleteClient(slug: string): Promise<void> {
   // state we just set.
   try {
     await $fetch(`/api/clients/${slug}`, { method: "DELETE" });
-  } catch {
+  } catch (err) {
+    console.error("Failed to delete client:", err);
     await refreshNuxtData("monitors-list");
   }
 }
@@ -291,7 +292,7 @@ async function confirmDeleteAll(): Promise<void> {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.35;
   transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
 }
 

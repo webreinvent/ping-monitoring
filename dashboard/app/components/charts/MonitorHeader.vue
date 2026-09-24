@@ -14,7 +14,7 @@
       </div>
       <div v-if="latestLatency != null" class="meta-item">
         <span class="meta-label">LATEST</span>
-        <span class="meta-value" :class="latencyColor">{{ latestLatency }} ms</span>
+        <span class="meta-value" :class="latencyColor">{{ formatMs(latestLatency) }} ms</span>
       </div>
       <div v-if="lastSeenMs != null" class="meta-item">
         <span class="meta-label">LAST SEEN</span>
@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 import type { QualityState } from "#shared/types";
+import { formatMs } from "~/utils/format";
 
 interface Props {
   targetName: string;

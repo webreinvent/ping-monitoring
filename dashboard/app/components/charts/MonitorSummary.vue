@@ -2,26 +2,26 @@
   <div class="monitor-summary" data-testid="monitor-summary">
     <div class="summary-card">
       <span class="label">PACKET LOSS</span>
-      <span class="value" :class="packetLossColor">{{ summary.packetLossPercent }}%</span>
+      <span class="value" :class="packetLossColor">{{ formatPercent(summary.packetLossPercent) }}%</span>
     </div>
     <div class="summary-card">
       <span class="label">AVG LATENCY</span>
-      <span class="value">{{ summary.averageLatencyMs != null ? `${summary.averageLatencyMs} ms` : '—' }}</span>
+      <span class="value">{{ formatMs(summary.averageLatencyMs) }} ms</span>
     </div>
     <div class="summary-card">
       <span class="label">MIN LATENCY</span>
-      <span class="value">{{ summary.minimumLatencyMs != null ? `${summary.minimumLatencyMs} ms` : '—' }}</span>
+      <span class="value">{{ formatMs(summary.minimumLatencyMs) }} ms</span>
     </div>
     <div class="summary-card">
       <span class="label">MAX LATENCY</span>
       <span class="value" :class="summary.maximumLatencyMs != null && summary.maximumLatencyMs > 300 ? 'danger' : ''">
-        {{ summary.maximumLatencyMs != null ? `${summary.maximumLatencyMs} ms` : '—' }}
+        {{ formatMs(summary.maximumLatencyMs) }} ms
       </span>
     </div>
     <div class="summary-card">
       <span class="label">P95 LATENCY</span>
       <span class="value" :class="p95Color">
-        {{ summary.p95LatencyMs != null ? `${summary.p95LatencyMs} ms` : '—' }}
+        {{ formatMs(summary.p95LatencyMs) }} ms
       </span>
     </div>
     <div class="summary-card">
@@ -30,18 +30,18 @@
     </div>
     <div class="summary-card">
       <span class="label">STABLE</span>
-      <span class="value accent">{{ summary.stablePercent }}%</span>
+      <span class="value accent">{{ formatPercent(summary.stablePercent) }}%</span>
     </div>
     <div class="summary-card">
       <span class="label">UNSTABLE</span>
       <span class="value" :class="summary.unstablePercent > 0 ? 'warning' : ''">
-        {{ summary.unstablePercent }}%
+        {{ formatPercent(summary.unstablePercent) }}%
       </span>
     </div>
     <div class="summary-card">
       <span class="label">DISCONNECTED</span>
       <span class="value" :class="summary.disconnectedPercent > 0 ? 'danger' : ''">
-        {{ summary.disconnectedPercent }}%
+        {{ formatPercent(summary.disconnectedPercent) }}%
       </span>
     </div>
   </div>
@@ -49,6 +49,7 @@
 
 <script setup lang="ts">
 import type { RangeSummary } from "#shared/types";
+import { formatMs, formatPercent } from "~/utils/format";
 
 const props = defineProps<{
   summary: RangeSummary;

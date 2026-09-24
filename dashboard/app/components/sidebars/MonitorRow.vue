@@ -33,7 +33,7 @@
         <small>{{ monitor.targetHost }}</small>
       </div>
       <span v-if="monitor.latencyMs != null" class="target-latency">
-        {{ monitor.latencyMs }} ms
+        {{ formatMs(monitor.latencyMs) }} ms
       </span>
       <button
         class="monitor-delete-btn"
@@ -64,6 +64,7 @@
 
 <script setup lang="ts">
 import type { MonitorListItem } from "#shared/types";
+import { formatMs } from "~/utils/format";
 
 interface Props {
   monitor: MonitorListItem;
@@ -154,7 +155,7 @@ function handleClick(): void {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.35;
   transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
 }
 

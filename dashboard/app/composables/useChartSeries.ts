@@ -5,7 +5,8 @@ import type { HistoryPoint, HistoryResponse } from "#shared/types";
  *
  * uPlot expects Float64Array columns:
  *   Column 0: timestamps in seconds (not ms)
- *   Column 1+: values (latency in ms)
+ *   Column 1: latency in ms
+ *   Column 2: packet loss percentage (0-100), NaN for buckets with no samples
  *
  * Missing data points (where averageLatencyMs is null) are represented as NaN.
  *
@@ -34,7 +35,14 @@ export function transformToUPlotData(history: HistoryResponse): Float64Array[] {
     latency[i] = points[i]!.averageLatencyMs ?? NaN;
   }
 
-  return [timestamps, latency];
+  // Column 2: packet loss percentage
+  const packetLoss = new Float64Array(len);
+  for (let i = 0; i < len; i++) {
+    const p = points[i]!;
+    packetLoss[i] = p.sampleCount > 0 ? (p.failureCount / p.sampleCount) * 100 : NaN;
+  }
+
+  return [timestamps, latency, packetLoss];
 }
 
 /**
@@ -59,4 +67,19 @@ export function transformPointsToUPlotSeries(points: HistoryPoint[]): [Float64Ar
   }
 
   return [timestamps, values];
+}
+
+/**
+ * Compute packet loss percentage series from history points.
+ * Returns a Float64Array of loss percentages (0-100) aligned to timestamps.
+ * Buckets with no samples produce NaN.
+ */
+export function computePacketLossSeries(points: HistoryPoint[]): Float64Array {
+  const len = points.length;
+  const loss = new Float64Array(len);
+  for (let i = 0; i < len; i++) {
+    const p = points[i]!;
+    loss[i] = p.sampleCount > 0 ? (p.failureCount / p.sampleCount) * 100 : NaN;
+  }
+  return loss;
 }

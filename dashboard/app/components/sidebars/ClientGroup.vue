@@ -182,7 +182,7 @@ function handleDeleteClient(): void {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.35;
   transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
 }
 

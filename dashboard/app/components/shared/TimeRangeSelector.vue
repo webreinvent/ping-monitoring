@@ -18,7 +18,7 @@ withDefaults(defineProps<{
   modelValue: string;
   presets?: string[];
 }>(), {
-  presets: () => ["1h", "6h", "24h", "7d"],
+  presets: () => ["5m", "10m", "30m", "1h", "6h", "12h", "24h", "7d", "30d"],
 });
 
 defineEmits<{

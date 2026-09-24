@@ -2,8 +2,18 @@
   <div data-testid="monitor-detail-page">
     <NavigationBreadcrumb label="All Monitors" to="/" />
 
-    <div v-if="loading" class="detail-loading">
-      <span>Loading monitor data...</span>
+    <div v-if="loading" class="detail-loading" aria-busy="true" aria-label="Loading monitor data">
+      <div class="skeleton-header">
+        <div class="skeleton-line skeleton-line--title" />
+        <div class="skeleton-meta">
+          <div class="skeleton-pill" />
+          <div class="skeleton-line skeleton-line--short" />
+        </div>
+      </div>
+      <div class="skeleton-chart" />
+      <div class="skeleton-cards">
+        <div v-for="i in 9" :key="i" class="skeleton-card" />
+      </div>
     </div>
 
     <template v-else-if="historyData">
@@ -25,22 +35,20 @@
 
       <LatencyChart
         :data="chartData"
-        :series-config="[
-          {
-            label: targetName,
-            stroke: '#3b82f6',
-            width: 1.5,
-            points: { show: false },
-          },
-        ]"
+        :series-config="latencySeriesConfig"
         :quality-bands="qualityBands"
         :threshold-value="thresholdMs"
+        :packet-loss-column-index="chartData.length > 2 ? 2 : null"
         :height="320"
       />
 
       <MonitorSummary :summary="summary" />
     </template>
 
+    <div v-else-if="hasError" class="detail-error" role="alert">
+      <p>Failed to load monitor data.</p>
+      <button type="button" class="retry-btn" @click="() => refreshHistory()">Try again</button>
+    </div>
     <EmptyState v-else message="No data available for this monitor" />
   </div>
 </template>
@@ -62,7 +70,7 @@ if (monitorId.value <= 0) {
 
 // Fetch history data — reactive to time window changes via key
 // Use preset as the key (not fromMs/toMs which use Date.now() and would change constantly)
-const { data: historyData, status } = useAsyncData<HistoryResponse>(
+const { data: historyData, status, refresh: refreshHistory } = useAsyncData<HistoryResponse>(
   () => `monitor-detail-${monitorId.value}-${timeWindow.value}`,
   async () => {
     return await $fetch<HistoryResponse>(`/api/monitors/${monitorId.value}`, {
@@ -76,6 +84,7 @@ const { data: historyData, status } = useAsyncData<HistoryResponse>(
 );
 
 const loading = computed(() => status.value === "pending");
+const hasError = computed(() => status.value === "error");
 
 // Extract data from history response
 const targetName = computed(() => {
@@ -152,6 +161,31 @@ const chartData = computed(() => {
   // Fall back to HTTP-fetched data
   if (!historyData.value) return [new Float64Array(0)];
   return transformToUPlotData(historyData.value);
+});
+
+// Series config for the latency chart: latency line + optional packet-loss area.
+// Packet loss is only available from HTTP history (not live WS data), so the
+// series config is built reactively based on whether the 3rd column exists.
+const latencySeriesConfig = computed(() => {
+  const config = [
+    {
+      label: targetName.value,
+      stroke: "#3b82f6",
+      width: 1.5,
+      points: { show: false },
+    },
+  ];
+  // If packet-loss column is present (index 2 in data = index 1 in seriesConfig),
+  // add a second series for it.
+  if (chartData.value.length > 2) {
+    config.push({
+      label: "Packet Loss",
+      stroke: "rgba(255, 107, 120, 0.6)",
+      width: 1,
+      points: { show: false },
+    });
+  }
+  return config;
 });
 
 // Live chart integration
