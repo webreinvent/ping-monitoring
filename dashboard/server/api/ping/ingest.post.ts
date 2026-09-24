@@ -181,7 +181,7 @@ function sendResponse(
  */
 async function broadcastAcceptedSamples(samples: AcceptedSample[]): Promise<void> {
   // Dynamic import to avoid circular dependency
-  const { broadcastSample } = await import("#server/ws/ping");
+  const { broadcastSample } = await import("#server/routes/ws/ping");
   const { getDb } = await import("#server/utils/db");
 
   // Group by monitorId for efficiency

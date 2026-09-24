@@ -1,5 +1,5 @@
 import { updateClientName, toClientResponse } from "../../utils/client";
-import { broadcastClientNameUpdated } from "../../ws/ping";
+import { broadcastClientNameUpdated } from "../../routes/ws/ping";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

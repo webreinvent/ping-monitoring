@@ -22,7 +22,7 @@ const mockDb: any = {
 };
 
 // Use both import path formats since the file may use relative or #server paths
-vi.mock("../../utils/db", () => ({
+vi.mock("../utils/db", () => ({
   getDb: () => mockDb,
 }));
 
@@ -30,7 +30,7 @@ vi.mock("#server/utils/db", () => ({
   getDb: () => mockDb,
 }));
 
-vi.mock("../../utils/logger", () => ({
+vi.mock("../utils/logger", () => ({
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),

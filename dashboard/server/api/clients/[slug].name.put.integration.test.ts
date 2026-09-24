@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { updateClientName, toClientResponse } from "../../utils/client";
 
 // Mock the broadcast function — it requires the full Nitro runtime
-vi.mock("../../ws/ping", () => ({
+vi.mock("../../routes/ws/ping", () => ({
   broadcastClientNameUpdated: vi.fn(),
 }));
 
 // Re-import after mocking to get the mocked version
-import { broadcastClientNameUpdated } from "../../ws/ping";
+import { broadcastClientNameUpdated } from "../../routes/ws/ping";
 
 /* ------------------------------------------------------------------ */
 /*  PUT /api/clients/:slug/name — endpoint logic with mock DB          */

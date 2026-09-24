@@ -15,7 +15,7 @@
     "test:e2e:ui": "playwright test --ui",
     "typecheck": "nuxt typecheck",
     "typecheck:watch": "nuxt typecheck --watch",
-    "postinstall": "npm rebuild better-sqlite3"
+    "postinstall": "node -e \"const fs=require('fs');const p='../node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/node_gyp_bins';try{fs.rmSync(p,{recursive:true,force:true});}catch(e){}\" && npm rebuild better-sqlite3 || echo 'better-sqlite3 build skipped - using existing binary'"
   },
   "dependencies": {
     "@nuxt/nitro-server": "^4.5.1",

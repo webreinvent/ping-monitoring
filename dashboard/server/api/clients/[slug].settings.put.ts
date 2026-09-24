@@ -1,6 +1,6 @@
 import { getClientBySlug } from "../../utils/client";
 import { getDb } from "../../utils/db";
-import { broadcastSettingsUpdate } from "../../ws/ping";
+import { broadcastSettingsUpdate } from "../../routes/ws/ping";
 
 /** Allowed sync interval values in minutes (per F9 spec) */
 const ALLOWED_INTERVALS = [1, 5, 10, 15, 30, 60];
