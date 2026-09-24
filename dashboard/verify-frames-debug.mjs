@@ -25,7 +25,7 @@ page.on("websocket", (ws) => {
 });
 
 // Listen for ALL events from start
-await page.goto("http://localhost:3000/monitors/31", { waitUntil: "load", timeout: 60000 });
+await page.goto("http://localhost:3000/monitors/28773", { waitUntil: "load", timeout: 60000 });
 await page.waitForTimeout(15000);
 
 console.log("\nTotal frames captured:", allFrames.length);

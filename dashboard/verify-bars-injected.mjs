@@ -15,8 +15,8 @@ page.on("console", (msg) => {
   if (t === "error") errors.push(`console.error: ${msg.text()}`);
 });
 
-console.log("=== Inject synthetic data into /monitors/31 ===");
-await page.goto("http://localhost:3000/monitors/31", { waitUntil: "networkidle", timeout: 30000 });
+console.log("=== Inject synthetic data into /monitors/28773 ===");
+await page.goto("http://localhost:3000/monitors/28773", { waitUntil: "networkidle", timeout: 30000 });
 await page.waitForSelector(".chart-wrapper canvas", { state: "attached", timeout: 15000 });
 await page.waitForTimeout(2000);
 

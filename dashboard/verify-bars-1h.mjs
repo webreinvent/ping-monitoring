@@ -15,8 +15,8 @@ page.on("console", (msg) => {
   if (t === "error") errors.push(`console.error: ${msg.text()}`);
 });
 
-console.log("=== /monitors/31 ===");
-await page.goto("http://localhost:3000/monitors/31", {
+console.log("=== /monitors/28773 ===");
+await page.goto("http://localhost:3000/monitors/28773", {
   waitUntil: "networkidle",
   timeout: 60000,
 });

@@ -19,8 +19,8 @@ page.on("websocket", (ws) => {
   });
 });
 
-console.log("=== Loading /monitors/31 ===");
-await page.goto("http://localhost:3000/monitors/31", { waitUntil: "networkidle", timeout: 60000 });
+console.log("=== Loading /monitors/28773 ===");
+await page.goto("http://localhost:3000/monitors/28773", { waitUntil: "networkidle", timeout: 60000 });
 await page.waitForSelector(".chart-wrapper canvas", { state: "attached", timeout: 30000 });
 await page.waitForTimeout(8000);
 

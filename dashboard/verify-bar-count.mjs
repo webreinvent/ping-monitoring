@@ -15,8 +15,8 @@ page.on("console", (msg) => {
   if (msg.type() === "error") errors.push(`console.error: ${msg.text()}`);
 });
 
-console.log("=== Loading /monitors/31 (live mode) ===");
-await page.goto("http://localhost:3000/monitors/31", { waitUntil: "networkidle", timeout: 60000 });
+console.log("=== Loading /monitors/28773 (live mode) ===");
+await page.goto("http://localhost:3000/monitors/28773", { waitUntil: "networkidle", timeout: 60000 });
 await page.waitForSelector(".chart-wrapper canvas", { state: "attached", timeout: 30000 });
 // Wait longer so the WS snapshot has time to arrive and the chart to redraw
 await page.waitForTimeout(5000);
