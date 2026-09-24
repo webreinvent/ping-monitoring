@@ -146,11 +146,16 @@ async function bootstrap(): Promise<void> {
 
 async function initMain(): Promise<void> {
   root.className = "app-shell";
+  const appVersion = await getVersion();
   root.innerHTML = `
     <header class="app-header">
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true"><img src="${logoUrl}" alt="" /></div>
-        <div><h1>${t("app.title")}</h1><p>${t("app.subtitle")}</p></div>
+        <div>
+          <h1>${t("app.title")}</h1>
+          <p>${t("app.subtitle")}</p>
+          <span class="version-badge" title="LNPM version">v${escapeHtml(appVersion)}</span>
+        </div>
       </div>
       <div class="header-actions">
         <button id="follow-live" class="button ghost active">● ${t("action.live")}</button>

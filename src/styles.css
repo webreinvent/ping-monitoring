@@ -143,6 +143,21 @@ select:focus-visible {
   font-size: 10px;
 }
 
+.version-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(94, 234, 212, 0.12);
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  color: var(--accent, #5eead4);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
 .brand-mark {
   position: relative;
   width: 34px;
