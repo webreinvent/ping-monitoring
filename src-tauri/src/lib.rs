@@ -14,7 +14,7 @@ use std::{io, sync::Arc, time::Duration};
 use commands::AppState;
 use directories::ProjectDirs;
 use monitor::MonitorService;
-use probe::SurgePingProbe;
+use probe::SystemPingProbe;
 use storage::Database;
 use sync::SyncService;
 use tauri::{Manager, RunEvent};
@@ -43,8 +43,7 @@ pub fn run() {
                 })?;
             let database = Database::new(data_directory)?;
             let settings = database.load_settings()?;
-            let probe =
-                tauri::async_runtime::block_on(SurgePingProbe::new()).map_err(io::Error::other)?;
+            let probe = SystemPingProbe::new();
             let event_sink = TauriEventSink::new(app.handle().clone(), database.clone());
             let monitor = MonitorService::new(database.clone(), probe, event_sink);
             monitor.start_all()?;
