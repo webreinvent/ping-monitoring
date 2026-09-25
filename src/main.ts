@@ -452,7 +452,7 @@ function renderDashboard(): void {
         selectedTargetId = targetId;
       }
       renderDashboard();
-      if (history) chart?.render(history);
+      if (history) chart?.render(history, selectedTargetId);
       renderSummary();
     });
     row.addEventListener("keydown", (event) => {
@@ -535,13 +535,14 @@ async function loadHistory(fromMs: number, toMs: number, showLoading = true): Pr
     history = response;
     chart?.destroy();
     chart = new LatencyChart(byId("main-chart"), {
+      selectedTargetId,
       onRangeChanged: (nextFrom, nextTo) => {
         followLive = false;
         byId("follow-live").classList.remove("active");
         void loadHistory(nextFrom, nextTo, false);
       },
     });
-    chart.render(response);
+    chart.render(response, selectedTargetId);
     renderLegend();
     renderSummary();
   } catch (error) {
@@ -567,14 +568,14 @@ function renderLegend(): void {
     ?.addEventListener("click", () => {
       selectedTargetId = null;
       renderDashboard();
-      chart?.render(history!);
+      chart?.render(history!, selectedTargetId);
       renderLegend();
     });
   byId("chart-legend").querySelectorAll<HTMLButtonElement>("[data-legend-id]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedTargetId = button.dataset.legendId ?? null;
       renderDashboard();
-      chart?.render(history!);
+      chart?.render(history!, selectedTargetId);
       renderLegend();
     });
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  barColorThresholds,
   palette,
   QUALITY_BAND_COLORS,
   resolveQualityBands,
@@ -39,6 +40,17 @@ describe("palette", () => {
 
   it("wraps around for series indices beyond the palette length", () => {
     expect(palette[(palette.length + 3) % palette.length]).toBe(palette[3]);
+  });
+});
+
+describe("barColorThresholds", () => {
+  it("maps the latency thresholds to bar fill colors", () => {
+    expect(barColorThresholds).toEqual([
+      [50, "#4ade80"],
+      [100, "#facc15"],
+      [200, "#fb923c"],
+      [Infinity, "#f87171"],
+    ]);
   });
 });
 
