@@ -5,21 +5,74 @@ import { calculateTooltipPosition } from "./chart-tooltip";
 import { formatDateTime, formatLatency, stateLabel } from "./i18n";
 import type { HistoryPoint, HistoryResponse, QualityIntervalRecord, QualityState } from "./types";
 
-const palette = ["#5eead4", "#60a5fa", "#c084fc", "#f472b6", "#facc15"];
-
 /**
- * Threshold-based bar colors for latency values (ms).
+ * Dashboard-matched 12-color series palette (M3-T1).
  */
-const barColorThresholds: [number, string][] = [
-  [50, "#4ade80"],      // green — Low
-  [100, "#facc15"],      // yellow — Medium
-  [200, "#fb923c"],      // orange — High
-  [Infinity, "#f87171"],  // red — Very High
+export const palette = [
+  "#3b82f6",
+  "#ef4444",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#f97316",
+  "#14b8a6",
+  "#6366f1",
+  "#84cc16",
+  "#e11d48",
 ];
 
+/**
+ * Threshold line colors (ms → rgba), matching the dashboard chart.
+ */
+export const THRESHOLD_LINE_COLORS: Record<number, string> = {
+  50: "rgba(69, 223, 194, 0.45)",   // green — Low
+  100: "rgba(246, 169, 74, 0.45)",  // yellow — Medium
+  150: "rgba(249, 115, 22, 0.45)",  // orange — High
+  200: "rgba(255, 107, 120, 0.45)", // red — Very High
+};
+
+/**
+ * Quality-state background band colors (rgba, alpha baked in), matching the
+ * dashboard's quality-band fills.
+ */
+export const QUALITY_BAND_COLORS: Record<QualityState, string> = {
+  veryHigh: "rgba(34, 197, 94, 0.12)",
+  high: "rgba(132, 204, 22, 0.12)",
+  medium: "rgba(234, 179, 8, 0.12)",
+  low: "rgba(249, 115, 22, 0.15)",
+  unstable: "rgba(239, 68, 68, 0.18)",
+  disconnected: "rgba(107, 114, 128, 0.20)",
+  warmingUp: "rgba(156, 163, 175, 0.10)",
+  // Desktop-only states (no dashboard counterpart) — gray, matching the
+  // disconnected semantics: no usable quality data rather than bad latency.
+  paused: "rgba(107, 114, 128, 0.20)",
+  unobserved: "rgba(107, 114, 128, 0.20)",
+  error: "rgba(107, 114, 128, 0.20)",
+};
+
+/**
+ * Convert quality intervals into chart-ready background bands (timestamps in
+ * seconds + dashboard-matched fill colors). Pure — unit-testable.
+ */
+export function resolveQualityBands(
+  intervals: QualityIntervalRecord[],
+  fallbackEndMs: number,
+): { startSec: number; endSec: number; color: string }[] {
+  return intervals.map((interval) => ({
+    startSec: interval.startMs / 1_000,
+    endSec: (interval.endMs ?? fallbackEndMs) / 1_000,
+    color: QUALITY_BAND_COLORS[interval.state] ?? QUALITY_BAND_COLORS.warmingUp,
+  }));
+}
+
 interface ChartOptions {
+  /**
+   * Display-only mini rendering (popup view): reduced padding/height and
+   * hidden axes. Series rendering is always line-only regardless of this.
+   */
   compact?: boolean;
-  selectedTargetId?: string | null;
   onRangeChanged?: (fromMs: number, toMs: number) => void;
 }
 
@@ -28,24 +81,18 @@ export class LatencyChart {
   private resizeObserver: ResizeObserver | null = null;
   private tooltip: HTMLDivElement;
   private history: HistoryResponse | null = null;
-  private selectedTargetId: string | null;
-  private isLineMode = false;
-  private aggregatedSeries: HistoryResponse | null = null;
-  private gaps: boolean[][] = [];
 
   constructor(
     private readonly container: HTMLElement,
     private readonly options: ChartOptions = {},
   ) {
-    this.selectedTargetId = options.selectedTargetId ?? null;
     this.tooltip = document.createElement("div");
     this.tooltip.className = "chart-tooltip";
     this.container.append(this.tooltip);
   }
 
-  render(history: HistoryResponse, selectedTargetId = this.selectedTargetId): void {
+  render(history: HistoryResponse): void {
     this.history = history;
-    this.selectedTargetId = selectedTargetId ?? null;
     this.plot?.destroy();
     this.resizeObserver?.disconnect();
     this.container.querySelector(".uplot")?.remove();
@@ -53,92 +100,28 @@ export class LatencyChart {
     const rangeMs = history.toMs - history.fromMs;
     const allPoints = history.series.flatMap((s) => s.points);
     const totalPointCount = allPoints.length;
-    // Target ~100-2000 bars for readability
-    const targetBarCount = Math.max(100, Math.min(2000, Math.round(rangeMs / 500)));
-    const bucketMs = getBucketSize(rangeMs, totalPointCount, targetBarCount);
+    // Target ~100-2000 aggregated buckets for readability
+    const targetBucketCount = Math.max(100, Math.min(2000, Math.round(rangeMs / 500)));
+    const bucketMs = getBucketSize(rangeMs, totalPointCount, targetBucketCount);
     const aggregated = aggregateData(history, bucketMs);
-    const { data, labels, gaps: gapsArr } = alignSeries(aggregated);
-    this.aggregatedSeries = aggregated;
-    this.gaps = gapsArr;
+    const { data, labels } = alignSeries(aggregated);
 
-    // In bar mode with a selected monitor, null out hidden series so they don't render
-    if (!this.options.compact && this.selectedTargetId) {
-      const dataArr = data as number[][];
-      for (let si = 0; si < aggregated.series.length; si++) {
-        if (aggregated.series[si].target.id !== this.selectedTargetId) {
-          dataArr[si + 1] = new Array(dataArr[si + 1].length).fill(null) as number[];
-        }
-      }
-    }
-    const actualBarCount = data[0].length;
     const width = Math.max(280, this.container.clientWidth);
     const height = Math.max(this.options.compact ? 80 : 260, this.container.clientHeight);
-    const intervals = this.intervalsForDisplay(history);
+    const intervals = history.series.flatMap((series) => series.intervals);
 
-    // Line mode: used when all monitors are visible (no single target selected) and not compact.
-    // Bar mode: used when a single monitor is selected or in compact view.
-    this.isLineMode = !this.options.compact && !this.selectedTargetId;
-    const isLineMode = this.isLineMode;
-
-
-    // Build bar path builder only in bar mode
-    const barsPath = isLineMode
-      ? undefined
-      : ((uPlot.paths as any)?.bars ?? (() => () => ({ stroke: null, fill: null, clip: null }))())({
-          size: [0.8, Math.max(1, Math.min(12, Math.round((width - 40) / Math.max(1, actualBarCount) * 0.8))), 1],
-          gap: 0,
-          radius: 0,
-          disp: {
-            fill: {
-              unit: 3 as uPlot.Series.BarsPathBuilderFacetUnit,
-              values: (_self: uPlot, seriesIdx: number, _idx0: number, _idx1: number) => {
-                const result: (string | null)[] = [];
-                for (let i = 0; i < data[seriesIdx].length; i++) {
-                  const value = data[seriesIdx][i];
-                  if (value == null) {
-                    result.push(null);
-                  } else if (this.gaps[seriesIdx - 1]?.[i]) {
-                    result.push("rgba(148, 163, 184, 0.25)");
-                  } else {
-                    result.push(barColor(value as number));
-                  }
-                }
-                return result;
-              },
-            },
-          },
-        });
-
+    // Line-only rendering: every monitor gets a colored line (M3-T1).
     const series: uPlot.Series[] = [
       { label: "Time" },
-      ...aggregated.series.map((item, index) => {
-        const isSelected = item.target.id === this.selectedTargetId;
-        const isHidden = !this.options.compact && this.selectedTargetId && !isSelected;
-        if (isLineMode) {
-          // Line mode: each monitor gets a colored line, no fill, no bars
-          return {
-            label: item.target.name,
-            stroke: palette[index % palette.length],
-            fill: "transparent",
-            width: 2,
-            spanGaps: true,
-            points: { show: false },
-            value: (_self: uPlot, rawValue: number | null) => formatLatency(rawValue),
-          };
-        }
-        // Bar mode: threshold-colored bars
-        return {
-          label: item.target.name,
-          stroke: isHidden ? "transparent" : palette[index % palette.length],
-          fill: isHidden ? "transparent" : palette[index % palette.length],
-          width: 0,
-          spanGaps: false,
-          points: { show: false },
-          value: (_self: uPlot, rawValue: number | null) => formatLatency(rawValue),
-          paths: isHidden ? undefined : barsPath,
-          ...(isHidden ? { min: 0, max: 0, scale: "y2" } : {}),
-        };
-      }),
+      ...aggregated.series.map((item, index) => ({
+        label: item.target.name,
+        stroke: palette[index % palette.length],
+        fill: "transparent",
+        width: 1.5,
+        spanGaps: true,
+        points: { show: false },
+        value: (_self: uPlot, rawValue: number | null) => formatLatency(rawValue),
+      })),
     ];
 
     const plotOptions: uPlot.Options = {
@@ -149,14 +132,7 @@ export class LatencyChart {
         x: { time: true },
         y: {
           auto: true,
-          range: (_u, _min, max) => {
-            const hi = Math.max(50, (max || 50) * 2);
-            return [0, Math.ceil(hi / 10) * 10];
-          },
-        },
-        y2: {
-          auto: false,
-          range: () => [0, 1],
+          min: 0,
         },
       },
       series,
@@ -169,7 +145,7 @@ export class LatencyChart {
                 Math.max(60, dim / 20),
               size: 32,
               stroke: "rgba(148, 163, 184, 0.36)",
-              font: "11px inherit",
+              font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               label: () => "",
               ticks: {
                 stroke: "rgba(148, 163, 184, 0.25)",
@@ -192,12 +168,12 @@ export class LatencyChart {
               },
             },
             {
-              space: 48,
-              size: 48,
+              space: 56,
+              size: 56,
               stroke: "rgba(148, 163, 184, 0.36)",
-              font: "11px inherit",
+              font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               label: "ms",
-              labelFont: "11px inherit",
+              labelFont: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               labelSize: 16,
               ticks: {
                 stroke: "rgba(148, 163, 184, 0.25)",
@@ -226,16 +202,19 @@ export class LatencyChart {
       cursor: {
         drag: { x: false, y: false },
         focus: { prox: 24 },
-        points: isLineMode
-          ? { size: 7, width: 2, fill: (_u, seriesIdx) => palette[(seriesIdx - 1) % palette.length] }
-          : { size: 7, width: 2 },
+        points: {
+          size: 7,
+          width: 2,
+          fill: "rgba(69, 223, 194, 0.1)",
+          stroke: "#45dfc2",
+        },
         y: false,
       },
       legend: { show: false },
       hooks: {
         drawClear: [
           (u) => {
-            if (isLineMode) drawThresholdZones(u);
+            drawThresholdZones(u);
             drawIntervals(u, intervals, history.toMs);
           },
         ],
@@ -266,19 +245,6 @@ export class LatencyChart {
     this.tooltip.remove();
   }
 
-  private intervalsForDisplay(history: HistoryResponse): QualityIntervalRecord[] {
-    if (this.options.compact) {
-      return history.series.flatMap((series) => series.intervals);
-    }
-    if (this.selectedTargetId === null) {
-      return history.series.flatMap((series) => series.intervals);
-    }
-    const selected =
-      history.series.find((series) => series.target.id === this.selectedTargetId) ??
-      history.series[0];
-    return selected?.intervals ?? [];
-  }
-
   private updateTooltip(plot: uPlot, labels: string[]): void {
     const index = plot.cursor.idx;
     if (index == null || plot.cursor.left == null || !this.history) {
@@ -290,9 +256,6 @@ export class LatencyChart {
     const timestampMs = timestampSeconds * 1_000;
     const values = labels
       .map((label, seriesIndex) => {
-        const isSelected = this.history!.series[seriesIndex]?.target.id === this.selectedTargetId;
-        const isHidden = !this.options.compact && this.selectedTargetId && !isSelected;
-        if (isHidden) return "";
         const value = plot.data[seriesIndex + 1]?.[index];
         return value == null
           ? ""
@@ -300,52 +263,28 @@ export class LatencyChart {
       })
       .filter(Boolean)
       .join("");
-    // Determine quality state label shown in tooltip
+    // Determine quality state label shown in tooltip: state of the series
+    // closest to the cursor at the hovered timestamp.
     let intervalText = "";
-    if (this.isLineMode) {
-      // Line mode: show state of the series closest to the cursor
-      let closestDist = Infinity;
-      let closestInterval: QualityIntervalRecord | null = null;
-      for (let si = 0; si < this.history.series.length; si++) {
-        const series = this.history.series[si];
-        for (const item of series.intervals) {
-          const end = item.endMs ?? this.history.toMs;
-          if (timestampMs < item.startMs || timestampMs > end) continue;
-          const val = plot.data[si + 1]?.[index];
-          if (val == null) continue;
-          const y = plot.valToPos(val, "y", true);
-          const dist = Math.abs(y - (plot.cursor.top ?? plot.bbox.top + plot.bbox.height / 2));
-          if (dist < closestDist) {
-            closestDist = dist;
-            closestInterval = item;
-          }
+    let closestDist = Infinity;
+    let closestInterval: QualityIntervalRecord | null = null;
+    for (let si = 0; si < this.history.series.length; si++) {
+      const series = this.history.series[si];
+      for (const item of series.intervals) {
+        const end = item.endMs ?? this.history.toMs;
+        if (timestampMs < item.startMs || timestampMs > end) continue;
+        const val = plot.data[si + 1]?.[index];
+        if (val == null) continue;
+        const y = plot.valToPos(val, "y", true);
+        const dist = Math.abs(y - (plot.cursor.top ?? plot.bbox.top + plot.bbox.height / 2));
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestInterval = item;
         }
       }
-      if (closestInterval) {
-        intervalText = `<div class="tooltip-state state-${closestInterval.state}">${stateLabel(closestInterval.state)}</div>`;
-      }
-    } else {
-      // Bar mode: derive state from the hovered bar's actual latency value,
-      // not from historical intervals (which may not match the bar's data)
-      const seriesIdx = this.selectedTargetId
-        ? this.aggregatedSeries!.series.findIndex((s) => s.target.id === this.selectedTargetId) + 1
-        : 1;
-      const hoveredVal = plot.data[seriesIdx]?.[index];
-      const isGap = this.gaps[seriesIdx - 1]?.[index] ?? false;
-      if (isGap) {
-        intervalText = `<div class="tooltip-state state-disconnected">${stateLabel("disconnected" as QualityState)}</div>`;
-      } else if (hoveredVal != null && hoveredVal > 0) {
-        const val = hoveredVal as number;
-        const stateFromLatency: QualityState =
-          val < 50
-            ? "low"
-            : val < 100
-            ? "medium"
-            : val < 200
-            ? "high"
-            : "veryHigh";
-        intervalText = `<div class="tooltip-state state-${stateFromLatency}">${stateLabel(stateFromLatency)}</div>`;
-      }
+    }
+    if (closestInterval) {
+      intervalText = `<div class="tooltip-state state-${closestInterval.state}">${stateLabel(closestInterval.state)}</div>`;
     }
     this.tooltip.innerHTML = `<time>${formatDateTime(timestampMs)}</time>${values}${intervalText}`;
     const containerRect = this.container.getBoundingClientRect();
@@ -432,22 +371,20 @@ export class LatencyChart {
 function alignSeries(history: HistoryResponse): {
   data: uPlot.AlignedData;
   labels: string[];
-  /** Per-series boolean arrays: true = gap (no data), false = real data */
-  gaps: boolean[][];
 } {
   const timestamps = Array.from(
     new Set(history.series.flatMap((series) => series.points.map((point) => point.timestampMs))),
   ).sort((a, b) => a - b);
   if (timestamps.length === 0) timestamps.push(history.fromMs, history.toMs);
   const data: uPlot.AlignedData = [timestamps.map((timestamp) => timestamp / 1_000)];
-  const gaps: boolean[][] = [];
 
   for (const series of history.series) {
     const values = new Map<number, number>(
       series.points.map((point) => [point.timestampMs, point.averageLatencyMs!]),
     );
 
-    // Compute the series' median latency to use as the height of gap bars
+    // Compute the series' median latency to bridge missing timestamps so the
+    // line stays continuous (spanGaps alone would flatten to zero).
     const latencies: number[] = [];
     for (const v of values.values()) {
       if (v > 0) latencies.push(v);
@@ -458,34 +395,22 @@ function alignSeries(history: HistoryResponse): {
         ? latencies[Math.floor(latencies.length / 2)]
         : 10;
 
-    const gapArray: boolean[] = [];
-    data.push(
-      timestamps.map((timestamp) => {
-        const val = values.get(timestamp);
-        if (val != null) {
-          gapArray.push(false);
-          return val;
-        }
-        gapArray.push(true);
-        return medianLatency;
-      }),
-    );
-    gaps.push(gapArray);
+    data.push(timestamps.map((timestamp) => values.get(timestamp) ?? medianLatency));
   }
 
-  return { data, gaps, labels: history.series.map((series) => series.target.name) };
+  return { data, labels: history.series.map((series) => series.target.name) };
 }
 
 /**
  * Determine the bucket size (in ms) for aggregating data based on the visible time range.
  */
-function getBucketSize(rangeMs: number, pointCount: number, targetBarCount: number): number {
+function getBucketSize(rangeMs: number, pointCount: number, targetBucketCount: number): number {
   // If we have fewer points than the target, don't aggregate — show each point
-  if (pointCount <= targetBarCount) {
+  if (pointCount <= targetBucketCount) {
     return 0; // No aggregation — use raw data as-is
   }
-  // Aggregate to reduce to target bar count
-  const rawBucket = Math.max(1_000, Math.round(rangeMs / targetBarCount));
+  // Aggregate to reduce to the target bucket count
+  const rawBucket = Math.max(1_000, Math.round(rangeMs / targetBucketCount));
   // Round up to a clean bucket size
   const cleanSizes = [1_000, 5_000, 10_000, 30_000, 60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000, 3_600_000];
   for (const size of cleanSizes) {
@@ -536,29 +461,20 @@ function aggregateData(history: HistoryResponse, bucketMs: number): HistoryRespo
 }
 
 /**
- * Draw threshold zone bands on the chart background (line mode only).
- * Each zone spans only its own range: 0-50ms, 50-100ms, 100-200ms, >200ms.
+ * Draw dashed threshold lines on the chart background (dashboard-matched
+ * rgba colors from THRESHOLD_LINE_COLORS).
  */
 function drawThresholdZones(plot: uPlot): void {
-  const yMax = plot.scales.y.max ?? 50;
-  // Threshold lines: green (50ms) → yellow (100ms) → orange (150ms) → red (200ms)
-  const zones: { low: number; lineColor: string }[] = [
-    { low: 200, lineColor: "#ef4444" },   // red
-    { low: 150, lineColor: "#f97316" },   // orange
-    { low: 100, lineColor: "#eab308" },   // yellow
-    { low: 50, lineColor: "#22c55e" },    // green
-  ];
-  for (const zone of zones) {
-    if (zone.low >= yMax) continue;
-    const y = plot.valToPos(zone.low, "y", true);
+  for (const [thresholdMs, color] of Object.entries(THRESHOLD_LINE_COLORS)) {
+    const threshold = Number(thresholdMs);
+    if (threshold >= (plot.scales.y.max ?? 50)) continue;
+    const y = plot.valToPos(threshold, "y", true);
     if (y < plot.bbox.top || y > plot.bbox.top + plot.bbox.height) continue;
 
-    // Dashed threshold line
     plot.ctx.save();
-    plot.ctx.strokeStyle = zone.lineColor;
+    plot.ctx.strokeStyle = color;
     plot.ctx.lineWidth = 1;
     plot.ctx.setLineDash([8, 4]);
-    plot.ctx.globalAlpha = 0.5;
     plot.ctx.beginPath();
     plot.ctx.moveTo(plot.bbox.left, y);
     plot.ctx.lineTo(plot.bbox.left + plot.bbox.width, y);
@@ -567,24 +483,27 @@ function drawThresholdZones(plot: uPlot): void {
   }
 }
 
-function drawIntervals(
-  _plot: uPlot,
-  _intervals: QualityIntervalRecord[],
-  _fallbackEndMs: number,
-): void {
-  // Intervals are already communicated via the status badge — skip drawing
-  // overlays on the chart to keep the background clean.
-}
-
 /**
- * Return the bar color based on latency threshold.
+ * Draw quality-interval background bands (dashboard-matched fills) behind the
+ * lines, clipped to the plot bbox.
  */
-function barColor(latencyMs: number): string {
-  if (latencyMs === 0) return "rgba(148, 163, 184, 0.25)";
-  for (const [threshold, color] of barColorThresholds) {
-    if (latencyMs < threshold) return color;
+function drawIntervals(
+  plot: uPlot,
+  intervals: QualityIntervalRecord[],
+  fallbackEndMs: number,
+): void {
+  for (const band of resolveQualityBands(intervals, fallbackEndMs)) {
+    const x0 = plot.valToPos(band.startSec, "x", true);
+    const x1 = plot.valToPos(band.endSec, "x", true);
+    if (x1 <= plot.bbox.left || x0 >= plot.bbox.left + plot.bbox.width) continue;
+    const startX = Math.max(plot.bbox.left, x0);
+    const endX = Math.min(plot.bbox.left + plot.bbox.width, x1);
+
+    plot.ctx.save();
+    plot.ctx.fillStyle = band.color;
+    plot.ctx.fillRect(startX, plot.bbox.top, endX - startX, plot.bbox.height);
+    plot.ctx.restore();
   }
-  return "#ef4444";
 }
 
 function escapeHtml(value: string): string {

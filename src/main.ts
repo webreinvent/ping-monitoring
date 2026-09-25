@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { openPath } from "@tauri-apps/plugin-opener";
 
 import { api } from "./api";
-import { LatencyChart } from "./chart";
+import { LatencyChart, palette } from "./chart";
 import { aggregateRangeSummary } from "./dashboard-selection";
 import {
   formatBytes,
@@ -452,7 +452,7 @@ function renderDashboard(): void {
         selectedTargetId = targetId;
       }
       renderDashboard();
-      if (history) chart?.render(history, selectedTargetId);
+      if (history) chart?.render(history);
       renderSummary();
     });
     row.addEventListener("keydown", (event) => {
@@ -535,14 +535,13 @@ async function loadHistory(fromMs: number, toMs: number, showLoading = true): Pr
     history = response;
     chart?.destroy();
     chart = new LatencyChart(byId("main-chart"), {
-      selectedTargetId,
       onRangeChanged: (nextFrom, nextTo) => {
         followLive = false;
         byId("follow-live").classList.remove("active");
         void loadHistory(nextFrom, nextTo, false);
       },
     });
-    chart.render(response, selectedTargetId);
+    chart.render(response);
     renderLegend();
     renderSummary();
   } catch (error) {
@@ -560,7 +559,7 @@ function renderLegend(): void {
     history.series
       .map(
         (series, index) =>
-          `<button data-legend-id="${series.target.id}" class="legend-item ${series.target.id === selectedTargetId ? "selected" : ""}"><span style="--series-color:${["#5eead4", "#60a5fa", "#c084fc", "#f472b6", "#facc15"][index % 5]}"></span>${escapeHtml(series.target.name)}</button>`,
+          `<button data-legend-id="${series.target.id}" class="legend-item ${series.target.id === selectedTargetId ? "selected" : ""}"><span style="--series-color:${palette[index % palette.length]}"></span>${escapeHtml(series.target.name)}</button>`,
       )
       .join("");
   byId("chart-legend")
@@ -568,14 +567,14 @@ function renderLegend(): void {
     ?.addEventListener("click", () => {
       selectedTargetId = null;
       renderDashboard();
-      chart?.render(history!, selectedTargetId);
+      chart?.render(history!);
       renderLegend();
     });
   byId("chart-legend").querySelectorAll<HTMLButtonElement>("[data-legend-id]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedTargetId = button.dataset.legendId ?? null;
       renderDashboard();
-      chart?.render(history!, selectedTargetId);
+      chart?.render(history!);
       renderLegend();
     });
   });
