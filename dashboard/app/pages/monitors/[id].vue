@@ -35,10 +35,7 @@
 
       <LatencyChart
         :data="chartData"
-        :series-config="latencySeriesConfig"
-        :quality-bands="qualityBands"
-        :threshold-value="thresholdMs"
-        :packet-loss-column-index="chartData.length > 2 ? 2 : null"
+        mode="bars"
         :height="320"
       />
 
@@ -56,7 +53,7 @@
 <script setup lang="ts">
 import type { HistoryResponse, QualityState, RangeSummary } from "#shared/types";
 import { transformToUPlotData } from "~/composables/useChartSeries";
-import { getQualityBandPaths } from "~/utils/quality-bands";
+import { aggregateLiveSamples } from "~/utils/live-aggregation";
 import { onBeforeUnmount } from "vue";
 
 const route = useRoute();
@@ -139,53 +136,19 @@ const lastSeenMs = computed<number | null>(() => {
   return points[points.length - 1]?.timestampMs ?? null;
 });
 
-const thresholdMs = computed<number | null>(() => {
-  const seriesArr = historyData.value?.series ?? [];
-  return seriesArr[0]?.target?.thresholds?.p95LatencyMs ?? null;
-});
-
-const qualityBands = computed(() => {
-  const seriesArr = historyData.value?.series ?? [];
-  const intervals = seriesArr[0]?.intervals ?? [];
-  return getQualityBandPaths(intervals);
-});
-
 // Chart data — merge HTTP history with live WebSocket data
 const chartData = computed(() => {
-  // If live data is available for this monitor, use it
+  // If live data is available for this monitor, use it — aggregated into
+  // time-bucketed bars (mirrors the desktop chart's bar density).
   const live = liveData.value.get(monitorId.value);
   if (live && live.timestamps.length > 0) {
-    // uPlot format: [timeColumn, valueColumn]
-    return [live.timestamps, live.values];
+    return aggregateLiveSamples(live.timestamps, live.values);
   }
-  // Fall back to HTTP-fetched data
+  // Fall back to HTTP-fetched data (server-side buckets). Latency column
+  // only — bars mode renders no secondary axes.
   if (!historyData.value) return [new Float64Array(0)];
-  return transformToUPlotData(historyData.value);
-});
-
-// Series config for the latency chart: latency line + optional packet-loss area.
-// Packet loss is only available from HTTP history (not live WS data), so the
-// series config is built reactively based on whether the 3rd column exists.
-const latencySeriesConfig = computed(() => {
-  const config = [
-    {
-      label: targetName.value,
-      stroke: "#3b82f6",
-      width: 1.5,
-      points: { show: false },
-    },
-  ];
-  // If packet-loss column is present (index 2 in data = index 1 in seriesConfig),
-  // add a second series for it.
-  if (chartData.value.length > 2) {
-    config.push({
-      label: "Packet Loss",
-      stroke: "rgba(255, 107, 120, 0.6)",
-      width: 1,
-      points: { show: false },
-    });
-  }
-  return config;
+  const columns = transformToUPlotData(historyData.value);
+  return [columns[0]!, columns[1]!];
 });
 
 // Live chart integration

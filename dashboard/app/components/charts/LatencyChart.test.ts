@@ -17,13 +17,10 @@ const THRESHOLD_COLORS: Record<number, string> = {
   200: "rgba(255, 107, 120, 0.45)",  // --danger (red) — bad
 };
 
-/** Resolve effective thresholds from props — mirrors LatencyChart buildOptions logic */
-function resolveThresholds(thresholdValue: number | null | undefined, thresholdValues: number[] | undefined): number[] {
+/** Resolve effective thresholds from props — mirrors LatencyChart buildOptions logic (line mode) */
+function resolveThresholds(thresholdValues: number[] | undefined): number[] {
   if (thresholdValues && thresholdValues.length > 0) {
     return thresholdValues;
-  }
-  if (thresholdValue != null) {
-    return [thresholdValue];
   }
   return [];
 }
@@ -69,34 +66,19 @@ describe("LatencyChart — threshold color mapping", () => {
   });
 });
 
-describe("LatencyChart — threshold resolution logic", () => {
-  it("empty thresholdValues and null thresholdValue produces no thresholds", () => {
-    const result = resolveThresholds(null, []);
+describe("LatencyChart — threshold resolution logic (line mode)", () => {
+  it("empty thresholdValues produces no thresholds", () => {
+    const result = resolveThresholds([]);
     expect(result).toEqual([]);
   });
 
-  it("single thresholdValue produces one threshold", () => {
-    const result = resolveThresholds(100, []);
-    expect(result).toEqual([100]);
-  });
-
-  it("thresholdValues takes precedence over thresholdValue", () => {
-    const result = resolveThresholds(100, [50, 100, 150, 200]);
-    expect(result).toEqual([50, 100, 150, 200]);
-  });
-
-  it("undefined thresholdValue with empty thresholdValues produces no thresholds", () => {
-    const result = resolveThresholds(undefined, undefined);
+  it("undefined thresholdValues produces no thresholds", () => {
+    const result = resolveThresholds(undefined);
     expect(result).toEqual([]);
-  });
-
-  it("single thresholdValue with undefined thresholdValues produces one threshold", () => {
-    const result = resolveThresholds(150, undefined);
-    expect(result).toEqual([150]);
   });
 
   it("standard multi-threshold values are correctly resolved", () => {
-    const result = resolveThresholds(null, [50, 100, 150, 200]);
+    const result = resolveThresholds([50, 100, 150, 200]);
     expect(result).toEqual([50, 100, 150, 200]);
   });
 });

@@ -5,14 +5,7 @@
 <script setup lang="ts">
 import uPlot from "uplot";
 
-interface QualityBand {
-  /** Start timestamp in seconds */
-  start: number;
-  /** End timestamp in seconds */
-  end: number;
-  /** Background color (CSS rgba) */
-  color: string;
-}
+import { BAR_GAP_FILL, barFillColor, medianLatencyFill } from "~/utils/bars";
 
 interface Props {
   /** uPlot data: column 0 is timestamps (seconds), column 1+ are values */
@@ -21,22 +14,22 @@ interface Props {
   seriesConfig?: uPlot.Series[];
   /** Height in pixels (default 300) */
   height?: number;
-  /** Quality interval bands to render as background regions */
-  qualityBands?: QualityBand[];
-  /** Horizontal threshold line Y value (in ms) — single threshold (backward compat) */
-  thresholdValue?: number | null;
-  /** Multiple horizontal threshold lines Y values (in ms) — takes precedence over thresholdValue */
+  /**
+   * Render mode. `"line"` (default) draws connected latency lines with
+   * optional threshold guides. `"bars"` draws threshold-colored latency bars
+   * whose fills are identical to the desktop (Tauri) chart's bar mode — used
+   * by the single-monitor detail view. Bars mode suppresses threshold guides
+   * and any secondary axes, and applies the bar-mode y-scale headroom.
+   */
+  mode?: "line" | "bars";
+  /** Multiple horizontal threshold lines Y values (in ms) — line mode only */
   thresholdValues?: number[];
-  /** Index of the series column that represents packet loss % (rendered on secondary axis) */
-  packetLossColumnIndex?: number | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   height: 300,
-  qualityBands: () => [],
-  thresholdValue: null,
+  mode: "line",
   thresholdValues: () => [],
-  packetLossColumnIndex: null,
 });
 
 const wrapperRef = ref<HTMLDivElement>();
@@ -94,12 +87,7 @@ function computeXScale(data: Float64Array[]): { time: true; min?: number; max?: 
 
 function buildOptions(): Record<string, unknown> {
   const seriesConfig = props.seriesConfig ?? [];
-  const bands = props.qualityBands;
-  const threshold = props.thresholdValue;
-  const thresholds = props.thresholdValues.length > 0 ? props.thresholdValues : (threshold != null ? [threshold] : []);
-
-  // Determine if packet loss series is present
-  const hasPacketLoss = props.packetLossColumnIndex !== null && props.packetLossColumnIndex >= 2;
+  const thresholds = props.mode === "line" ? props.thresholdValues : [];
 
   // Threshold color mapping — matching desktop app and design tokens
   const THRESHOLD_COLORS: Record<number, string> = {
@@ -110,24 +98,33 @@ function buildOptions(): Record<string, unknown> {
   };
 
   // Build series array: time + data series.
-  // For each non-time series, force spanGaps so NaN holes don't break the line
-  // (uPlot's auto-scaler treats a fully-NaN column as having no range; spanning
-  // ensures adjacent valid points still connect).
-  // The packet-loss column (if present) is assigned to the secondary y2 scale.
-  const series: uPlot.Series[] = [
-    { label: "Time" },
-    ...seriesConfig.map((s, i) => {
-      const colIdx = i + 2; // column index in data (0=time, 1=first data)
-      const isLoss = hasPacketLoss && colIdx === props.packetLossColumnIndex;
-      return {
-        ...s,
-        spanGaps: true,
-        ...(isLoss ? { scale: "y2" } : {}),
-      };
-    }),
-  ];
+  // Bars mode suppresses uPlot's native series drawing entirely (transparent
+  // stroke, zero width, no points) — all geometry is drawn manually in the
+  // draw hook below, mirroring the desktop chart's bar-mode fills. Line mode
+  // forces spanGaps so NaN holes don't break the line (uPlot's auto-scaler
+  // treats a fully-NaN column as having no range; spanning ensures adjacent
+  // valid points still connect).
+  const series: uPlot.Series[] =
+    props.mode === "bars"
+      ? [
+          { label: "Time" },
+          {
+            label: "Latency",
+            stroke: "transparent",
+            fill: "transparent",
+            width: 0,
+            spanGaps: false,
+            points: { show: false },
+          },
+        ]
+      : [
+          { label: "Time" },
+          ...seriesConfig.map((s) => ({ ...s, spanGaps: true })),
+        ];
 
-  // Scales: always include x + y (latency). Add y2 (packet loss %) if present.
+  // Scales: x + y (latency). Bars mode applies headroom in the draw hook so
+  // bars occupy roughly the lower half of the plot (matching Tauri's
+  // bar-mode y-scale); line mode keeps the tighter auto range.
   const scales: Record<string, unknown> = {
     x: computeXScale(props.data),
     y: {
@@ -135,16 +132,8 @@ function buildOptions(): Record<string, unknown> {
       min: 0,
     },
   };
-  if (hasPacketLoss) {
-    scales.y2 = {
-      auto: false,
-      min: 0,
-      max: 100,
-      range: (_self: unknown, min: number | null, max: number | null) => [0, 100],
-    };
-  }
 
-  // Axes: x-axis + left y-axis (latency ms) + optional right y2-axis (packet loss %)
+  // Axes: x-axis + left y-axis (latency ms)
   const axes: Array<Record<string, unknown>> = [
     {
       // x-axis
@@ -185,33 +174,11 @@ function buildOptions(): Record<string, unknown> {
     },
   ];
 
-  if (hasPacketLoss) {
-    axes.push({
-      // y2-axis (right) — packet loss %
-      scale: "y2",
-      stroke: "rgba(255, 107, 120, 0.36)",
-      font: "10px Inter, ui-sans-serif, system-ui, sans-serif",
-      label: "loss %",
-      labelFont: "10px Inter, ui-sans-serif, system-ui, sans-serif",
-      labelSize: 14,
-      size: 44,
-      side: 1,
-      ticks: { stroke: "rgba(255, 107, 120, 0.25)", size: 3 },
-      grid: { stroke: "rgba(255, 107, 120, 0.06)", width: 1 },
-      incrs: [0, 25, 50, 75, 100],
-      values: (
-        _self: uPlot,
-        splits: number[],
-        _axisIdx: number,
-      ) => splits.map((s) => `${Math.round(s)}%`),
-    });
-  }
 
   const opts: Record<string, unknown> = {
     title: "",
     // Padding matches the desktop chart so axis labels have breathing room.
-    // Extra right padding when packet-loss axis is present.
-    padding: [16, hasPacketLoss ? 56 : 24, 8, 12],
+    padding: [16, 24, 8, 12],
     scales,
     series,
     axes,
@@ -244,27 +211,7 @@ function buildOptions(): Record<string, unknown> {
         // uPlot will fire another drawClear once the layout is settled.
         if (!u.scale || !u.bbox) return;
 
-        // Draw quality interval bands
-        if (bands && bands.length > 0) {
-          const { bbox, scale, toLeft } = u;
-          const xScale = scale["x"];
-          if (xScale) {
-            for (const band of bands) {
-              const x0 = toLeft(xScale, band.start);
-              const x1 = toLeft(xScale, band.end);
-              if (x0 >= bbox.width || x1 < 0) continue;
-              const xStart = Math.max(0, x0);
-              const xEnd = Math.min(bbox.width, x1);
-              ctx.save();
-              ctx.globalAlpha = 1;
-              ctx.fillStyle = band.color;
-              ctx.fillRect(xStart, bbox.top, xEnd - xStart, bbox.height);
-              ctx.restore();
-            }
-          }
-        }
-
-        // Draw threshold lines
+        // Draw threshold lines (line mode only — bars mode renders no guides)
         if (thresholds.length > 0) {
           const { bbox, scale, toBottom } = u;
           const yScale = scale["y"];
@@ -325,9 +272,16 @@ function buildOptions(): Record<string, unknown> {
             }
           }
         }
-        if (yMax <= 0) return;
+        if (yMax <= 0 && props.mode !== "bars") return;
         const resolvedYMin = yMin === Infinity ? 0 : Math.min(0, yMin);
-        const resolvedYMax = Math.ceil((yMax * 1.1) / 10) * 10;
+        // Bars mode applies headroom (2× max, minimum 50, rounded up to 10ms)
+        // so bars occupy roughly the lower half of the plot — matching
+        // Tauri's bar-mode y-scale. Line mode keeps the tighter 10% headroom.
+        const rawMax = yMax <= 0 ? 0 : yMax;
+        const resolvedYMax =
+          props.mode === "bars"
+            ? Math.ceil(Math.max(50, rawMax * 2) / 10) * 10
+            : Math.ceil((yMax * 1.1) / 10) * 10;
 
         // Mirror the resolved y range onto the scale so valToPos is consistent
         // with our drawing math AND uPlot's axis ticks show real values.
@@ -337,6 +291,47 @@ function buildOptions(): Record<string, unknown> {
         u.scales.y._max = resolvedYMax;
 
         const pxRatio = u.pxRatio ?? 1;
+
+        if (props.mode === "bars") {
+          // Bars mode — threshold-colored bars with fills identical to the
+          // desktop (Tauri) chart's bar mode. Buckets without a usable
+          // latency (NaN) render as gray bars at the median-fill height;
+          // zero-latency buckets draw nothing (matching the desktop).
+          const ys = data[1];
+          if (!ys || ys.length === 0) return;
+          const median = medianLatencyFill(ys);
+          const plotWidth = u.bbox?.width ?? 0;
+          const barWidth = Math.max(
+            1,
+            Math.min(
+              12,
+              Math.round(((plotWidth - 40) / Math.max(1, xs.length)) * 0.8),
+            ),
+          );
+          const yBase = u.valToPos(0, "y", true);
+          for (let i = 0; i < xs.length; i++) {
+            const t = xs[i]!;
+            const v = ys[i]!;
+            if (t == null || Number.isNaN(t)) continue;
+            const x = u.valToPos(t, "x", true);
+            if (x < -barWidth || x > plotWidth + barWidth) continue;
+            if (v == null || Number.isNaN(v)) {
+              const yTop = u.valToPos(median, "y", true);
+              ctx.save();
+              ctx.fillStyle = BAR_GAP_FILL;
+              ctx.fillRect(x - barWidth / 2, yTop, barWidth, Math.max(1, yBase - yTop));
+              ctx.restore();
+              continue;
+            }
+            if (v === 0) continue;
+            const yTop = u.valToPos(v, "y", true);
+            ctx.save();
+            ctx.fillStyle = barFillColor(v);
+            ctx.fillRect(x - barWidth / 2, yTop, barWidth, Math.max(1, yBase - yTop));
+            ctx.restore();
+          }
+          return;
+        }
 
         for (let si = 1; si < data.length; si++) {
           const ys = data[si];
@@ -456,8 +451,6 @@ function ensureScalesResolved(): void {
   }
 
   // Y scale: compute min/max from the latency series only (column 1).
-  // The packet-loss column (if present) lives on the y2 scale (0-100%) and
-  // must NOT influence the latency auto-scale.
   if (chart.scales.y.min == null || chart.scales.y.max == null) {
     let yMin = Infinity;
     let yMax = -Infinity;
@@ -473,7 +466,10 @@ function ensureScalesResolved(): void {
     }
     if (yMax > 0) {
       const min = yMin === Infinity ? 0 : Math.min(0, yMin);
-      const max = Math.ceil((yMax * 1.1) / 10) * 10;
+      const max =
+        props.mode === "bars"
+          ? Math.ceil(Math.max(50, yMax * 2) / 10) * 10
+          : Math.ceil((yMax * 1.1) / 10) * 10;
       chart.scales.y.min = min;
       chart.scales.y.max = max;
       chart.scales.y._min = min;
@@ -482,14 +478,6 @@ function ensureScalesResolved(): void {
     }
   }
 
-  // Y2 scale (packet loss %): fixed 0-100 range.
-  if (chart.scales.y2 && (chart.scales.y2.min == null || chart.scales.y2.max == null)) {
-    chart.scales.y2.min = 0;
-    chart.scales.y2.max = 100;
-    chart.scales.y2._min = 0;
-    chart.scales.y2._max = 100;
-    mutated = true;
-  }
 
   if (mutated) {
     chart.redraw(true);
