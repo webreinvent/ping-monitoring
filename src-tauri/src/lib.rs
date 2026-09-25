@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod domain;
 pub mod i18n;
+pub mod identity;
 pub mod monitor;
 pub mod probe;
 pub mod quality;
@@ -116,6 +117,7 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::get_storage_info,
+            commands::get_host_identity,
             commands::run_retention_cleanup,
             commands::backup_database,
             commands::show_main,

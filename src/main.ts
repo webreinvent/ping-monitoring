@@ -158,6 +158,10 @@ async function initMain(): Promise<void> {
         </div>
       </div>
       <div class="header-actions">
+        <span class="host-badge" id="host-identity" hidden title="${t("section.hostIdentity")}">
+          <strong id="host-name">—</strong>
+          <code id="host-ip"></code>
+        </span>
         <button id="follow-live" class="button ghost active">● ${t("action.live")}</button>
         <button id="pause-monitoring" class="button ghost"></button>
         <button id="sync-status-icon" class="button icon-button sync-status-icon" data-sync-state="off" aria-label="${t("action.syncStatus")}">⊘</button>
@@ -177,6 +181,7 @@ async function initMain(): Promise<void> {
           <p>${t("empty.targetsDescription")}</p>
           <button class="button primary" data-action="add-target">${t("action.addTarget")}</button>
         </div>
+        <button id="delete-all" class="button ghost danger-text delete-all" type="button">${iconSvg("trash")}<span>${t("action.deleteAllMonitors")}</span></button>
       </aside>
       <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar">
         <span class="sidebar-resizer-handle"></span>
@@ -219,6 +224,7 @@ async function initMain(): Promise<void> {
     <dialog id="target-dialog" class="modal"></dialog>
     <dialog id="settings-dialog" class="modal settings-modal"></dialog>
     <dialog id="update-dialog" class="modal update-modal"></dialog>
+    <dialog id="confirm-dialog" class="modal compact-modal"></dialog>
     <dialog id="range-dialog" class="modal compact-modal">
       <form id="range-form">
         <header><h3>${t("dashboard.customRange")}</h3><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
@@ -229,6 +235,21 @@ async function initMain(): Promise<void> {
     </dialog>
     <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   `;
+
+  // Identify this host (best effort — silent on failure)
+  void api
+    .hostIdentity()
+    .then((identity) => {
+      const host = byId("host-identity");
+      const name = byId("host-name");
+      const ip = byId("host-ip");
+      if (!host || !name || !ip) return;
+      name.textContent = identity.hostname;
+      ip.textContent = identity.ipAddress ?? "";
+      ip.hidden = !identity.ipAddress;
+      host.hidden = false;
+    })
+    .catch(() => {});
 
   bindMainEvents();
   restoreViewState();
@@ -304,6 +325,7 @@ function bindMainEvents(): void {
   initSidebarResizer();
   byId("add-target").addEventListener("click", () => openTargetDialog());
   root.querySelector('[data-action="add-target"]')?.addEventListener("click", () => openTargetDialog());
+  byId("delete-all").addEventListener("click", () => void removeAllTargets());
   byId("open-settings").addEventListener("click", () => {
     void openSettingsDialog().catch((error) => showToast(formatError(error), "error"));
   });
@@ -377,6 +399,7 @@ function renderDashboard(): void {
   byId("target-count").textContent = String(dashboard.targets.length);
   byId("empty-targets").classList.toggle("hidden", dashboard.targets.length > 0);
   byId("target-list").classList.toggle("hidden", dashboard.targets.length === 0);
+  byId("delete-all").classList.toggle("hidden", dashboard.targets.length === 0);
   const pauseButton = byId<HTMLButtonElement>("pause-monitoring");
   const pauseLabel = dashboard.paused ? t("action.resume") : t("action.pause");
   pauseButton.innerHTML = buttonLabel(dashboard.paused ? "play" : "pause", pauseLabel);
@@ -411,6 +434,7 @@ function renderDashboard(): void {
               <span class="toggle-track ${enabled ? "on" : "off"}"><span class="toggle-thumb"></span></span>
             </button>
             <button type="button" class="target-menu" data-edit-target="${item.target.id}" title="${escapeHtml(t("action.manageTarget"))}" aria-label="${escapeHtml(t("action.manageTarget"))}">${iconSvg("edit")}</button>
+            <button type="button" class="target-menu" data-delete-target="${item.target.id}" title="${escapeHtml(t("action.removeMonitor"))}" aria-label="${escapeHtml(t("action.removeMonitor"))}">${iconSvg("trash")}</button>
           </span>
         </div>`;
       })
@@ -443,6 +467,16 @@ function renderDashboard(): void {
       });
     });
 
+    // Handle delete buttons directly
+    row.querySelectorAll("[data-delete-target]").forEach((btn) => {
+      (btn as HTMLElement).addEventListener("click", (event) => {
+        event.stopPropagation();
+        const targetId = row.dataset.targetId ?? null;
+        const status = targetId ? dashboard.targets.find((item) => item.target.id === targetId) : null;
+        if (status) void removeTarget(status.target, null);
+      });
+    });
+
     row.addEventListener("click", () => {
       const targetId = row.dataset.targetId ?? null;
       if (!targetId) {
@@ -457,7 +491,7 @@ function renderDashboard(): void {
     });
     row.addEventListener("keydown", (event) => {
       if (row instanceof HTMLButtonElement) return;
-      if ((event.target as HTMLElement).closest("[data-edit-target]") || (event.target as HTMLElement).closest("[data-toggle-target]") || (event.target as HTMLElement).closest("[data-toggle-all]")) return;
+      if ((event.target as HTMLElement).closest("[data-edit-target]") || (event.target as HTMLElement).closest("[data-toggle-target]") || (event.target as HTMLElement).closest("[data-toggle-all]") || (event.target as HTMLElement).closest("[data-delete-target]")) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       row.click();
@@ -701,12 +735,43 @@ async function saveTargetForm(base: Target, dialog: HTMLDialogElement): Promise<
   }
 }
 
-async function removeTarget(target: Target, dialog: HTMLDialogElement): Promise<void> {
-  const accepted = confirm(t("toast.removeConfirm", { name: target.name }));
+/** In-app confirmation modal — portable across WebView runtimes (native confirm() is unreliable in WKWebView). */
+function askConfirm(message: string): Promise<boolean> {
+  const dialog = byId<HTMLDialogElement>("confirm-dialog");
+  let resolve: (accepted: boolean) => void = () => {};
+  const result = new Promise<boolean>((r) => {
+    resolve = r;
+  });
+  const finish = (accepted: boolean): void => {
+    dialog.close();
+    resolve(accepted);
+  };
+  const onCancel = (event: Event): void => {
+    event.preventDefault();
+    finish(false);
+  };
+  dialog.innerHTML = `
+    <header><div><h3>${escapeHtml(message)}</h3></div><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
+    <footer>
+      <div></div>
+      <div><button id="confirm-cancel" type="button" class="button ghost">${t("action.cancel")}</button><button id="confirm-ok" type="button" class="button danger">${t("action.confirm")}</button></div>
+    </footer>`;
+  dialog.querySelector(".modal-close")?.addEventListener("click", () => finish(false));
+  byId("confirm-cancel").addEventListener("click", () => finish(false));
+  byId("confirm-ok").addEventListener("click", () => finish(true));
+  dialog.addEventListener("cancel", onCancel);
+  dialog.addEventListener("close", () => dialog.removeEventListener("cancel", onCancel), { once: true });
+  dialog.showModal();
+  byId("confirm-cancel").focus();
+  return result;
+}
+
+async function removeTarget(target: Target, dialog: HTMLDialogElement | null): Promise<void> {
+  const accepted = await askConfirm(t("toast.removeConfirm", { name: target.name }));
   if (!accepted) return;
   try {
     await api.archiveTarget(target.id);
-    dialog.close();
+    dialog?.close();
     dashboard = await api.dashboard();
     selectedTargetId = null;
     renderDashboard();
@@ -719,6 +784,34 @@ async function removeTarget(target: Target, dialog: HTMLDialogElement): Promise<
   } catch (error) {
     showToast(formatError(error), "error");
   }
+}
+
+/** Delete all monitors (soft-archive each; historical data is retained). */
+async function removeAllTargets(): Promise<void> {
+  const targets = [...dashboard.targets];
+  if (targets.length === 0) return;
+  const accepted = await askConfirm(t("toast.deleteAllConfirm", { count: targets.length }));
+  if (!accepted) return;
+  let removed = 0;
+  for (const item of targets) {
+    try {
+      await api.archiveTarget(item.target.id);
+      removed += 1;
+    } catch (error) {
+      showToast(formatError(error), "error");
+      break;
+    }
+  }
+  dashboard = await api.dashboard();
+  selectedTargetId = null;
+  renderDashboard();
+  if (selectedTargetId) await loadHistory(currentRange.fromMs, currentRange.toMs);
+  else {
+    chart?.destroy();
+    chart = null;
+    history = null;
+  }
+  if (removed > 0) showToast(t("toast.allMonitorsRemoved", { count: removed }), "success");
 }
 
 async function openSettingsDialog(focusSection?: string): Promise<void> {
@@ -1226,13 +1319,15 @@ function buttonLabel(icon: "pause" | "play", label: string): string {
   return `<span class="button-label">${iconSvg(icon)}<span>${escapeHtml(label)}</span></span>`;
 }
 
-function iconSvg(icon: "pause" | "play" | "edit" | "layers"): string {
+function iconSvg(icon: "pause" | "play" | "edit" | "layers" | "trash"): string {
   const paths = {
     pause: '<path d="M8 6v12M16 6v12" />',
     play: '<path d="m9 6 9 6-9 6Z" />',
     edit: '<path d="M5 19h4l10-10-4-4L5 15v4Z" /><path d="m13.5 6.5 4 4" />',
     layers:
       '<path d="m12 4 8 4-8 4-8-4 8-4Z" /><path d="m4 12 8 4 8-4" /><path d="m4 16 8 4 8-4" />',
+    trash:
+      '<path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="m6 7 1 13h10l1-13" /><path d="M10 11v5" /><path d="M14 11v5" />',
   } as const;
   return `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[icon]}</svg>`;
 }
