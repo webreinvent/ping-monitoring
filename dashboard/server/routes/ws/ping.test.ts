@@ -21,22 +21,13 @@ const mockDb: any = {
   prepare: vi.fn(),
 };
 
-// Use both import path formats since the file may use relative or #server paths
-vi.mock("../utils/db", () => ({
+// ping.ts uses relative imports ("../../utils/db", "../../utils/logger"),
+// so mocks must use the same relative paths to be matched correctly.
+vi.mock("../../utils/db", () => ({
   getDb: () => mockDb,
 }));
 
-vi.mock("#server/utils/db", () => ({
-  getDb: () => mockDb,
-}));
-
-vi.mock("../utils/logger", () => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-}));
-
-vi.mock("#server/utils/logger", () => ({
+vi.mock("../../utils/logger", () => ({
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
@@ -59,7 +50,13 @@ describe("WebSocket ping handler", () => {
   describe("open", () => {
     test("sends connected message on connection", async () => {
       const sendMock = vi.fn();
-      const peer = { send: sendMock };
+      // Real Nitro Peer shape: raw ws is reachable via peer._internal.ws
+      // (the crossws NodePeer internal storage). getRawWs() requires this
+      // to register the peer in allPeers and proceed.
+      const peer = {
+        send: sendMock,
+        _internal: { ws: { readyState: 1 } },
+      };
 
       const mod = await import("./ping");
       const handler = mod.default;
