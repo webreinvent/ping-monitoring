@@ -57,7 +57,12 @@ COPY --from=build /app/dashboard/schema /app/dashboard/schema
 COPY --from=build /app/dashboard/package.json /app/dashboard/package.json
 
 # Default DATABASE_PATH is .data/lingering.db (relative to CWD).
-RUN mkdir -p .data && chown -R appuser:appgroup /app
+# Chown ONLY .data — the runtime user needs write access there (SQLite DB +
+# its -wal/-shm files). Everything else (node_modules, .output, schema) is
+# read-only at runtime and already world-readable from COPY, so a recursive
+# chown of the whole /app tree is unnecessary and slow enough to time out on
+# PaaS builders (Coolify).
+RUN mkdir -p .data && chown appuser:appgroup .data
 USER appuser
 
 LABEL org.opencontainers.image.version="${APP_VERSION}"
