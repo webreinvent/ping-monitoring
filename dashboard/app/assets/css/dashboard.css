@@ -377,28 +377,48 @@ body {
   flex-shrink: 0;
 }
 
-.status-dot.state-low,
-.status-dot.state-medium {
+/* Health semantics (matches the Tauri app's latency scale): the
+   dashboard's quality states are ordered best→worst as
+   veryHigh → high → medium → low, so the colors run green → red. */
+
+/* Best quality: 0% loss, <50ms avg — receiving healthy pings */
+.status-dot.state-veryHigh {
   background: var(--accent);
   box-shadow: 0 0 0 3px rgba(69, 223, 194, 0.1), 0 0 8px rgba(69, 223, 194, 0.38);
 }
 
+/* Good: 0% loss, <150ms avg */
 .status-dot.state-high {
+  background: #eab308;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1), 0 0 8px rgba(234, 179, 8, 0.38);
+}
+
+/* Degraded: ≤10% loss, ≤300ms avg */
+.status-dot.state-medium {
   background: #f97316;
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1), 0 0 8px rgba(249, 115, 22, 0.38);
 }
 
-.status-dot.state-veryHigh {
+/* Poor: very high latency or heavy packet loss (catch-all) */
+.status-dot.state-low {
   background: #ef4444;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1), 0 0 8px rgba(239, 68, 68, 0.38);
 }
 
+/* High jitter (coefficient of variation > 0.5) */
 .status-dot.state-unstable {
   background: #a855f7;
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1), 0 0 8px rgba(168, 85, 247, 0.38);
 }
 
+/* No samples for 5+ minutes (server classifier) */
 .status-dot.state-disconnected {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255, 107, 120, 0.1), 0 0 8px rgba(255, 107, 120, 0.38);
+}
+
+/* No ping data received in the last 10s (sidebar freshness rule) */
+.status-dot.state-stale {
   background: var(--danger);
   box-shadow: 0 0 0 3px rgba(255, 107, 120, 0.1), 0 0 8px rgba(255, 107, 120, 0.38);
 }

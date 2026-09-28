@@ -1,6 +1,10 @@
 <template>
   <div class="chart-container" data-testid="all-monitors-chart">
-    <EmptyState v-if="hasNoData" message="No data to display" />
+    <EmptyState
+      v-if="hasNoData"
+      message="No data in this time range"
+      hint="Try a wider time range, or check that your client is syncing."
+    />
     <LatencyChart
       v-else
       :data="chartData"
@@ -175,11 +179,20 @@ const chartData = computed(() => {
   return [mergedTime, ...seriesColumns];
 });
 
-// Fetch on mount and when monitors or time window change
+// Fetch on mount and when monitors or time window change.
+// The source is a stable string (not an array) — a fresh array each
+// evaluation would be reference-compared and re-fire on every monitor-list
+// refresh (the 5s freshness tick), re-fetching history needlessly.
 watch(
-  () => [props.monitors.map((m) => m.id).join(","), selectedPreset.value],
+  () => props.monitors.map((m) => m.id).join(",") + "|" + selectedPreset.value,
   async () => {
-    await fetchAllHistory();
+    // Client-only: the chart needs a DOM, and a fetch that completes during
+    // SSR would flip hasNoData before the server render, causing a hydration
+    // mismatch (server renders the chart, client's first render shows the
+    // empty state).
+    if (import.meta.client) {
+      await fetchAllHistory();
+    }
   },
   { immediate: true },
 );

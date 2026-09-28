@@ -1,4 +1,4 @@
-import { ref, computed, watch } from "vue";
+import { computed, onMounted, watch } from "vue";
 
 /**
  * Time window preset definitions.
@@ -23,19 +23,24 @@ const TIME_WINDOW_PRESETS: Record<string, number> = {
 export function useTimeWindow() {
   const STORAGE_KEY = "lnpm-chart-time-window-v2";
 
-  const selectedPreset = ref<string>("1h");
+  // Shared across every caller (selector, charts, detail page) via useState,
+  // so the selector drives all charts. SSR-consistent: server and the
+  // client's first render both start at "1h"; the saved preference is
+  // restored after mount (reading localStorage during setup would diverge
+  // from the server-rendered markup and cause a hydration class mismatch
+  // on the active preset button).
+  const selectedPreset = useState<string>("lnpm-chart-time-window", () => "1h");
 
-  // Restore from localStorage on init (client-side only)
-  if (typeof window !== "undefined") {
+  onMounted(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && stored in TIME_WINDOW_PRESETS) {
+      if (stored && stored in TIME_WINDOW_PRESETS && stored !== selectedPreset.value) {
         selectedPreset.value = stored;
       }
     } catch {
       // localStorage unavailable — ignore
     }
-  }
+  });
 
   // Watch for changes and persist
   watch(selectedPreset, (preset: string) => {

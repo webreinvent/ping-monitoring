@@ -39,6 +39,7 @@
         mode="bars"
         :height="320"
         :window-sec="liveWindowSec"
+        :labels="[targetName]"
       />
 
       <MonitorSummary :summary="summary" />

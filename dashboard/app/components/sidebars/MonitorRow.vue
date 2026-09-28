@@ -27,7 +27,7 @@
           />
         </template>
       </ClientOnly>
-      <StatusDot :quality-state="monitor.qualityState" />
+      <StatusDot :quality-state="monitor.qualityState" :stale="isStale" />
       <div class="target-copy">
         <strong>{{ monitor.targetName }}</strong>
         <small>{{ monitor.targetHost }}</small>
@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import type { MonitorListItem } from "#shared/types";
 import { formatMs } from "~/utils/format";
+import { isMonitorStale } from "~/utils/monitor-staleness";
 
 interface Props {
   monitor: MonitorListItem;
@@ -83,6 +84,11 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const selected = computed(() => route.path.startsWith(`/monitors/${props.monitor.id}`));
+
+// Red dot when no ping data has arrived in the last 10s (the shared
+// `now` clock ticks every 5s alongside the monitor-list refresh).
+const { now } = useMonitors();
+const isStale = computed(() => isMonitorStale(props.monitor.lastSeenMs, now.value));
 
 function emitToggle(): void {
   emit("toggle");

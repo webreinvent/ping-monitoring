@@ -1,11 +1,16 @@
 <template>
-  <div class="chart-wrapper" ref="wrapperRef" />
+  <div class="chart-wrapper" ref="wrapperRef">
+    <!-- Hover tooltip: innerHTML-driven, so its children never receive the
+         scoped data-v attribute — styles live in the global charts.css. -->
+    <div class="chart-tooltip" ref="tooltipRef" aria-hidden="true" />
+  </div>
 </template>
 
 <script setup lang="ts">
 import uPlot from "uplot";
 
 import { BAR_GAP_FILL, barFillColor, medianLatencyFill } from "~/utils/bars";
+import { calculateTooltipPosition } from "~/utils/chart-tooltip";
 
 interface Props {
   /** uPlot data: column 0 is timestamps (seconds), column 1+ are values */
@@ -31,6 +36,11 @@ interface Props {
    * even when only a handful of samples have arrived so far.
    */
   windowSec?: [number, number];
+  /**
+   * Optional per-series display names for the hover tooltip (index 0 = first
+   * data series). Falls back to the uPlot series label when omitted.
+   */
+  labels?: string[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -38,9 +48,11 @@ const props = withDefaults(defineProps<Props>(), {
   mode: "line",
   thresholdValues: () => [],
   windowSec: undefined,
+  labels: () => [],
 });
 
 const wrapperRef = ref<HTMLDivElement>();
+const tooltipRef = ref<HTMLDivElement>();
 let chart: uPlot | null = null;
 
 function formatXAxisTick(value: number, rangeSeconds: number): string {
@@ -61,6 +73,132 @@ function formatYAxisTick(value: number, max: number): string {
   if (value === 0) return "0";
   if (max <= 10) return value % 1 === 0 ? String(value) : value.toFixed(1);
   return String(Math.round(value));
+}
+
+// ---------------------------------------------------------------------------
+// Hover tooltip — mirrors the desktop (Tauri) chart's tooltip: timestamp,
+// one value row per visible series (swatch + label + latency), and a
+// threshold-derived latency state line for single-series charts.
+// ---------------------------------------------------------------------------
+
+const TOOLTIP_STATE_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  veryHigh: "Very High",
+  unstable: "Unstable",
+  disconnected: "Disconnected",
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/'/g, "&#39;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatLatency(value: number | null): string {
+  if (value == null) return "—";
+  const num = new Intl.NumberFormat("en", {
+    maximumFractionDigits: value < 10 ? 1 : 0,
+  }).format(value);
+  return `${num} ms`;
+}
+
+function formatDateTime(ms: number): string {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(new Date(ms));
+}
+
+/** Threshold-derived latency state (mirrors the desktop app's bar-mode tooltip). */
+function stateFromLatency(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return "disconnected";
+  if (value < 50) return "low";
+  if (value < 100) return "medium";
+  if (value < 200) return "high";
+  return "veryHigh";
+}
+
+function hideTooltip(): void {
+  tooltipRef.value?.classList.remove("visible");
+}
+
+/**
+ * uPlot `setCursor` hook — fires on every cursor move AND when the cursor is
+ * cleared (idx → null), so this one handler covers both show and hide.
+ */
+function updateTooltip(u: uPlot): void {
+  const tooltip = tooltipRef.value;
+  const wrapper = wrapperRef.value;
+  if (!tooltip || !wrapper) return;
+
+  const index = u.cursor.idx ?? null;
+  if (index == null || u.cursor.left == null) {
+    hideTooltip();
+    return;
+  }
+
+  const data = u.data as Float64Array[];
+  const ts = data[0]?.[index];
+  if (ts == null || Number.isNaN(ts)) {
+    hideTooltip();
+    return;
+  }
+
+  const seriesCount = data.length - 1;
+  let rows = "";
+  for (let si = 1; si < data.length; si++) {
+    const value = data[si]?.[index];
+    if (value == null || Number.isNaN(value)) continue;
+    const series = u.series[si];
+    // uPlot types `label` as `string | HTMLElement` — only strings are usable.
+    const seriesLabel = typeof series?.label === "string" ? series.label : undefined;
+    const label = props.labels?.[si - 1] ?? seriesLabel ?? "Latency";
+    // `_stroke` is uPlot's internal cached stroke (not in the public type) —
+    // same access pattern as the draw hook above.
+    const internal = series as unknown as { _stroke?: string } | undefined;
+    let color = typeof internal?._stroke === "string" ? internal._stroke : null;
+    // Bars mode paints series strokes transparent (manual draw) — fall back to
+    // the accent so the swatch still identifies the series.
+    if (!color || color === "transparent") color = "#45dfc2";
+    rows += `<div class="tooltip-row"><span class="tooltip-swatch" style="--swatch:${color}"></span>${escapeHtml(label)} <strong>${formatLatency(value)}</strong></div>`;
+  }
+  if (!rows) {
+    hideTooltip();
+    return;
+  }
+
+  // State line only for single-series charts (the detail view) — with many
+  // series a per-hover quality state would be ambiguous.
+  let stateHtml = "";
+  if (seriesCount === 1) {
+    const value = data[1]?.[index];
+    const state = stateFromLatency(value == null ? null : value);
+    stateHtml = `<div class="tooltip-state state-${state}">Latency: ${TOOLTIP_STATE_LABELS[state] ?? state}</div>`;
+  }
+
+  tooltip.innerHTML = `<time>${formatDateTime(ts * 1000)}</time>${rows}${stateHtml}`;
+  tooltip.classList.add("visible");
+
+  // Position relative to the wrapper (the tooltip's offset parent).
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const overRect = (u.over as HTMLElement).getBoundingClientRect();
+  const anchorX = overRect.left - wrapperRect.left + u.cursor.left;
+  const anchorY = overRect.top - wrapperRect.top + (u.cursor.top ?? overRect.height / 2);
+  const position = calculateTooltipPosition({
+    anchorX,
+    anchorY,
+    tooltipWidth: tooltip.offsetWidth,
+    tooltipHeight: tooltip.offsetHeight,
+    containerWidth: wrapper.clientWidth,
+    containerHeight: wrapper.clientHeight,
+  });
+  tooltip.style.left = `${position.left}px`;
+  tooltip.style.top = `${position.top}px`;
 }
 
 /**
@@ -223,6 +361,12 @@ function buildOptions(): Record<string, unknown> {
   // multi-series merged data. Bypassing uPlot's path builder and drawing
   // polylines via valToPos guarantees the visualization always renders.
   opts.hooks = {
+    setCursor: [
+      (u: uPlot) => {
+        updateTooltip(u);
+      },
+    ],
+
     drawClear: [
       (u: any) => {
         const ctx: CanvasRenderingContext2D | null = u.ctx;
@@ -416,6 +560,9 @@ function rebuildChart(): void {
   const width = wrapperRef.value.clientWidth ?? 800;
   if (width === 0) return;
 
+  // A fresh chart has no cursor — drop any stale tooltip before rebuilding.
+  hideTooltip();
+
   // Tear down any existing chart — uPlot's column count is locked at construction
   if (chart) {
     chart.destroy();
@@ -601,6 +748,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
+  hideTooltip();
   chart?.destroy();
   chart = null;
 });

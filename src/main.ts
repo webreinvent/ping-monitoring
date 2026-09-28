@@ -140,6 +140,8 @@ async function bootstrap(): Promise<void> {
     await listen<SyncEvent>("sync-status-changed", (event) => {
       syncStatus = event.payload;
       updateSyncIcon(event.payload.status, event.payload.message ?? null);
+      // Keep the settings dialog's status line in sync too (if open)
+      updateSyncStatusText(event.payload.status, event.payload.message ?? null);
     });
   }
 }
@@ -852,6 +854,8 @@ async function openSettingsDialog(focusSection?: string): Promise<void> {
       </div>
       <footer><span>v${await getVersion()}</span><div><button type="button" class="button ghost modal-close">${t("action.cancel")}</button><button class="button primary">${t("action.save")}</button></div></footer>
     </form>`;
+  // Seed the status line with the current detail message (e.g. last error)
+  updateSyncStatusText(syncStatus.status, syncStatus.message ?? null);
   byId<HTMLSelectElement>("retention-days").value = settings.retentionDays?.toString() ?? "unlimited";
   byId<HTMLSelectElement>("language").value = settings.language;
   dialog.querySelectorAll(".modal-close").forEach((button) =>
@@ -881,6 +885,13 @@ async function openSettingsDialog(focusSection?: string): Promise<void> {
   const ingestUrlError = byId<HTMLDivElement>("ingest-url-error");
   const syncPausedCheckbox = byId<HTMLInputElement>("cloud-sync-paused");
 
+  // Keep the sync now button enabled state in sync with the URL field
+  // (a typed-but-unsaved URL is usable, a cleared/invalid one is not)
+  const refreshSyncNowEnabled = (): void => {
+    const urlResult = validateIngestUrl(ingestUrlInput.value);
+    syncNowButton.disabled = !urlResult.ok || urlResult.url === "" || syncPausedCheckbox.checked;
+  };
+
   // Validate URL on input
   ingestUrlInput.addEventListener("input", () => {
     const result = validateIngestUrl(ingestUrlInput.value);
@@ -891,6 +902,7 @@ async function openSettingsDialog(focusSection?: string): Promise<void> {
       ingestUrlError.textContent = result.reason;
       ingestUrlError.classList.remove("hidden");
     }
+    refreshSyncNowEnabled();
   });
 
   // Sync now button
@@ -898,6 +910,23 @@ async function openSettingsDialog(focusSection?: string): Promise<void> {
     syncNowButton.disabled = true;
     syncNowButton.textContent = t("cloudSync.syncing");
     try {
+      // Persist the endpoint as typed first, so the sync uses the new URL
+      // and it survives reopening the dialog (the sync service only knows
+      // the last *saved* settings, not the field's current value).
+      const urlResult = validateIngestUrl(ingestUrlInput.value);
+      if (!urlResult.ok) {
+        ingestUrlError.textContent = urlResult.reason;
+        ingestUrlError.classList.remove("hidden");
+        return;
+      }
+      const nextUrl = urlResult.url === "" ? null : urlResult.url;
+      if (nextUrl !== settings.dashboardIngestUrl || syncPausedCheckbox.checked !== settings.cloudSyncPaused) {
+        settings = await api.saveSettings({
+          ...settings,
+          dashboardIngestUrl: nextUrl,
+          cloudSyncPaused: syncPausedCheckbox.checked,
+        });
+      }
       const result = await api.triggerSyncNow();
       showToast(
         t("toast.syncSuccess", {
@@ -915,10 +944,7 @@ async function openSettingsDialog(focusSection?: string): Promise<void> {
   });
 
   // Update sync now button enabled state when pause checkbox changes
-  syncPausedCheckbox.addEventListener("change", () => {
-    const disabled = !settings.dashboardIngestUrl || syncPausedCheckbox.checked;
-    syncNowButton.disabled = disabled;
-  });
+  syncPausedCheckbox.addEventListener("change", refreshSyncNowEnabled);
   byId<HTMLFormElement>("settings-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -1303,6 +1329,20 @@ function validateIngestUrl(raw: string): { ok: true; url: string } | { ok: false
 /** Format sync status for display in settings. */
 function formatSyncStatus(status: string): string {
   return t(`cloudSync.status.${status}` as MessageKey) ?? status;
+}
+
+/**
+ * Update the settings dialog's sync status line (#sync-status-text).
+ * Shows the status label plus the detail message (e.g. the last error),
+ * with the full message available in the tooltip.
+ */
+function updateSyncStatusText(status: string, message: string | null): void {
+  const el = document.getElementById("sync-status-text");
+  if (!el) return;
+  el.dataset.syncState = status;
+  const label = formatSyncStatus(status);
+  el.textContent = message ? `${label} — ${message}` : label;
+  el.title = message ?? label;
 }
 
 function setText(id: string, value: string): void {

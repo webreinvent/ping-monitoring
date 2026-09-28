@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -200,7 +202,10 @@ pub struct SyncService {
     config: RwLock<Option<SyncConfig>>,
     identity: Mutex<Option<ClientIdentity>>,
     handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    status: RwLock<SyncStatus>,
+    status: Arc<RwLock<SyncStatus>>,
+    /// Last status message (e.g. the error detail) so `status()` can report
+    /// it after app restarts or when the frontend queries the current state.
+    last_message: Arc<RwLock<Option<String>>>,
 }
 
 impl SyncService {
@@ -211,7 +216,8 @@ impl SyncService {
             config: RwLock::new(None),
             identity: Mutex::new(None),
             handle: Mutex::new(None),
-            status: RwLock::new(SyncStatus::Off),
+            status: Arc::new(RwLock::new(SyncStatus::Off)),
+            last_message: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -228,6 +234,7 @@ impl SyncService {
     async fn emit_status(&self, status: SyncStatus, message: Option<String>) {
         let pending_count = self.count_pending().await;
         *self.status.write().await = status;
+        *self.last_message.write().await = message.clone();
         let event = SyncEvent {
             status,
             message,
@@ -263,6 +270,8 @@ impl SyncService {
 
         let database = self.database.clone();
         let app = self.app.clone();
+        let sync_status = Arc::clone(&self.status);
+        let last_message = Arc::clone(&self.last_message);
         let endpoint = config.endpoint.clone();
         let batch_timeout_ms = config.batch_timeout_ms;
         let max_batch_size = config.max_batch_size;
@@ -385,6 +394,8 @@ impl SyncService {
                                 }
 
                                 // Emit success event
+                                *sync_status.write().await = SyncStatus::Success;
+                                *last_message.write().await = None;
                                 let event = SyncEvent {
                                     status: SyncStatus::Success,
                                     message: None,
@@ -413,6 +424,8 @@ impl SyncService {
                     } else {
                         last_error.clone()
                     };
+                    *sync_status.write().await = SyncStatus::Error;
+                    *last_message.write().await = Some(message.clone());
                     let pending = database.unsynced_samples(0).ok().map(|s| s.len() as u32).unwrap_or(0);
                     let event = SyncEvent {
                         status: SyncStatus::Error,
@@ -442,24 +455,38 @@ impl SyncService {
         }
     }
 
+    /// Record a failure message so `status()` can surface it, and return it.
+    async fn record_failure(&self, message: String) -> String {
+        *self.last_message.write().await = Some(message.clone());
+        message
+    }
+
     /// Trigger an immediate sync (for the "Sync now" button).
     pub async fn trigger_now(&self) -> Result<SyncResult, String> {
         let config = self.config.read().await;
-        let config = config.as_ref().ok_or_else(|| "Sync is not configured".to_string())?;
+        let config = match config.as_ref() {
+            Some(c) => c,
+            None => {
+                return Err(self.record_failure("Sync is not configured".to_string()).await)
+            }
+        };
 
-        let client = Client::builder()
+        let client = match Client::builder()
             .timeout(std::time::Duration::from_secs(15))
             .build()
-            .map_err(|e| e.to_string())?;
+        {
+            Ok(c) => c,
+            Err(e) => return Err(self.record_failure(e.to_string()).await),
+        };
 
         let identity = self.get_identity().await;
 
         // Get all unsynced samples (joined with host so the dashboard sees a
         // human-meaningful `targetHost` instead of the internal UUID).
-        let samples = self
-            .database
-            .unsynced_samples_with_host(0)
-            .map_err(|e| e.to_string())?;
+        let samples = match self.database.unsynced_samples_with_host(0) {
+            Ok(s) => s,
+            Err(e) => return Err(self.record_failure(e.to_string()).await),
+        };
 
         if samples.is_empty() {
             return Ok(SyncResult {
@@ -470,6 +497,8 @@ impl SyncService {
         }
 
         // Emit syncing status
+        *self.status.write().await = SyncStatus::Syncing;
+        *self.last_message.write().await = None;
         let pending = samples.len() as u32;
         let event = SyncEvent {
             status: SyncStatus::Syncing,
@@ -511,18 +540,26 @@ impl SyncService {
             samples: batch,
         };
 
-        let body = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+        let body = match serde_json::to_string(&payload) {
+            Ok(b) => b,
+            Err(e) => return Err(self.record_failure(e.to_string()).await),
+        };
 
-        let response = client
+        let response = match client
             .post(&config.endpoint)
             .header("Content-Type", "application/json")
             .body(body)
             .send()
             .await
-            .map_err(|e| format!("Request failed: {e}"))?;
+        {
+            Ok(r) => r,
+            Err(e) => return Err(self.record_failure(format!("Request failed: {e}")).await),
+        };
 
         if !response.status().is_success() {
-            return Err(format!("HTTP {}", response.status()));
+            return Err(self
+                .record_failure(format!("HTTP {}", response.status()))
+                .await);
         }
 
         let result = response
@@ -539,6 +576,8 @@ impl SyncService {
         let _ = self.database.mark_samples_synced(&unique_ids, from_ms, to_ms, now_ms);
 
         // Emit success
+        *self.status.write().await = SyncStatus::Success;
+        *self.last_message.write().await = None;
         let event = SyncEvent {
             status: SyncStatus::Success,
             message: None,
@@ -553,10 +592,11 @@ impl SyncService {
     /// Get current sync status.
     pub async fn status(&self) -> SyncEvent {
         let status = *self.status.read().await;
+        let message = self.last_message.read().await.clone();
         let pending_count = self.count_pending().await;
         SyncEvent {
             status,
-            message: None,
+            message,
             last_synced_at_ms: None,
             pending_count,
         }

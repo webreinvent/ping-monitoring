@@ -1,3 +1,4 @@
+import type { Ref } from "vue";
 import type { MonitorListItem, MonitorsListResponse } from "#shared/types";
 
 interface MonitorGroup {
@@ -10,6 +11,39 @@ interface MonitorGroup {
 
 /** localStorage key for visible monitors set */
 const VISIBLE_MONITORS_KEY = "lnpm-visible-monitors";
+
+/** How often the sidebar re-fetches the monitor list and advances the
+ *  freshness clock (drives the "no data in last 10s → red dot" rule). */
+const MONITOR_TICK_INTERVAL_MS = 5000;
+
+// One module-level timer serves every useMonitors() caller. A single
+// refresh() updates the shared "monitors-list" payload, so only one
+// instance re-fetches per tick.
+const tickMembers = new Set<() => Promise<void>>();
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+
+function startTicking(now: Ref<number>, refresh: () => Promise<void>): void {
+  tickMembers.add(refresh);
+  if (tickTimer) return;
+  tickTimer = setInterval(() => {
+    now.value = Date.now();
+    for (const refreshMonitors of tickMembers) {
+      refreshMonitors().catch(() => {
+        // Transient API failures between ticks must not surface as
+        // unhandled rejections; the next tick retries.
+      });
+      break;
+    }
+  }, MONITOR_TICK_INTERVAL_MS);
+}
+
+function stopTicking(refresh: () => Promise<void>): void {
+  tickMembers.delete(refresh);
+  if (tickMembers.size === 0 && tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
 
 /**
  * Restore the visible monitors set from localStorage.
@@ -41,6 +75,13 @@ function saveVisibleMonitors(monitors: Set<number>): void {
 }
 
 export function useMonitors() {
+  // Client-only freshness clock shared by every MonitorRow instance.
+  // useState with a fixed key returns the same ref across all callers,
+  // so the 5s tick advances one shared clock. 0 on the server / before
+  // the first tick — isMonitorStale() treats that as "not live yet" and
+  // never reports stale.
+  const now = useState<number>("lnpm-monitor-now", () => 0);
+
   const { data: monitorsResponse, status, error, refresh } = useAsyncData(
     "monitors-list",
     async () => {
@@ -152,6 +193,13 @@ export function useMonitors() {
     if (stored.size > 0) {
       visibleMonitors.value = stored;
     }
+    // Keep the monitor list (and each row's lastSeenMs) fresh so the
+    // "no data in last 10s → red dot" rule stays live.
+    startTicking(now, refresh);
+  });
+
+  onBeforeUnmount(() => {
+    stopTicking(refresh);
   });
 
   // Initialize: show all monitors on first load.
@@ -187,6 +235,8 @@ export function useMonitors() {
     hasError: computed(() => status.value === "error"),
     error,
     refresh,
+    /** Shared freshness clock (0 until the first client tick). */
+    now,
     // Toggle state
     visibleMonitors,
     toggleMonitor,

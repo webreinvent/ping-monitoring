@@ -160,7 +160,7 @@ export class LatencyChart {
                   if (value == null) {
                     result.push(null);
                   } else if (this.gaps[seriesIdx - 1]?.[i]) {
-                    result.push("rgba(148, 163, 184, 0.25)");
+                    result.push("rgba(148, 176, 194, 0.25)");
                   } else {
                     result.push(barColor(value as number));
                   }
@@ -182,7 +182,7 @@ export class LatencyChart {
             label: item.target.name,
             stroke: palette[index % palette.length],
             fill: "transparent",
-            width: 2,
+            width: 1.5,
             spanGaps: true,
             points: { show: false },
             value: (_self: uPlot, rawValue: number | null) => formatLatency(rawValue),
@@ -212,7 +212,19 @@ export class LatencyChart {
         // Line mode (all-monitors): dashboard look — natural auto-scale from 0.
         // Bar mode (selected/compact): headroom above the tallest bar.
         y: isLineMode
-          ? { auto: true, min: 0 }
+          ? {
+              auto: true,
+              // Pin the floor at 0 (latency is non-negative) and auto-fit the
+              // ceiling with ~10% headroom, rounded up to a clean 10ms step —
+              // matching the dashboard's line-mode y-scale. A bare `min: 0`
+              // (no range fn) makes uPlot treat the scale as "min fixed, max
+              // on me" and leave `scales.y.max = null`, so no lines or ticks
+              // render. The range fn is what forces uPlot to compute the max.
+              range: (_u, _min, max) => {
+                const hi = max && max > 0 ? max : 0;
+                return [0, Math.max(10, Math.ceil((hi * 1.1) / 10) * 10)];
+              },
+            }
           : {
               auto: true,
               range: (_u, _min, max) => {
@@ -234,15 +246,15 @@ export class LatencyChart {
               space: (_self: uPlot, _axisIdx: number, _min: number, _max: number, dim: number) =>
                 Math.max(60, dim / 20),
               size: 32,
-              stroke: "rgba(148, 163, 184, 0.36)",
+              stroke: "rgba(148, 176, 194, 0.36)",
               font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               label: () => "",
               ticks: {
-                stroke: "rgba(148, 163, 184, 0.25)",
+                stroke: "rgba(148, 176, 194, 0.25)",
                 size: 4,
               },
               grid: {
-                stroke: "rgba(148, 163, 184, 0.07)",
+                stroke: "rgba(148, 176, 194, 0.07)",
                 width: 1,
               },
               values: (
@@ -260,23 +272,22 @@ export class LatencyChart {
             {
               space: 56,
               size: 56,
-              stroke: "rgba(148, 163, 184, 0.36)",
+              stroke: "rgba(148, 176, 194, 0.36)",
               font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               label: "ms",
               labelFont: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               labelSize: 16,
               ticks: {
-                stroke: "rgba(148, 163, 184, 0.25)",
+                stroke: "rgba(148, 176, 194, 0.25)",
                 size: 4,
               },
               grid: {
-                stroke: "rgba(148, 163, 184, 0.07)",
+                stroke: "rgba(148, 176, 194, 0.07)",
                 width: 1,
               },
-              // Limit Y-axis labels so they don't overlap on narrow charts
-              incrs: [
-                5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 250, 500, 750, 1000, 2000, 5000, 10000,
-              ],
+              // Match the dashboard's Y-axis tick increments so the two charts
+              // produce identical tick spacing for the same data.
+              incrs: [5, 10, 25, 50, 100, 200, 500, 1000],
               values: (
                 self: uPlot,
                 splits: number[],
@@ -617,7 +628,7 @@ function drawThresholdZones(plot: uPlot): void {
  * Return the bar color based on latency threshold.
  */
 function barColor(latencyMs: number): string {
-  if (latencyMs === 0) return "rgba(148, 163, 184, 0.25)";
+  if (latencyMs === 0) return "rgba(148, 176, 194, 0.25)";
   for (const [threshold, color] of barColorThresholds) {
     if (latencyMs < threshold) return color;
   }

@@ -53,7 +53,7 @@
       @delete-client="handleRequestDeleteClient"
     />
   </template>
-  <EmptyState v-else />
+  <EmptyState v-else message="No monitors configured" hint="Start by registering a client." />
   <DeleteMonitorModal
     v-if="pendingDelete"
     :monitor="pendingDelete"
