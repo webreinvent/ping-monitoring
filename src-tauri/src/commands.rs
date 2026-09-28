@@ -218,9 +218,7 @@ pub async fn get_sync_status(state: State<'_, AppState>) -> Result<SyncEvent, Co
 }
 
 #[tauri::command]
-pub async fn trigger_sync_now(
-    state: State<'_, AppState>,
-) -> Result<SyncResult, CommandError> {
+pub async fn trigger_sync_now(state: State<'_, AppState>) -> Result<SyncResult, CommandError> {
     state
         .sync_service
         .trigger_now()

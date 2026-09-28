@@ -133,10 +133,7 @@ impl Database {
                     "CREATE INDEX idx_ping_samples_unsynced ON ping_samples(cloud_synced_at_ms, timestamp_ms)",
                     [],
                 )?;
-                connection.execute(
-                    "UPDATE schema_info SET version = 2",
-                    [],
-                )?;
+                connection.execute("UPDATE schema_info SET version = 2", [])?;
             }
             _ => {}
         }
@@ -437,12 +434,13 @@ impl Database {
              ORDER BY timestamp_ms",
         )?;
         let rows = statement.query_map([since_ms], |row| {
-            let status = probe_status_from_i64(row.get(3)?)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            let status = probe_status_from_i64(row.get(3)?).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
                     3,
                     rusqlite::types::Type::Integer,
                     Box::new(e),
-                ))?;
+                )
+            })?;
             Ok(PingSample {
                 target_id: row.get(0)?,
                 timestamp_ms: row.get(1)?,
@@ -476,12 +474,13 @@ impl Database {
              ORDER BY ps.timestamp_ms",
         )?;
         let rows = statement.query_map([since_ms], |row| {
-            let status = probe_status_from_i64(row.get(3)?)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            let status = probe_status_from_i64(row.get(3)?).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
                     3,
                     rusqlite::types::Type::Integer,
                     Box::new(e),
-                ))?;
+                )
+            })?;
             let sample = PingSample {
                 target_id: row.get(0)?,
                 timestamp_ms: row.get(1)?,

@@ -1,9 +1,4 @@
-use std::{
-    net::IpAddr,
-    process::Stdio,
-    sync::Arc,
-    time::Duration,
-};
+use std::{net::IpAddr, process::Stdio, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use regex::Regex;
@@ -80,7 +75,7 @@ impl PingProbe for SystemPingProbe {
         // `-c 1` / `-n 1` mean "send exactly one echo" — we don't need more.
         // `-W` / `-w` are per-request timeouts in seconds (Unix) / ms (Windows).
         let mut command = if self.unix {
-            let timeout_seconds = ((target.timeout_ms + 999) / 1000).max(1);
+            let timeout_seconds = target.timeout_ms.div_ceil(1000).max(1);
             let mut command = Command::new("ping");
             command
                 .arg("-c")
@@ -131,11 +126,8 @@ impl PingProbe for SystemPingProbe {
         let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
             Ok(Ok(output)) => output,
             Ok(Err(error)) => {
-                let mut sample = PingSample::failure(
-                    target.id.clone(),
-                    timestamp_ms,
-                    ProbeStatus::Error,
-                );
+                let mut sample =
+                    PingSample::failure(target.id.clone(), timestamp_ms, ProbeStatus::Error);
                 sample.resolved_address = Some(address.to_string());
                 sample.error = Some(format!("ping wait failed: {error}"));
                 return sample;
@@ -144,11 +136,8 @@ impl PingProbe for SystemPingProbe {
                 // Hard timeout: the OS binary didn't honor the per-request
                 // timeout (rare, but observed on busy systems). Treat as
                 // Timeout — the dashboard already knows how to render it.
-                let mut sample = PingSample::failure(
-                    target.id.clone(),
-                    timestamp_ms,
-                    ProbeStatus::Timeout,
-                );
+                let mut sample =
+                    PingSample::failure(target.id.clone(), timestamp_ms, ProbeStatus::Timeout);
                 sample.resolved_address = Some(address.to_string());
                 sample.error = Some(format!(
                     "ping exceeded hard timeout of {} ms",
@@ -168,7 +157,7 @@ impl PingProbe for SystemPingProbe {
 ///   * macOS / Linux print a per-reply line (`time=12.3 ms`) **only when
 ///     stdout is a TTY**. When the probe pipes stdout (it always does),
 ///     macOS / Linux omit that line and only print a summary:
-///       `round-trip min/avg/max/stddev = 51.113/51.113/51.113/nan ms`
+///     `round-trip min/avg/max/stddev = 51.113/51.113/51.113/nan ms`
 ///
 /// So we try two sources of latency, in order:
 ///   1. the per-reply `time=` / `time<` token (Windows, and Unix TTY), and
@@ -193,18 +182,14 @@ fn parse_ping_output(
     // Source 1: per-reply `time=12.3`, `time<1`, `time=12`.
     let per_reply_ms = TIME_REGEX
         .captures(&text)
-        .and_then(|captures| {
-            captures.get(1).and_then(|m| m.as_str().parse::<f64>().ok())
-        })
+        .and_then(|captures| captures.get(1).and_then(|m| m.as_str().parse::<f64>().ok()))
         .map(|n| n.max(0.0));
 
     // Source 2 (Unix): `round-trip min/avg/max[/stddev] = X/Y/Z ms` — take
     // the **avg** (second) value. On a single-packet probe min == avg == max.
     let summary_avg_ms = SUMMARY_REGEX
         .captures(&text)
-        .and_then(|captures| {
-            captures.get(2).and_then(|m| m.as_str().parse::<f64>().ok())
-        })
+        .and_then(|captures| captures.get(2).and_then(|m| m.as_str().parse::<f64>().ok()))
         .map(|n| n.max(0.0));
 
     let latency_ms = per_reply_ms.or(summary_avg_ms);
@@ -252,7 +237,7 @@ static TIME_REGEX: std::sync::LazyLock<Regex> =
 /// Match "total loss" phrasings, tolerant of the decimal the OSes print:
 ///   * macOS / Linux:  `100.0% packet loss`  (also `100% loss`, `100% packets`)
 ///   * any platform:   `0 packets received`  /  `0 received`
-/// (case-insensitive; the caller lower-cases the input)
+///     (case-insensitive; the caller lower-cases the input)
 static LOSS_REGEX: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     Regex::new(r"(?:100(?:\.\d+)?%\s*(?:packet\s*)?loss|0\s+packets\s+received|0\s+received)")
         .expect("valid regex")
@@ -404,7 +389,8 @@ mod tests {
             sample.status,
             ProbeStatus::Success,
             "piped macOS summary must be a Success; got {:?} error={:?}",
-            sample.status, sample.error
+            sample.status,
+            sample.error
         );
         let latency = sample.latency_ms.expect("latency on success");
         assert!(
@@ -472,7 +458,8 @@ mod tests {
         let target = Target::new("Down", "10.0.0.99");
         // A host that replies never: `0 packets received` — classify as
         // Timeout even if the loss % line is absent or formatted oddly.
-        let stdout = b"--- 10.0.0.99 ping statistics ---\n1 packets transmitted, 0 packets received\n";
+        let stdout =
+            b"--- 10.0.0.99 ping statistics ---\n1 packets transmitted, 0 packets received\n";
         let sample = parse_ping_output(
             stdout,
             &target,
@@ -549,7 +536,10 @@ mod tests {
             sample.error
         );
         let latency = sample.latency_ms.expect("latency on success");
-        assert!(latency >= 0.0, "latency must be non-negative, got {latency}");
+        assert!(
+            latency >= 0.0,
+            "latency must be non-negative, got {latency}"
+        );
         assert_eq!(
             sample.resolved_address.as_deref(),
             Some("127.0.0.1"),

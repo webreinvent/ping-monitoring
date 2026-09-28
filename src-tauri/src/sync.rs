@@ -171,15 +171,24 @@ impl ClientIdentity {
                 .as_deref()
                 .map(|mac| {
                     // Take last 5 chars of MAC as a short unique suffix
-                    mac.chars().rev().take(5).collect::<String>().chars().rev().collect::<String>()
+                    mac.chars()
+                        .rev()
+                        .take(5)
+                        .collect::<String>()
+                        .chars()
+                        .rev()
+                        .collect::<String>()
                 })
                 .unwrap_or_else(|| {
                     // Fallback: random-ish hex based on current time
-                    format!("{:x}", std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis()
-                        % 0xFFFFFF)
+                    format!(
+                        "{:x}",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis()
+                            % 0xFFFFFF
+                    )
                 })
         );
 
@@ -246,7 +255,11 @@ impl SyncService {
 
     /// Count unsynced samples in the database.
     async fn count_pending(&self) -> u32 {
-        self.database.unsynced_samples(0).ok().map(|s| s.len() as u32).unwrap_or(0)
+        self.database
+            .unsynced_samples(0)
+            .ok()
+            .map(|s| s.len() as u32)
+            .unwrap_or(0)
     }
 
     /// Start the sync background task with the given config.
@@ -288,8 +301,10 @@ impl SyncService {
             // Discover identity once
             let identity = ClientIdentity::discover();
 
-            let mut last_flush_ms =
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+            let mut last_flush_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
 
             loop {
                 let now_ms = std::time::SystemTime::now()
@@ -327,7 +342,10 @@ impl SyncService {
 
                 if samples.is_empty() {
                     last_flush_ms = now_ms;
-                    tokio::time::sleep(std::time::Duration::from_millis(batch_timeout_ms.min(10_000))).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        batch_timeout_ms.min(10_000),
+                    ))
+                    .await;
                     continue;
                 }
 
@@ -338,7 +356,8 @@ impl SyncService {
                     .collect();
 
                 // Collect unique target_ids for marking synced later
-                let target_ids: Vec<String> = samples.iter().map(|(s, _)| s.target_id.clone()).collect();
+                let target_ids: Vec<String> =
+                    samples.iter().map(|(s, _)| s.target_id.clone()).collect();
                 let from_ms = batch.first().map(|s| s.timestamp_ms).unwrap_or(0);
                 let to_ms = batch.last().map(|s| s.timestamp_ms).unwrap_or(0);
 
@@ -369,7 +388,13 @@ impl SyncService {
                         }
                     };
 
-                    match client.post(&endpoint).header("Content-Type", "application/json").body(body.clone()).send().await {
+                    match client
+                        .post(&endpoint)
+                        .header("Content-Type", "application/json")
+                        .body(body.clone())
+                        .send()
+                        .await
+                    {
                         Ok(response) => {
                             let status = response.status();
                             if status.is_success() {
@@ -383,13 +408,19 @@ impl SyncService {
 
                                 // Mark samples as synced
                                 let synced_at = now_ms as i64;
-                                let target_ids_for_mark: Vec<String> = target_ids.iter()
+                                let target_ids_for_mark: Vec<String> = target_ids
+                                    .iter()
                                     .take(max_batch_size)
                                     .cloned()
                                     .collect::<std::collections::HashSet<_>>()
                                     .into_iter()
                                     .collect();
-                                if let Err(e) = database.mark_samples_synced(&target_ids_for_mark, from_ms, to_ms, synced_at) {
+                                if let Err(e) = database.mark_samples_synced(
+                                    &target_ids_for_mark,
+                                    from_ms,
+                                    to_ms,
+                                    synced_at,
+                                ) {
                                     eprintln!("sync: failed to mark samples synced: {e}");
                                 }
 
@@ -426,7 +457,11 @@ impl SyncService {
                     };
                     *sync_status.write().await = SyncStatus::Error;
                     *last_message.write().await = Some(message.clone());
-                    let pending = database.unsynced_samples(0).ok().map(|s| s.len() as u32).unwrap_or(0);
+                    let pending = database
+                        .unsynced_samples(0)
+                        .ok()
+                        .map(|s| s.len() as u32)
+                        .unwrap_or(0);
                     let event = SyncEvent {
                         status: SyncStatus::Error,
                         message: Some(message),
@@ -467,7 +502,9 @@ impl SyncService {
         let config = match config.as_ref() {
             Some(c) => c,
             None => {
-                return Err(self.record_failure("Sync is not configured".to_string()).await)
+                return Err(self
+                    .record_failure("Sync is not configured".to_string())
+                    .await);
             }
         };
 
@@ -562,18 +599,17 @@ impl SyncService {
                 .await);
         }
 
-        let result = response
-            .json::<SyncResult>()
-            .await
-            .unwrap_or(SyncResult {
-                accepted: batch_len as u32,
-                duplicate: 0,
-                rejected: 0,
-            });
+        let result = response.json::<SyncResult>().await.unwrap_or(SyncResult {
+            accepted: batch_len as u32,
+            duplicate: 0,
+            rejected: 0,
+        });
 
         // Mark samples as synced
         let now_ms = crate::domain::unix_time_ms();
-        let _ = self.database.mark_samples_synced(&unique_ids, from_ms, to_ms, now_ms);
+        let _ = self
+            .database
+            .mark_samples_synced(&unique_ids, from_ms, to_ms, now_ms);
 
         // Emit success
         *self.status.write().await = SyncStatus::Success;
@@ -692,12 +728,27 @@ mod tests {
         );
         let json: serde_json::Value = serde_json::to_value(&s).unwrap();
         assert_eq!(json["targetHost"], "1.1.1.1", "samples[].targetHost");
-        assert_eq!(json["timestampMs"], 1786102269039_i64, "samples[].timestampMs");
+        assert_eq!(
+            json["timestampMs"], 1786102269039_i64,
+            "samples[].timestampMs"
+        );
         assert_eq!(json["latencyMs"], 12.5, "samples[].latencyMs");
-        assert_eq!(json["status"], "success", "samples[].status must be a literal string");
-        assert_eq!(json["resolvedAddress"], "1.1.1.1", "samples[].resolvedAddress");
-        assert!(json.get("target_id").is_none(), "target_id must be renamed to targetHost");
-        assert!(json.get("resolved_address").is_none(), "resolvedAddress, not resolved_address");
+        assert_eq!(
+            json["status"], "success",
+            "samples[].status must be a literal string"
+        );
+        assert_eq!(
+            json["resolvedAddress"], "1.1.1.1",
+            "samples[].resolvedAddress"
+        );
+        assert!(
+            json.get("target_id").is_none(),
+            "target_id must be renamed to targetHost"
+        );
+        assert!(
+            json.get("resolved_address").is_none(),
+            "resolvedAddress, not resolved_address"
+        );
 
         // --- Status mapping: each ProbeStatus must collapse to one of
         //     the dashboard's three valid values. ---
@@ -727,9 +778,18 @@ mod tests {
         };
         let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["clientSlug"], "pk-mac-abc12345", "payload.clientSlug");
-        assert_eq!(json["mac_address"], "aa:bb:cc:dd:ee:ff", "payload.mac_address must be snake_case");
-        assert!(json.get("macAddress").is_none(), "macAddress (camelCase) breaks the dashboard client upsert");
-        assert_eq!(json["ipAddress"], "192.168.2.1", "payload.ipAddress must be camelCase");
+        assert_eq!(
+            json["mac_address"], "aa:bb:cc:dd:ee:ff",
+            "payload.mac_address must be snake_case"
+        );
+        assert!(
+            json.get("macAddress").is_none(),
+            "macAddress (camelCase) breaks the dashboard client upsert"
+        );
+        assert_eq!(
+            json["ipAddress"], "192.168.2.1",
+            "payload.ipAddress must be camelCase"
+        );
         assert!(json["samples"].is_array(), "payload.samples");
     }
 }

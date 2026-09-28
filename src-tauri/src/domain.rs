@@ -416,10 +416,12 @@ impl AppSettings {
                 return Err(SettingsValidationError::InvalidScheme);
             }
             // Basic URL validation - must have a host after ://
-            let after_scheme = trimmed.strip_prefix("http://")
+            let after_scheme = trimmed
+                .strip_prefix("http://")
                 .or_else(|| trimmed.strip_prefix("https://"))
                 .unwrap();
-            if after_scheme.is_empty() || !after_scheme.contains('.') && !after_scheme.contains(':') {
+            if after_scheme.is_empty() || !after_scheme.contains('.') && !after_scheme.contains(':')
+            {
                 return Err(SettingsValidationError::InvalidUrl);
             }
         }
