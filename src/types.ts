@@ -58,6 +58,12 @@ export interface PingSample {
   error: string | null;
 }
 
+export interface HostIdentity {
+  username: string;
+  hostname: string;
+  ipAddress: string | null;
+}
+
 export interface QualityMetrics {
   sampleCount: number;
   successCount: number;

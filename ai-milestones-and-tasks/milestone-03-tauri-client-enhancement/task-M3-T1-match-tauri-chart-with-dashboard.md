@@ -2,7 +2,7 @@
 
 > **Milestone:** M3 (Tauri Client Enhancement)
 > **Priority:** High
-> **Status:** ⚪ Not Started
+> **Status:** 🟢 Complete
 > **Estimated Effort:** 4-6 hours
 
 ## Description
@@ -126,3 +126,16 @@ Update the Tauri desktop client's uPlot `LatencyChart` (`src/chart.ts`) to visua
 
 - The dashboard uses a manual-draw workaround (bypasses uPlot's path builder) due to a uPlot bug with merged multi-series data. Evaluate whether the Tauri chart needs the same workaround after the refactor. If `alignSeries` produces the same merged-data pattern, the manual-draw approach may be necessary.
 - The Tauri chart currently has a `compact` mode (smaller, fewer axes). Decide whether to keep compact mode (for tray/mini view) or unify with the main chart. If kept, it should still use the 12-color palette and line-only rendering.
+
+## Completion Notes
+
+- **Completed:** 2026-09-25
+- **Branch:** `feature/M3-T1-match-tauri-chart-with-dashboard` (from synced `develop`)
+- **Files changed:** `src/chart.ts` (chart-construction surgery: bar-mode removed; look constants single-sourced; uniform line series; bbox-guarded threshold/band fills; selection removed from chart scope; `ChartOptions` narrowed to `{ compact?; onRangeChanged? }`; single-arg `render(history)`), `src/main.ts` (all call sites: instantiation without `selectedTargetId`, single-arg `render`, legend swatches import `palette`), `src/chart.test.ts` (NEW — 8 tests: exact-value assertions for `palette`, `THRESHOLD_LINE_COLORS`, `QUALITY_BAND_COLORS` + `resolveQualityBands` edge cases)
+- **Tests:** root `pnpm test` — task-scoped suites green (`src/`-scoped: 7 files / 38 tests), zero regressions vs clean-tree baseline (stash-verified); `src/chart.test.ts` adds +1 file / +8 passing tests; `cargo test --locked` (verification-only, no Rust changes) green — `42 passed; 0 failed; 1 ignored`
+- **Notes:**
+  - Manual-draw workaround (dashboard's merged-data uPlot bug) **not required** — uniform line series with `spanGaps: true` handles gaps natively; quality-band fills drawn via bbox-clamped `fillRect` in `hooks.drawClear`, pure-logic in exported `resolveQualityBands`.
+  - `compact` mode **kept strictly as a popup display toggle** — popup chart construction shares the identical look constants (12-color palette, line-only).
+  - Selection no longer narrows the chart (matches the dashboard's all-series view); selection still drives summary metrics via `renderDashboard`/`renderSummary` in `src/main.ts`.
+  - Desktop-only quality states (`paused`/`unobserved`/`error`) mapped to the disconnected-gray fill — no usable quality data rather than bad latency.
+  - **Deviations:** pre-existing dashboard typecheck errors (`LatencyChart.vue`, `SidebarContent.vue`) and 3 pre-existing dashboard vitest failures are out of diff scope, not introduced by this task, and were not fixed; visual-comparison AC labelled `manual-verified` (Tauri native window not drivable by Playwright); memory-MCP unavailable → file-based persistence used.

@@ -34,6 +34,7 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
       m.id,
       c.slug AS client_slug,
       c.name AS client_name,
+      c.ip_address AS client_ip,
       m.target_host,
       m.target_name,
       ls.status AS last_status,
@@ -53,6 +54,7 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
       id: number;
       client_slug: string;
       client_name: string;
+      client_ip: string | null;
       target_host: string;
       target_name: string | null;
       last_status: string | null;
@@ -67,6 +69,7 @@ export function getAllMonitorsWithLatestState(): MonitorListItem[] {
     id: row.id,
     clientSlug: row.client_slug,
     clientName: row.client_name,
+    clientIp: row.client_ip ?? null,
     targetHost: row.target_host,
     targetName: row.target_name ?? row.target_host,
     status: mapSampleStatus(row.last_status),

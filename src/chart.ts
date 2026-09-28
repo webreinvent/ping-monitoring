@@ -5,12 +5,75 @@ import { calculateTooltipPosition } from "./chart-tooltip";
 import { formatDateTime, formatLatency, stateLabel } from "./i18n";
 import type { HistoryPoint, HistoryResponse, QualityIntervalRecord, QualityState } from "./types";
 
-const palette = ["#5eead4", "#60a5fa", "#c084fc", "#f472b6", "#facc15"];
+/**
+ * Dashboard-matched 12-color series palette (M3-T1).
+ */
+export const palette = [
+  "#3b82f6",
+  "#ef4444",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#f97316",
+  "#14b8a6",
+  "#6366f1",
+  "#84cc16",
+  "#e11d48",
+];
 
 /**
- * Threshold-based bar colors for latency values (ms).
+ * Threshold line colors (ms → rgba), matching the dashboard chart.
  */
-const barColorThresholds: [number, string][] = [
+export const THRESHOLD_LINE_COLORS: Record<number, string> = {
+  50: "rgba(69, 223, 194, 0.45)",   // green — Low
+  100: "rgba(246, 169, 74, 0.45)",  // yellow — Medium
+  150: "rgba(249, 115, 22, 0.45)",  // orange — High
+  200: "rgba(255, 107, 120, 0.45)", // red — Very High
+};
+
+/**
+ * Quality-state background band colors (rgba, alpha baked in), matching the
+ * dashboard's quality-band fills. Exported as single-sourced look constants
+ * (unit-test pinned); the current bars/lines rendering does not draw band
+ * fills — see drawClear.
+ */
+export const QUALITY_BAND_COLORS: Record<QualityState, string> = {
+  veryHigh: "rgba(34, 197, 94, 0.12)",
+  high: "rgba(132, 204, 22, 0.12)",
+  medium: "rgba(234, 179, 8, 0.12)",
+  low: "rgba(249, 115, 22, 0.15)",
+  unstable: "rgba(239, 68, 68, 0.18)",
+  disconnected: "rgba(107, 114, 128, 0.20)",
+  warmingUp: "rgba(156, 163, 175, 0.10)",
+  // Desktop-only states (no dashboard counterpart) — gray, matching the
+  // disconnected semantics: no usable quality data rather than bad latency.
+  paused: "rgba(107, 114, 128, 0.20)",
+  unobserved: "rgba(107, 114, 128, 0.20)",
+  error: "rgba(107, 114, 128, 0.20)",
+};
+
+/**
+ * Convert quality intervals into chart-ready background bands (timestamps in
+ * seconds + dashboard-matched fill colors). Pure — unit-testable.
+ */
+export function resolveQualityBands(
+  intervals: QualityIntervalRecord[],
+  fallbackEndMs: number,
+): { startSec: number; endSec: number; color: string }[] {
+  return intervals.map((interval) => ({
+    startSec: interval.startMs / 1_000,
+    endSec: (interval.endMs ?? fallbackEndMs) / 1_000,
+    color: QUALITY_BAND_COLORS[interval.state] ?? QUALITY_BAND_COLORS.warmingUp,
+  }));
+}
+
+/**
+ * Threshold-based bar colors for latency values (ms). Bars encode their own
+ * quality signal via these fill colors.
+ */
+export const barColorThresholds: [number, string][] = [
   [50, "#4ade80"],      // green — Low
   [100, "#facc15"],      // yellow — Medium
   [200, "#fb923c"],      // orange — High
@@ -73,7 +136,6 @@ export class LatencyChart {
     const actualBarCount = data[0].length;
     const width = Math.max(280, this.container.clientWidth);
     const height = Math.max(this.options.compact ? 80 : 260, this.container.clientHeight);
-    const intervals = this.intervalsForDisplay(history);
 
     // Line mode: used when all monitors are visible (no single target selected) and not compact.
     // Bar mode: used when a single monitor is selected or in compact view.
@@ -147,13 +209,17 @@ export class LatencyChart {
       padding: this.options.compact ? [8, 6, 4, 0] : [16, 24, 8, 12],
       scales: {
         x: { time: true },
-        y: {
-          auto: true,
-          range: (_u, _min, max) => {
-            const hi = Math.max(50, (max || 50) * 2);
-            return [0, Math.ceil(hi / 10) * 10];
-          },
-        },
+        // Line mode (all-monitors): dashboard look — natural auto-scale from 0.
+        // Bar mode (selected/compact): headroom above the tallest bar.
+        y: isLineMode
+          ? { auto: true, min: 0 }
+          : {
+              auto: true,
+              range: (_u, _min, max) => {
+                const hi = Math.max(50, (max || 50) * 2);
+                return [0, Math.ceil(hi / 10) * 10];
+              },
+            },
         y2: {
           auto: false,
           range: () => [0, 1],
@@ -169,7 +235,7 @@ export class LatencyChart {
                 Math.max(60, dim / 20),
               size: 32,
               stroke: "rgba(148, 163, 184, 0.36)",
-              font: "11px inherit",
+              font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               label: () => "",
               ticks: {
                 stroke: "rgba(148, 163, 184, 0.25)",
@@ -192,12 +258,12 @@ export class LatencyChart {
               },
             },
             {
-              space: 48,
-              size: 48,
+              space: 56,
+              size: 56,
               stroke: "rgba(148, 163, 184, 0.36)",
-              font: "11px inherit",
+              font: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               label: "ms",
-              labelFont: "11px inherit",
+              labelFont: "11px Inter, ui-sans-serif, system-ui, sans-serif",
               labelSize: 16,
               ticks: {
                 stroke: "rgba(148, 163, 184, 0.25)",
@@ -226,9 +292,12 @@ export class LatencyChart {
       cursor: {
         drag: { x: false, y: false },
         focus: { prox: 24 },
-        points: isLineMode
-          ? { size: 7, width: 2, fill: (_u, seriesIdx) => palette[(seriesIdx - 1) % palette.length] }
-          : { size: 7, width: 2 },
+        points: {
+          size: 7,
+          width: 2,
+          fill: "rgba(69, 223, 194, 0.1)",
+          stroke: "#45dfc2",
+        },
         y: false,
       },
       legend: { show: false },
@@ -236,7 +305,6 @@ export class LatencyChart {
         drawClear: [
           (u) => {
             if (isLineMode) drawThresholdZones(u);
-            drawIntervals(u, intervals, history.toMs);
           },
         ],
         setCursor: [(u) => this.updateTooltip(u, labels)],
@@ -264,19 +332,6 @@ export class LatencyChart {
     this.plot?.destroy();
     this.plot = null;
     this.tooltip.remove();
-  }
-
-  private intervalsForDisplay(history: HistoryResponse): QualityIntervalRecord[] {
-    if (this.options.compact) {
-      return history.series.flatMap((series) => series.intervals);
-    }
-    if (this.selectedTargetId === null) {
-      return history.series.flatMap((series) => series.intervals);
-    }
-    const selected =
-      history.series.find((series) => series.target.id === this.selectedTargetId) ??
-      history.series[0];
-    return selected?.intervals ?? [];
   }
 
   private updateTooltip(plot: uPlot, labels: string[]): void {
@@ -536,44 +591,26 @@ function aggregateData(history: HistoryResponse, bucketMs: number): HistoryRespo
 }
 
 /**
- * Draw threshold zone bands on the chart background (line mode only).
- * Each zone spans only its own range: 0-50ms, 50-100ms, 100-200ms, >200ms.
+ * Draw threshold lines on the chart background (line mode only), using the
+ * dashboard-matched THRESHOLD_LINE_COLORS (rgba, 0.45 alpha).
  */
 function drawThresholdZones(plot: uPlot): void {
-  const yMax = plot.scales.y.max ?? 50;
-  // Threshold lines: green (50ms) → yellow (100ms) → orange (150ms) → red (200ms)
-  const zones: { low: number; lineColor: string }[] = [
-    { low: 200, lineColor: "#ef4444" },   // red
-    { low: 150, lineColor: "#f97316" },   // orange
-    { low: 100, lineColor: "#eab308" },   // yellow
-    { low: 50, lineColor: "#22c55e" },    // green
-  ];
-  for (const zone of zones) {
-    if (zone.low >= yMax) continue;
-    const y = plot.valToPos(zone.low, "y", true);
+  for (const [thresholdMs, color] of Object.entries(THRESHOLD_LINE_COLORS)) {
+    const threshold = Number(thresholdMs);
+    if (threshold >= (plot.scales.y.max ?? 50)) continue;
+    const y = plot.valToPos(threshold, "y", true);
     if (y < plot.bbox.top || y > plot.bbox.top + plot.bbox.height) continue;
 
-    // Dashed threshold line
     plot.ctx.save();
-    plot.ctx.strokeStyle = zone.lineColor;
+    plot.ctx.strokeStyle = color;
     plot.ctx.lineWidth = 1;
     plot.ctx.setLineDash([8, 4]);
-    plot.ctx.globalAlpha = 0.5;
     plot.ctx.beginPath();
     plot.ctx.moveTo(plot.bbox.left, y);
     plot.ctx.lineTo(plot.bbox.left + plot.bbox.width, y);
     plot.ctx.stroke();
     plot.ctx.restore();
   }
-}
-
-function drawIntervals(
-  _plot: uPlot,
-  _intervals: QualityIntervalRecord[],
-  _fallbackEndMs: number,
-): void {
-  // Intervals are already communicated via the status badge — skip drawing
-  // overlays on the chart to keep the background clean.
 }
 
 /**

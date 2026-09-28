@@ -24,6 +24,7 @@
         </template>
         <template v-else>
           <span class="eyebrow">{{ displayName }}</span>
+          <span v-if="clientIp" class="client-ip">| {{ clientIp }}</span>
           <button
             class="edit-client-name-btn"
             @click.stop="startEdit"
@@ -93,6 +94,8 @@ import type { MonitorListItem } from "#shared/types";
 
 interface Props {
   clientName: string;
+  /** Client-reported LAN IP — rendered as the `name | IP` suffix */
+  clientIp?: string | null;
   clientSlug: string;
   monitors: MonitorListItem[];
   /** Function to check if a monitor is visible */

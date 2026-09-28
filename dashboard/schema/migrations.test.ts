@@ -40,7 +40,7 @@ function extractCreateIndexNames(sql: string): string[] {
 }
 
 describe("migration files", () => {
-  test("all 6 migration files exist", () => {
+  test("all 7 migration files exist", () => {
     const files = readdirSync(migrationsDir).filter(
       (f) => f.endsWith(".sql") && !f.startsWith("index"),
     );
@@ -52,6 +52,7 @@ describe("migration files", () => {
       "004_create_minute_rollups.sql",
       "005_create_indexes.sql",
       "006_add_quality_state_updated_at.sql",
+      "007_add_client_ip_address.sql",
     ];
 
     expect(files.length).toBe(expected.length);
@@ -81,6 +82,14 @@ describe("migration files", () => {
     expect(files[3]).toBe("004_create_minute_rollups.sql");
     expect(files[4]).toBe("005_create_indexes.sql");
     expect(files[5]).toBe("006_add_quality_state_updated_at.sql");
+    expect(files[6]).toBe("007_add_client_ip_address.sql");
+  });
+});
+
+describe("007_add_client_ip_address.sql", () => {
+  test("adds nullable ip_address column to clients", () => {
+    const sql = loadMigration("007_add_client_ip_address.sql");
+    expect(sql).toMatch(/ALTER\s+TABLE\s+clients\s+ADD\s+COLUMN\s+ip_address\s+TEXT/);
   });
 });
 

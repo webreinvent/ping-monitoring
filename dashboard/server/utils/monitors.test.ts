@@ -90,6 +90,7 @@ describe("getAllMonitorsWithLatestState — basic behavior", () => {
       id: 1,
       clientSlug: "test-client",
       clientName: "Test Client",
+      clientIp: null,
       targetHost: "8.8.8.8",
       targetName: "Google DNS",
       status: "up",

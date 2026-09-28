@@ -166,6 +166,11 @@ pub fn get_storage_info(state: State<'_, AppState>) -> Result<StorageInfo, Comma
 }
 
 #[tauri::command]
+pub fn get_host_identity() -> crate::identity::HostIdentity {
+    crate::identity::discover()
+}
+
+#[tauri::command]
 pub fn run_retention_cleanup(state: State<'_, AppState>) -> Result<u64, CommandError> {
     let settings = state.database.load_settings()?;
     Ok(state.database.cleanup(settings.retention_days)?)

@@ -34,12 +34,11 @@
       </div>
 
       <LatencyChart
+        ref="chartRef"
         :data="chartData"
-        :series-config="latencySeriesConfig"
-        :quality-bands="qualityBands"
-        :threshold-value="thresholdMs"
-        :packet-loss-column-index="chartData.length > 2 ? 2 : null"
+        mode="bars"
         :height="320"
+        :window-sec="liveWindowSec"
       />
 
       <MonitorSummary :summary="summary" />
@@ -56,12 +55,12 @@
 <script setup lang="ts">
 import type { HistoryResponse, QualityState, RangeSummary } from "#shared/types";
 import { transformToUPlotData } from "~/composables/useChartSeries";
-import { getQualityBandPaths } from "~/utils/quality-bands";
+import { aggregateLiveSamples } from "~/utils/live-aggregation";
 import { onBeforeUnmount } from "vue";
 
 const route = useRoute();
 const monitorId = computed(() => Number(route.params.id));
-const { selectedPreset: timeWindow, fromMs, toMs } = useTimeWindow();
+const { selectedPreset: timeWindow, currentWindow } = useTimeWindow();
 
 // Redirect to / if monitor ID is invalid
 if (monitorId.value <= 0) {
@@ -70,20 +69,27 @@ if (monitorId.value <= 0) {
 
 // Fetch history data — reactive to time window changes via key
 // Use preset as the key (not fromMs/toMs which use Date.now() and would change constantly)
+// Async-data key — stable (preset-identity based, never Date.now()-based).
+const asyncKey = computed(() => `monitor-detail-${monitorId.value}-${timeWindow.value}`);
+
 const { data: historyData, status, refresh: refreshHistory } = useAsyncData<HistoryResponse>(
-  () => `monitor-detail-${monitorId.value}-${timeWindow.value}`,
+  asyncKey,
   async () => {
+    // Window resolved at fetch time (never a value cached at mount).
+    const w = currentWindow();
     return await $fetch<HistoryResponse>(`/api/monitors/${monitorId.value}`, {
       query: {
-        fromMs: fromMs.value,
-        toMs: toMs.value,
+        fromMs: w.fromMs,
+        toMs: w.toMs,
         maxPoints: 2000,
       },
     });
   },
 );
 
-const loading = computed(() => status.value === "pending");
+// Skeleton only on initial loads (no data yet) — during any refresh,
+// previously fetched data stays visible and swaps in atomically.
+const loading = computed(() => status.value === "pending" && !historyData.value);
 const hasError = computed(() => status.value === "error");
 
 // Extract data from history response
@@ -139,53 +145,73 @@ const lastSeenMs = computed<number | null>(() => {
   return points[points.length - 1]?.timestampMs ?? null;
 });
 
-const thresholdMs = computed<number | null>(() => {
-  const seriesArr = historyData.value?.series ?? [];
-  return seriesArr[0]?.target?.thresholds?.p95LatencyMs ?? null;
+// Trailing-window slice over ascending live timestamps: scan backward from
+// the newest point until the window start is crossed — O(window), not
+// O(retention). Returns the original arrays when everything is in-window.
+function sliceTrailingWindow(
+  ts: Float64Array,
+  vals: Float64Array,
+  fromMs: number,
+): [Float64Array, Float64Array] {
+  let start = ts.length;
+  for (let i = ts.length - 1; i >= 0; i--) {
+    if (ts[i]! * 1000 >= fromMs) {
+      start = i;
+    } else {
+      break;
+    }
+  }
+  if (start === 0) return [ts, vals];
+  return [ts.slice(start), vals.slice(start)];
+}
+
+// Chart data — live client stream first, HTTP history as fallback/context.
+// Real-time: retained live points are sliced to the active preset's trailing
+// window (single-sourced via the time-window composable — `live` ⇒ trailing
+// 60 s) before bucket aggregation, and every incoming sample re-renders via
+// the rAF-debounced update cycle below. Without a client stream there is no
+// real-time data to show; the last received frame holds until the stream
+// reconnects (the WebSocket client auto-reconnects with backoff).
+// Trailing-window anchor: the newest received sample when live, else null.
+// There is always a few seconds of lag between a ping being sent and its
+// sample arriving over the wire (the client syncs in batches); anchoring the
+// window to wall-clock now would leave a blank right-edge band exactly as
+// wide as that lag. Anchoring to the newest sample keeps bars flush against
+// the right edge — matching the desktop app. Non-live presets keep the
+// wall-clock window; at their span the lag is visually negligible.
+const liveAnchorMs = computed<number | null>(() => {
+  if (timeWindow.value !== "live") return null;
+  const live = liveData.value.get(monitorId.value);
+  if (!live || live.timestamps.length === 0) return null;
+  return live.timestamps[live.timestamps.length - 1]! * 1000;
 });
 
-const qualityBands = computed(() => {
-  const seriesArr = historyData.value?.series ?? [];
-  const intervals = seriesArr[0]?.intervals ?? [];
-  return getQualityBandPaths(intervals);
-});
-
-// Chart data — merge HTTP history with live WebSocket data
 const chartData = computed(() => {
-  // If live data is available for this monitor, use it
   const live = liveData.value.get(monitorId.value);
   if (live && live.timestamps.length > 0) {
-    // uPlot format: [timeColumn, valueColumn]
-    return [live.timestamps, live.values];
+    const { fromMs, toMs } = currentWindow();
+    const anchor = liveAnchorMs.value;
+    const sliceFromMs = anchor != null ? anchor - (toMs - fromMs) : fromMs;
+    return aggregateLiveSamples(...sliceTrailingWindow(live.timestamps, live.values, sliceFromMs));
   }
-  // Fall back to HTTP-fetched data
+  // Fall back to HTTP-fetched data (server-side buckets). Latency column
+  // only — bars mode renders no secondary axes.
   if (!historyData.value) return [new Float64Array(0)];
-  return transformToUPlotData(historyData.value);
+  const columns = transformToUPlotData(historyData.value);
+  return [columns[0]!, columns[1]!];
 });
 
-// Series config for the latency chart: latency line + optional packet-loss area.
-// Packet loss is only available from HTTP history (not live WS data), so the
-// series config is built reactively based on whether the 3rd column exists.
-const latencySeriesConfig = computed(() => {
-  const config = [
-    {
-      label: targetName.value,
-      stroke: "#3b82f6",
-      width: 1.5,
-      points: { show: false },
-    },
-  ];
-  // If packet-loss column is present (index 2 in data = index 1 in seriesConfig),
-  // add a second series for it.
-  if (chartData.value.length > 2) {
-    config.push({
-      label: "Packet Loss",
-      stroke: "rgba(255, 107, 120, 0.6)",
-      width: 1,
-      points: { show: false },
-    });
-  }
-  return config;
+// Live-mode x-window bounds in seconds [min, max]: the trailing 60s window
+// anchored at the newest received sample (see `liveAnchorMs`), so the right
+// edge tracks incoming data instead of wall-clock now. Other presets leave
+// `windowSec` undefined so the X-axis spans the actual data bounds
+// (HTTP-fetched history).
+const liveWindowSec = computed<[number, number] | undefined>(() => {
+  const anchor = liveAnchorMs.value;
+  if (anchor == null) return undefined;
+  const { fromMs, toMs } = currentWindow();
+  const widthMs = toMs - fromMs;
+  return [(anchor - widthMs) / 1000, anchor / 1000];
 });
 
 // Live chart integration

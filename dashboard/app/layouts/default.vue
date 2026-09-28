@@ -8,6 +8,7 @@
         <slot />
       </main>
     </div>
+    <div id="toast-stack" class="toast-stack" aria-live="polite" />
   </div>
 </template>
 

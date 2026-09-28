@@ -75,7 +75,7 @@ describe("transformToUPlotData", () => {
     expect(result[0]!.length).toBe(0);
   });
 
-  it("transforms points into [timestamps, latency] Float64Arrays", () => {
+  it("transforms points into [timestamps, latency, packetLoss] Float64Arrays", () => {
     const points: HistoryPoint[] = [
       { timestampMs: 1000000, averageLatencyMs: 20, minimumLatencyMs: 10, maximumLatencyMs: 30, sampleCount: 10, failureCount: 0 },
       { timestampMs: 1060000, averageLatencyMs: 25, minimumLatencyMs: 15, maximumLatencyMs: 35, sampleCount: 10, failureCount: 1 },
@@ -134,12 +134,19 @@ describe("transformToUPlotData", () => {
 
     const result = transformToUPlotData(response);
 
-    // Should return [timestamps, latency]
-    expect(result).toHaveLength(2);
+    // Should return [timestamps, latency, packetLoss]
+    expect(result).toHaveLength(3);
     expect(result[0]!).toBeInstanceOf(Float64Array);
     expect(result[1]!).toBeInstanceOf(Float64Array);
+    expect(result[2]!).toBeInstanceOf(Float64Array);
     expect(result[0]!.length).toBe(3);
     expect(result[1]!.length).toBe(3);
+    expect(result[2]!.length).toBe(3);
+
+    // Packet loss percent per bucket (failureCount / sampleCount * 100)
+    expect(result[2]![0]).toBe(0);
+    expect(result[2]![1]).toBe(10);
+    expect(result[2]![2]).toBe(0);
 
     // Timestamps should be in seconds (ms / 1000)
     expect(result[0]![0]).toBe(1000000 / 1000);

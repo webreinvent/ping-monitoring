@@ -117,6 +117,7 @@ describe("GET /api/monitors — full endpoint response", () => {
       id: 1,
       clientSlug: "alice-desktop-aa00bb11cc22",
       clientName: "Alice's Desktop",
+      clientIp: null,
       targetHost: "8.8.8.8",
       targetName: "Google DNS",
       status: "up",

@@ -13,7 +13,7 @@ lastUpdated: "2026-09-25"
 |----|-------|--------|----------|-----------------|----------------|--------------|
 | M1 | [Backend Platform](./milestone-01-backend-platform/README.md) | 🟢 Complete | Critical | 12-15 days | 11/12 | None |
 | M2 | [Dashboard UI](./milestone-02-dashboard-ui/README.md) | 🟢 Complete | High | 5-7 days | 9/9 | M1 |
-| M3 | [Tauri Client Enhancement](./milestone-03-tauri-client-enhancement/README.md) | ⚪ Not Started | High | 6-9 days | 0/2 | M1, M2 (complete) |
+| M3 | [Tauri Client Enhancement](./milestone-03-tauri-client-enhancement/README.md) | 🟡 In Progress | High | 6-9 days | 1/2 | M1, M2 (complete) |
 
 ## Tasks
 
@@ -40,7 +40,7 @@ lastUpdated: "2026-09-25"
 | M2-T7 | Implement inline client name editing with WebSocket broadcast | 🟢 Complete | Medium | 1-2 hours | M2 | M2-T2, M1-T5, M2-T5 |
 | M2-T8 | Display Nitro API endpoint in dashboard header for Tauri client setup | 🟢 Complete | Medium | 2-3 hours | M2 | M2-T1, M1-T6 |
 | M2-T9 | Add dashboard ingest endpoint with sync icon and pause toggle | 🟢 Complete | High | 6-10 hours | M2 | M1 |
-| M3-T1 | Match Tauri uPlot chart with dashboard chart (palette, line-only, thresholds, quality bands) | ⚪ Not Started | High | 4-6 hours | M3 | None |
+| M3-T1 | Match Tauri uPlot chart with dashboard chart (palette, line-only, thresholds, quality bands) | 🟢 Complete | High | 4-6 hours | M3 | None |
 | M3-T2 | Fix Tauri slug generation to match dashboard 10-hex-char MAC algorithm | ⚪ Not Started | High | 2-3 hours | M3 | None |
 
 ## Features Coverage
@@ -64,10 +64,10 @@ lastUpdated: "2026-09-25"
 
 ## Progress
 
-- **Overall:** 20/23 tasks complete (87%)
+- **Overall:** 21/23 tasks complete (91%)
 - **M1 Backend Platform:** 11/12 tasks complete (92%)
 - **M2 Dashboard UI:** 9/9 tasks complete (100%)
-- **M3 Tauri Client Enhancement:** 0/2 tasks complete (0%)
+- **M3 Tauri Client Enhancement:** 1/2 tasks complete (50%)
 - **Total Estimated Effort:** 23-31 days
 
 ## Execution Order

@@ -134,6 +134,26 @@ function cleanupEmptyMonitor(monitorId: number): void {
 // Helper: send JSON to a peer (Nitro Peer<AdapterInternal>)
 // ============================================================================
 
+/**
+ * Extract the raw `ws` library WebSocket from a Nitro Peer.
+ *
+ * The crossws Peer class exposes `ws` via a prototype getter. Casting via
+ * `(peer as any).ws` does NOT invoke the getter — it reads own-properties only,
+ * which returns `undefined`. The actual underlying socket is reachable via
+ * `peer._internal.ws` (the crossws NodePeer stores `{ ws, request, peers, nodeReq }`
+ * there).
+ *
+ * Test mocks (peer = `{ send, ws }`) still use the legacy `.ws` own-property
+ * shape, so we accept both — preferring `_internal.ws` (the real adapter path)
+ * but falling back to `.ws` when present (mock-friendly).
+ */
+function getRawWs(peer: any): WebSocketType | undefined {
+  const fromInternal = (peer as any)._internal?.ws as WebSocketType | undefined;
+  if (fromInternal) return fromInternal;
+  const direct = (peer as any).ws as WebSocketType | undefined;
+  return direct;
+}
+
 function sendJSON(peer: any, message: OutboundMessage): void {
   try {
     peer.send(JSON.stringify(message));
@@ -242,7 +262,7 @@ export function broadcastSample(
   // Iterate a copy — the set may change during iteration
   for (const ws of [...subSet]) {
     try {
-      if (ws.readyState === 1) {
+      if (ws && ws.readyState === 1) {
         // 1 = OPEN
         ws.send(payload);
       }
@@ -343,7 +363,24 @@ export function broadcastSettingsUpdate(
 export default defineWebSocketHandler({
   open(peer) {
     // Track this peer in the global set for non-monitor-scoped broadcasts
-    const ws: WebSocketType = (peer as any).ws;
+    const ws = getRawWs(peer);
+    if (!ws) {
+      warn("WebSocket open: could not extract raw ws from peer");
+      return;
+    }
+
+    // Suppress socket-level errors from crashing the process. An abrupt
+    // client disconnect (e.g. process exit mid-connection) surfaces as an
+    // ECONNRESET on the underlying socket; with no listener attached it
+    // becomes an unhandled rejection and kills the whole server. The
+    // `close` hook still fires afterwards and runs normal cleanup.
+    if (typeof (ws as any).on === "function") {
+      (ws as any).on("error", (err: unknown) => {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        warn(`WebSocket peer socket error: ${errMessage}`);
+      });
+    }
+
     allPeers.add(ws);
 
     // Send connected acknowledgment (matches existing behavior, retained for backward compat)
@@ -380,7 +417,14 @@ export default defineWebSocketHandler({
     }
 
     // Get the underlying WebSocket from the peer
-    const ws: WebSocketType = (peer as any).ws;
+    const ws = getRawWs(peer);
+    if (!ws) {
+      sendJSON(peer, {
+        type: "error",
+        message: "Could not access underlying WebSocket",
+      });
+      return;
+    }
 
     switch (parsed.type) {
       case "subscribe": {
@@ -404,7 +448,11 @@ export default defineWebSocketHandler({
 
   close(peer) {
     // Remove this peer's WebSocket from all subscription sets
-    const ws: WebSocketType = (peer as any).ws;
+    const ws = getRawWs(peer);
+    if (!ws) {
+      info("WebSocket close: could not extract raw ws from peer");
+      return;
+    }
 
     // Remove from global peer set
     allPeers.delete(ws);
@@ -422,6 +470,14 @@ export default defineWebSocketHandler({
     }
 
     info("WebSocket client disconnected from /ws/ping");
+  },
+
+  error(peer, error) {
+    // crossws-level error hook — log and let the close hook clean up.
+    // Without this hook an error surfaced by the adapter can propagate
+    // as an unhandled rejection.
+    const errMessage = error instanceof Error ? error.message : String(error);
+    warn(`WebSocket handler error: ${errMessage}`);
   },
 });
 

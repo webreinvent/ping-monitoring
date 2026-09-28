@@ -1,0 +1,13 @@
+.git
+node_modules
+**/node_modules
+dashboard/.nuxt
+dashboard/.output
+dashboard/.data
+coverage
+test-results
+src-tauri
+*.db
+.claude
+.llmkb
+.llmkbignore

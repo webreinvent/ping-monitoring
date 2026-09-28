@@ -3,6 +3,7 @@ import type {
   AppSettings,
   DashboardSnapshot,
   HistoryResponse,
+  HostIdentity,
   PingSample,
   StorageInfo,
   SyncEvent,
@@ -36,6 +37,7 @@ export const api = {
   saveSettings: (settings: AppSettings) =>
     invoke<AppSettings>("save_settings", { settings }),
   storageInfo: () => invoke<StorageInfo>("get_storage_info"),
+  hostIdentity: () => invoke<HostIdentity>("get_host_identity"),
   cleanup: () => invoke<number>("run_retention_cleanup"),
   backup: () => invoke<string>("backup_database"),
   showMain: () => invoke<void>("show_main"),

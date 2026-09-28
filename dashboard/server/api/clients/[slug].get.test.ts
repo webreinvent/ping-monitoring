@@ -34,6 +34,7 @@ describe("GET /api/clients/:slug", () => {
       username: "alice",
       hostname: "desktop",
       mac_address: "aa:00:bb:11:cc:22",
+      ip_address: null,
       created_at: new Date(now).toISOString(),
       updated_at: new Date(now).toISOString(),
     });

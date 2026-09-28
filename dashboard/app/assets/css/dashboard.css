@@ -298,6 +298,18 @@ body {
   font-weight: 650;
 }
 
+/* Identity suffix — `<name> | <IP>` display pattern */
+.client-group-header .client-ip {
+  color: var(--muted);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .client-count-badge {
   display: grid;
   min-width: 21px;
@@ -823,4 +835,47 @@ body {
 .retry-btn:focus-visible {
   outline: 2px solid rgba(69, 223, 194, 0.55);
   outline-offset: 2px;
+}
+
+/* Toast notifications (matches Tauri's showToast() look) */
+.toast-stack {
+  position: fixed;
+  z-index: 1000;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 360px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  padding: 10px 13px;
+  color: var(--text);
+  background: rgba(12, 27, 36, 0.97);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0;
+  transform: translateY(7px);
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: auto;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-error {
+  border-color: rgba(255, 107, 120, 0.4);
+  color: var(--text);
+}
+
+.toast-success {
+  border-color: rgba(69, 223, 194, 0.4);
 }

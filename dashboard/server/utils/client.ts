@@ -14,6 +14,8 @@ export interface ClientRow {
   sync_interval_min: number;
   backend_url: string;
   last_synced_at_ms: number | null;
+  /** Client-reported LAN IP (007); null when never reported. */
+  ip_address: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -28,6 +30,8 @@ export interface ClientResponse {
   username: string;
   hostname: string;
   mac_address: string;
+  /** Client-reported LAN IP; null when never reported. */
+  ip_address: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +102,7 @@ export function toClientResponse(row: ClientRow): ClientResponse {
     username: row.username,
     hostname: row.hostname,
     mac_address: row.mac_address,
+    ip_address: row.ip_address ?? null,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
   };
@@ -118,6 +123,7 @@ export function upsertClient(
   username: string,
   hostname: string,
   macAddress: string,
+  ipAddress?: string | null,
 ): ClientRow {
   const db = getDb();
   const now = Date.now();
@@ -129,19 +135,46 @@ export function upsertClient(
   const name = `${username.trim()}@${hostname.trim()}`;
 
   const stmt = db.prepare(`
-    INSERT INTO clients (slug, name, username, hostname, mac_address, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO clients (slug, name, username, hostname, mac_address, ip_address, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET
       username = excluded.username,
       hostname = excluded.hostname,
       mac_address = excluded.mac_address,
+      ip_address = COALESCE(excluded.ip_address, clients.ip_address),
       updated_at = excluded.updated_at
   `);
 
-  stmt.run(slug, name, username, hostname, macAddress, now, now);
+  stmt.run(
+    slug,
+    name,
+    username,
+    hostname,
+    macAddress,
+    ipAddress?.trim() ? ipAddress.trim() : null,
+    now,
+    now,
+  );
 
   // Return the (possibly newly created) row
   return getClientBySlug(slug) as ClientRow;
+}
+
+/**
+ * Update the client-reported LAN IP for an existing client.
+ * Called from the ingest pipeline whenever a batch carries an IP that
+ * differs from the stored one (DHCP changes).
+ *
+ * @param clientId - The client row id
+ * @param ipAddress - The newly reported LAN IP
+ */
+export function updateClientIpAddress(clientId: number, ipAddress: string): void {
+  const db = getDb();
+  db.prepare("UPDATE clients SET ip_address = ?, updated_at = ? WHERE id = ?").run(
+    ipAddress.trim(),
+    Date.now(),
+    clientId,
+  );
 }
 
 /**

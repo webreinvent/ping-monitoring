@@ -227,6 +227,30 @@ select:focus-visible {
   transform: translateY(1px);
 }
 
+.button:focus-visible,
+.range-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(69, 223, 194, 0.28);
+}
+
+.button.primary:focus-visible {
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 0 3px rgba(69, 223, 194, 0.36);
+}
+
+.button.danger:focus-visible {
+  border-color: #ff97a2;
+  box-shadow: 0 0 0 3px rgba(255, 107, 120, 0.36);
+}
+
+.button[disabled],
+.range-button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .button.primary {
   border-color: rgba(69, 223, 194, 0.46);
   color: #03120f;
@@ -286,6 +310,19 @@ select:focus-visible {
 .button.danger-text:hover {
   border-color: rgba(255, 107, 120, 0.28);
   background: var(--danger-soft);
+}
+
+.button.danger {
+  border-color: rgba(255, 107, 120, 0.46);
+  color: #1f0509;
+  background: linear-gradient(135deg, #ff97a2, var(--danger));
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(255, 107, 120, 0.13);
+}
+
+.button.danger:hover {
+  border-color: var(--danger);
+  background: linear-gradient(135deg, #ffb3ba, #ff8a95);
 }
 
 .workspace {
@@ -366,6 +403,59 @@ select:focus-visible {
   border-color: rgba(69, 223, 194, 0.23);
   color: var(--accent-bright);
   background: var(--accent-soft);
+}
+
+.delete-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 14px);
+  margin: 12px 7px 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top: 1px solid var(--line);
+}
+
+.delete-all .ui-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.host-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 260px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.host-badge strong {
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.host-badge .host-sep {
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.host-badge code {
+  color: var(--muted-strong);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
 }
 
 .target-list {
@@ -1054,19 +1144,27 @@ select:focus-visible {
   width: 32px;
   min-width: 32px;
   height: 32px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   padding: 0;
   place-items: center;
-  color: var(--muted);
-  background: transparent;
+  color: var(--muted-strong);
+  background: rgba(255, 255, 255, 0.025);
   font-size: 18px;
   cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
 }
 
 .modal-close:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--muted);
+}
+
+.modal-close:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(69, 223, 194, 0.28);
 }
 
 .form-grid {
@@ -1245,8 +1343,8 @@ select:focus-visible {
 .modal footer {
   justify-content: space-between;
   gap: 12px;
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -1261,7 +1359,8 @@ select:focus-visible {
 }
 
 .modal footer .button {
-  min-width: 88px;
+  min-width: 96px;
+  min-height: 40px;
   padding-right: 16px;
   padding-left: 16px;
   text-align: center;
@@ -1271,8 +1370,24 @@ select:focus-visible {
   width: min(430px, calc(100vw - 36px));
 }
 
+.compact-modal header h3 {
+  line-height: 1.45;
+}
+
 .compact-modal label {
   margin-bottom: 12px;
+}
+
+.confirm-body {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.confirm-body p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .update-modal {

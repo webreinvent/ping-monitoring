@@ -3,6 +3,8 @@ import type { MonitorListItem, MonitorsListResponse } from "#shared/types";
 interface MonitorGroup {
   clientSlug: string;
   clientName: string;
+  /** Client-reported LAN IP (identity display suffix); null when never reported */
+  clientIp: string | null;
   monitors: MonitorListItem[];
 }
 
@@ -47,9 +49,28 @@ export function useMonitors() {
     },
   );
 
-  // Group by client
+  // Monitors hidden by an optimistic local deletion while their DELETE is in
+  // flight. The sidebar restores these (then re-fetches the canonical list)
+  // when the DELETE fails, so the overlay never outlives the request.
+  // Shared via useState so the sidebar and charts hide the row together.
+  const removedMonitorIds = useState<Set<number>>("lnpm-removed-monitor-ids", () => new Set());
+
+  /** Optimistically hide the given monitors (until restore or a re-fetch). */
+  function removeMonitorsLocally(ids: number[]): void {
+    const next = new Set(removedMonitorIds.value);
+    for (const id of ids) next.add(id);
+    removedMonitorIds.value = next;
+  }
+
+  /** Undo every optimistic local removal (used on DELETE failure). */
+  function restoreRemovedMonitors(): void {
+    removedMonitorIds.value = new Set();
+  }
+
+  // Group by client (optimistically-removed monitors are excluded)
   const groupedByClient = computed<MonitorGroup[]>(() => {
-    const monitors = monitorsResponse.value?.monitors ?? [];
+    const removed = removedMonitorIds.value;
+    const monitors = (monitorsResponse.value?.monitors ?? []).filter((m) => !removed.has(m.id));
     const map = new Map<string, MonitorListItem[]>();
 
     for (const m of monitors) {
@@ -64,6 +85,7 @@ export function useMonitors() {
       groups.push({
         clientSlug: slug,
         clientName: items[0]!.clientName,
+        clientIp: items[0]!.clientIp ?? null,
         monitors: items,
       });
     }
@@ -155,8 +177,12 @@ export function useMonitors() {
   );
 
   return {
-    monitors: computed<MonitorListItem[]>(() => monitorsResponse.value?.monitors ?? []),
+    monitors: computed<MonitorListItem[]>(() =>
+      (monitorsResponse.value?.monitors ?? []).filter((m) => !removedMonitorIds.value.has(m.id)),
+    ),
     groupedByClient,
+    removeMonitorsLocally,
+    restoreRemovedMonitors,
     loading: computed(() => status.value === "pending"),
     hasError: computed(() => status.value === "error"),
     error,

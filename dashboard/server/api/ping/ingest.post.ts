@@ -82,6 +82,7 @@ export default defineEventHandler(async (event) => {
       username: body.username,
       hostname: body.hostname,
       mac_address: body.mac_address,
+      ipAddress: body.ipAddress,
       samples: samples as PingSampleIngest[],
     };
 
@@ -93,6 +94,7 @@ export default defineEventHandler(async (event) => {
         username: payload.username,
         hostname: payload.hostname,
         mac_address: payload.mac_address,
+        ipAddress: payload.ipAddress,
       },
     );
 
@@ -136,7 +138,13 @@ export default defineEventHandler(async (event) => {
     // F7: Broadcast new samples to WebSocket subscribers (fire-and-forget, non-blocking)
     // F12: Quality state is already updated by post-ingest classification in ping-ingest.ts
     if (result.acceptedSamples && result.acceptedSamples.length > 0) {
-      broadcastAcceptedSamples(result.acceptedSamples);
+      // Fire-and-forget; catch any rejection so a broadcast failure can't
+      // surface as an unhandled promise rejection.
+      broadcastAcceptedSamples(result.acceptedSamples).catch((err) => {
+        logError("WebSocket broadcast failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     }
 
     return sendResponse(event, statusCode, response);

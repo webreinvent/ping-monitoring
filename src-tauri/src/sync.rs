@@ -80,6 +80,10 @@ struct IngestPayload {
     /// Dashboard reads `mac_address` (snake_case) on the top-level body.
     #[serde(rename = "mac_address")]
     mac_address: Option<String>,
+    /// Client-reported LAN IP (the desktop app's probed address) — the
+    /// dashboard stores it on the client row for the `<name> | <IP>`
+    /// identity display. Serializes camelCase (`ipAddress`).
+    ip_address: Option<String>,
     samples: Vec<IngestSample>,
 }
 
@@ -145,6 +149,7 @@ struct ClientIdentity {
     username: String,
     hostname: String,
     mac_address: Option<String>,
+    ip_address: Option<String>,
 }
 
 impl ClientIdentity {
@@ -181,6 +186,9 @@ impl ClientIdentity {
             username,
             hostname,
             mac_address,
+            // Same probe the host-identity badge uses — keeps the IP shown
+            // in the desktop header and in the dashboard identical.
+            ip_address: crate::identity::probe_lan_address().map(|address| address.to_string()),
         }
     }
 }
@@ -330,6 +338,7 @@ impl SyncService {
                     username: identity.username.clone(),
                     hostname: identity.hostname.clone(),
                     mac_address: identity.mac_address.clone(),
+                    ip_address: identity.ip_address.clone(),
                     samples: batch,
                 };
 
@@ -498,6 +507,7 @@ impl SyncService {
             username: identity.username,
             hostname: identity.hostname,
             mac_address: identity.mac_address,
+            ip_address: identity.ip_address,
             samples: batch,
         };
 
@@ -672,12 +682,14 @@ mod tests {
             username: "pk".into(),
             hostname: "mac".into(),
             mac_address: Some("aa:bb:cc:dd:ee:ff".into()),
+            ip_address: Some("192.168.2.1".into()),
             samples: vec![s],
         };
         let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["clientSlug"], "pk-mac-abc12345", "payload.clientSlug");
         assert_eq!(json["mac_address"], "aa:bb:cc:dd:ee:ff", "payload.mac_address must be snake_case");
         assert!(json.get("macAddress").is_none(), "macAddress (camelCase) breaks the dashboard client upsert");
+        assert_eq!(json["ipAddress"], "192.168.2.1", "payload.ipAddress must be camelCase");
         assert!(json["samples"].is_array(), "payload.samples");
     }
 }

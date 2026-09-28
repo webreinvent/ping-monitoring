@@ -4,6 +4,7 @@ import { ref, computed, watch } from "vue";
  * Time window preset definitions.
  */
 const TIME_WINDOW_PRESETS: Record<string, number> = {
+  "live": 60_000,
   "5m": 300_000,
   "10m": 600_000,
   "30m": 1_800_000,
@@ -63,10 +64,23 @@ export function useTimeWindow() {
     }
   }
 
+  /**
+   * Compute the currently selected window (epoch ms) fresh on each call.
+   * Sliding consumers (live-window re-resolution) call this at fetch time so
+   * the window tracks "now"; duration resolution stays single-sourced in
+   * TIME_WINDOW_PRESETS.
+   */
+  function currentWindow(): { fromMs: number; toMs: number } {
+    const now = Date.now();
+    const duration = TIME_WINDOW_PRESETS[selectedPreset.value] ?? 3_600_000;
+    return { fromMs: now - duration, toMs: now };
+  }
+
   return {
     selectedPreset,
     fromMs,
     toMs,
     selectPreset,
+    currentWindow,
   };
 }

@@ -1625,3 +1625,33 @@ pub enum SyncStatus { Off, Paused, Idle, Syncing, Success, Error }
 | ADR-078 | #[serde(default)] for AppSettings Backward Compat | Old saved JSON loads without new fields; no migration or manual upgrade needed; tested with deserialization test |
 
 *Last updated: 2026-08-06 (Agent 04 — M2-T9 cloud sync service conventions appended)*
+
+## LNPM Cloud Dashboard — New Conventions (2026-09-25, M3-T1)
+
+### Chart-Look Constants Single-Sourcing (M3-T1)
+
+`src/chart.ts` (Tauri frontend) now exports its chart-look constants single-sourced so the desktop app renders with the dashboard's exact visual language:
+
+- **`palette`** — the dashboard's canonical 12-color series palette. Consumers (e.g., `src/main.ts` legend swatches) import it and index via `palette[index % palette.length]` — never duplicate the array.
+- **`THRESHOLD_LINE_COLORS`** — `Record<number, string>` mapping threshold ms values (50/100/150/200) to the dashboard's rgba line colors (0.45 alpha); dashed `[8, 4]` stroke style.
+- **`QUALITY_BAND_COLORS`** — `Record<QualityState, string>` covering **all 10 repo states**: the 7 dashboard-canonical band fills plus the desktop-only `paused`/`unobserved`/`error` states mapped to disconnected gray (`rgba(107, 114, 128, 0.20)`) — "no usable quality data rather than bad latency". The repo's `QualityState` union (`src/types.ts`) is broader than the dashboard's; exhaustive records force explicit mappings, and the `??` fallback guards future drift.
+- **`resolveQualityBands(intervals, fallbackEndMs)`** — pure transform from `QualityIntervalRecord[]` (epoch ms) to uPlot-seconds band fills `{ startSec, endSec, color }`. Open-ended intervals (`endMs: null`) close at the fallback end; unmapped state → warmingUp color. Testable without a chart/DOM context.
+
+### Chart-Construction Conventions (M3-T1)
+
+- **Line-only, uniform series**: every series renders as a line (`spanGaps: true`, width `1.5`, points hidden). Bar mode removed (`barsPath`/`barColor`/`barColorThresholds`/`isLineMode` gone). NaN gaps are handled natively via `spanGaps` — the dashboard's manual-draw workaround (uPlot merged-data bug) is NOT needed on the Tauri chart.
+- **Selection decoupled from chart scope**: the chart renders all series unconditionally; selection no longer narrows the chart (matches the dashboard's all-series view). Selection still drives summary metrics via `renderDashboard`/`renderSummary` in `src/main.ts` only.
+- **`ChartOptions` = `{ compact?; onRangeChanged? }`** — `compact` retained strictly as a popup display toggle (identical look constants, smaller axes); `render(history)` is single-arg.
+- **Exact-value look tests** (`src/chart.test.ts`): palette/threshold/band color maps are pinned with `toEqual` exact-value assertions (plus wrap-around and `resolveQualityBands` edge cases), so look drift fails loudly at CI instead of rendering subtly wrong.
+
+### Decision: Selection Decoupled from Chart Scope (ADR-079)
+
+The Tauri chart renders all series regardless of selection; selection drives summary metrics only. Matches the dashboard's all-series view. Trade-off accepted: the desktop app no longer offers per-target chart isolation (summary metrics remain target-specific).
+
+### ADRs — M3-T1 Chart Match
+
+| ADR | Decision | Summary |
+|-----|----------|---------|
+| ADR-079 | Selection Decoupled from Chart Scope | All-series rendering matches the dashboard; selection drives summary metrics only; per-target chart isolation intentionally dropped in the desktop view |
+
+*Last updated: 2026-09-25 (M3-T1 chart-match conventions appended)*

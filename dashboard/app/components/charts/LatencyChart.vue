@@ -5,14 +5,7 @@
 <script setup lang="ts">
 import uPlot from "uplot";
 
-interface QualityBand {
-  /** Start timestamp in seconds */
-  start: number;
-  /** End timestamp in seconds */
-  end: number;
-  /** Background color (CSS rgba) */
-  color: string;
-}
+import { BAR_GAP_FILL, barFillColor, medianLatencyFill } from "~/utils/bars";
 
 interface Props {
   /** uPlot data: column 0 is timestamps (seconds), column 1+ are values */
@@ -21,22 +14,30 @@ interface Props {
   seriesConfig?: uPlot.Series[];
   /** Height in pixels (default 300) */
   height?: number;
-  /** Quality interval bands to render as background regions */
-  qualityBands?: QualityBand[];
-  /** Horizontal threshold line Y value (in ms) — single threshold (backward compat) */
-  thresholdValue?: number | null;
-  /** Multiple horizontal threshold lines Y values (in ms) — takes precedence over thresholdValue */
+  /**
+   * Render mode. `"line"` (default) draws connected latency lines with
+   * optional threshold guides. `"bars"` draws threshold-colored latency bars
+   * whose fills are identical to the desktop (Tauri) chart's bar mode — used
+   * by the single-monitor detail view. Bars mode suppresses threshold guides
+   * and any secondary axes, and applies the bar-mode y-scale headroom.
+   */
+  mode?: "line" | "bars";
+  /** Multiple horizontal threshold lines Y values (in ms) — line mode only */
   thresholdValues?: number[];
-  /** Index of the series column that represents packet loss % (rendered on secondary axis) */
-  packetLossColumnIndex?: number | null;
+  /**
+   * Optional explicit x-window in seconds [min, max]. When supplied, the
+   * chart anchors to these bounds instead of computing from the data column.
+   * Used by live mode where the trailing 60s window must always be visible,
+   * even when only a handful of samples have arrived so far.
+   */
+  windowSec?: [number, number];
 }
 
 const props = withDefaults(defineProps<Props>(), {
   height: 300,
-  qualityBands: () => [],
-  thresholdValue: null,
+  mode: "line",
   thresholdValues: () => [],
-  packetLossColumnIndex: null,
+  windowSec: undefined,
 });
 
 const wrapperRef = ref<HTMLDivElement>();
@@ -65,8 +66,20 @@ function formatYAxisTick(value: number, max: number): string {
 /**
  * Compute an explicit x-scale from the data column 0 (timestamps in seconds).
  * Falls back to a generic time scale if the data is missing or empty.
+ * When `windowSec` is provided (live mode), the bounds are taken from it
+ * directly — the trailing 60s window must always be visible, even when only
+ * a handful of samples have arrived so far.
  */
 function computeXScale(data: Float64Array[]): { time: true; min?: number; max?: number } {
+  if (props.windowSec) {
+    const [lo, hi] = props.windowSec;
+    const span = Math.max(1, hi - lo);
+    return {
+      time: true,
+      min: lo - span * 0.005,
+      max: hi + span * 0.005,
+    };
+  }
   const ts = data[0];
   if (!ts || ts.length === 0) {
     return { time: true };
@@ -94,12 +107,7 @@ function computeXScale(data: Float64Array[]): { time: true; min?: number; max?: 
 
 function buildOptions(): Record<string, unknown> {
   const seriesConfig = props.seriesConfig ?? [];
-  const bands = props.qualityBands;
-  const threshold = props.thresholdValue;
-  const thresholds = props.thresholdValues.length > 0 ? props.thresholdValues : (threshold != null ? [threshold] : []);
-
-  // Determine if packet loss series is present
-  const hasPacketLoss = props.packetLossColumnIndex !== null && props.packetLossColumnIndex >= 2;
+  const thresholds = props.mode === "line" ? props.thresholdValues : [];
 
   // Threshold color mapping — matching desktop app and design tokens
   const THRESHOLD_COLORS: Record<number, string> = {
@@ -110,24 +118,33 @@ function buildOptions(): Record<string, unknown> {
   };
 
   // Build series array: time + data series.
-  // For each non-time series, force spanGaps so NaN holes don't break the line
-  // (uPlot's auto-scaler treats a fully-NaN column as having no range; spanning
-  // ensures adjacent valid points still connect).
-  // The packet-loss column (if present) is assigned to the secondary y2 scale.
-  const series: uPlot.Series[] = [
-    { label: "Time" },
-    ...seriesConfig.map((s, i) => {
-      const colIdx = i + 2; // column index in data (0=time, 1=first data)
-      const isLoss = hasPacketLoss && colIdx === props.packetLossColumnIndex;
-      return {
-        ...s,
-        spanGaps: true,
-        ...(isLoss ? { scale: "y2" } : {}),
-      };
-    }),
-  ];
+  // Bars mode suppresses uPlot's native series drawing entirely (transparent
+  // stroke, zero width, no points) — all geometry is drawn manually in the
+  // draw hook below, mirroring the desktop chart's bar-mode fills. Line mode
+  // forces spanGaps so NaN holes don't break the line (uPlot's auto-scaler
+  // treats a fully-NaN column as having no range; spanning ensures adjacent
+  // valid points still connect).
+  const series: uPlot.Series[] =
+    props.mode === "bars"
+      ? [
+          { label: "Time" },
+          {
+            label: "Latency",
+            stroke: "transparent",
+            fill: "transparent",
+            width: 0,
+            spanGaps: false,
+            points: { show: false },
+          },
+        ]
+      : [
+          { label: "Time" },
+          ...seriesConfig.map((s) => ({ ...s, spanGaps: true })),
+        ];
 
-  // Scales: always include x + y (latency). Add y2 (packet loss %) if present.
+  // Scales: x + y (latency). Bars mode applies headroom in the draw hook so
+  // bars occupy roughly the lower half of the plot (matching Tauri's
+  // bar-mode y-scale); line mode keeps the tighter auto range.
   const scales: Record<string, unknown> = {
     x: computeXScale(props.data),
     y: {
@@ -135,16 +152,8 @@ function buildOptions(): Record<string, unknown> {
       min: 0,
     },
   };
-  if (hasPacketLoss) {
-    scales.y2 = {
-      auto: false,
-      min: 0,
-      max: 100,
-      range: (_self: unknown, min: number | null, max: number | null) => [0, 100],
-    };
-  }
 
-  // Axes: x-axis + left y-axis (latency ms) + optional right y2-axis (packet loss %)
+  // Axes: x-axis + left y-axis (latency ms)
   const axes: Array<Record<string, unknown>> = [
     {
       // x-axis
@@ -185,33 +194,11 @@ function buildOptions(): Record<string, unknown> {
     },
   ];
 
-  if (hasPacketLoss) {
-    axes.push({
-      // y2-axis (right) — packet loss %
-      scale: "y2",
-      stroke: "rgba(255, 107, 120, 0.36)",
-      font: "10px Inter, ui-sans-serif, system-ui, sans-serif",
-      label: "loss %",
-      labelFont: "10px Inter, ui-sans-serif, system-ui, sans-serif",
-      labelSize: 14,
-      size: 44,
-      side: 1,
-      ticks: { stroke: "rgba(255, 107, 120, 0.25)", size: 3 },
-      grid: { stroke: "rgba(255, 107, 120, 0.06)", width: 1 },
-      incrs: [0, 25, 50, 75, 100],
-      values: (
-        _self: uPlot,
-        splits: number[],
-        _axisIdx: number,
-      ) => splits.map((s) => `${Math.round(s)}%`),
-    });
-  }
 
   const opts: Record<string, unknown> = {
     title: "",
     // Padding matches the desktop chart so axis labels have breathing room.
-    // Extra right padding when packet-loss axis is present.
-    padding: [16, hasPacketLoss ? 56 : 24, 8, 12],
+    padding: [16, 24, 8, 12],
     scales,
     series,
     axes,
@@ -244,27 +231,7 @@ function buildOptions(): Record<string, unknown> {
         // uPlot will fire another drawClear once the layout is settled.
         if (!u.scale || !u.bbox) return;
 
-        // Draw quality interval bands
-        if (bands && bands.length > 0) {
-          const { bbox, scale, toLeft } = u;
-          const xScale = scale["x"];
-          if (xScale) {
-            for (const band of bands) {
-              const x0 = toLeft(xScale, band.start);
-              const x1 = toLeft(xScale, band.end);
-              if (x0 >= bbox.width || x1 < 0) continue;
-              const xStart = Math.max(0, x0);
-              const xEnd = Math.min(bbox.width, x1);
-              ctx.save();
-              ctx.globalAlpha = 1;
-              ctx.fillStyle = band.color;
-              ctx.fillRect(xStart, bbox.top, xEnd - xStart, bbox.height);
-              ctx.restore();
-            }
-          }
-        }
-
-        // Draw threshold lines
+        // Draw threshold lines (line mode only — bars mode renders no guides)
         if (thresholds.length > 0) {
           const { bbox, scale, toBottom } = u;
           const yScale = scale["y"];
@@ -325,9 +292,16 @@ function buildOptions(): Record<string, unknown> {
             }
           }
         }
-        if (yMax <= 0) return;
+        if (yMax <= 0 && props.mode !== "bars") return;
         const resolvedYMin = yMin === Infinity ? 0 : Math.min(0, yMin);
-        const resolvedYMax = Math.ceil((yMax * 1.1) / 10) * 10;
+        // Bars mode applies headroom (2× max, minimum 50, rounded up to 10ms)
+        // so bars occupy roughly the lower half of the plot — matching
+        // Tauri's bar-mode y-scale. Line mode keeps the tighter 10% headroom.
+        const rawMax = yMax <= 0 ? 0 : yMax;
+        const resolvedYMax =
+          props.mode === "bars"
+            ? Math.ceil(Math.max(50, rawMax * 2) / 10) * 10
+            : Math.ceil((yMax * 1.1) / 10) * 10;
 
         // Mirror the resolved y range onto the scale so valToPos is consistent
         // with our drawing math AND uPlot's axis ticks show real values.
@@ -337,6 +311,55 @@ function buildOptions(): Record<string, unknown> {
         u.scales.y._max = resolvedYMax;
 
         const pxRatio = u.pxRatio ?? 1;
+
+        if (props.mode === "bars") {
+          // Bars mode — threshold-colored bars with fills identical to the
+          // desktop (Tauri) chart's bar mode. Buckets without a usable
+          // latency (NaN) render as gray bars at the median-fill height;
+          // zero-latency buckets draw nothing (matching the desktop).
+          const ys = data[1];
+          if (!ys || ys.length === 0) return;
+          const median = medianLatencyFill(ys);
+          const plotWidth = u.bbox?.width ?? 0;
+          // valToPos(..., true) returns ABSOLUTE canvas-device coordinates —
+          // they include the left axis offset (bbox.left). The off-plot cull
+          // must therefore be measured against [bbox.left, bbox.left +
+          // bbox.width], not [0, bbox.width]; otherwise the rightmost bars
+          // (those past bbox.width in absolute space) are silently skipped,
+          // leaving a blank band along the right edge as wide as the y-axis.
+          const bboxLeft = u.bbox?.left ?? 0;
+          const bboxRight = bboxLeft + plotWidth;
+          const barWidth = Math.max(
+            1,
+            Math.min(
+              12,
+              Math.round(((plotWidth - 40) / Math.max(1, xs.length)) * 0.8),
+            ),
+          );
+          const yBase = u.valToPos(0, "y", true);
+          for (let i = 0; i < xs.length; i++) {
+            const t = xs[i]!;
+            const v = ys[i]!;
+            if (t == null || Number.isNaN(t)) continue;
+            const x = u.valToPos(t, "x", true);
+            if (x < bboxLeft - barWidth || x > bboxRight + barWidth) continue;
+            if (v == null || Number.isNaN(v)) {
+              const yTop = u.valToPos(median, "y", true);
+              ctx.save();
+              ctx.fillStyle = BAR_GAP_FILL;
+              ctx.fillRect(x - barWidth / 2, yTop, barWidth, Math.max(1, yBase - yTop));
+              ctx.restore();
+              continue;
+            }
+            if (v === 0) continue;
+            const yTop = u.valToPos(v, "y", true);
+            ctx.save();
+            ctx.fillStyle = barFillColor(v);
+            ctx.fillRect(x - barWidth / 2, yTop, barWidth, Math.max(1, yBase - yTop));
+            ctx.restore();
+          }
+          return;
+        }
 
         for (let si = 1; si < data.length; si++) {
           const ys = data[si];
@@ -428,37 +451,54 @@ function rebuildChart(): void {
  * `chart.scales.<key>.min/max` and calling `redraw(true)` is the only known
  * reliable way to recover.
  */
+// uPlot's public Scale type omits the internal `_min`/`_max` fields it uses
+// for scale caching; direct-mutation recovery has to write those too, so we
+// widen the type locally instead of casting at every mutation site.
+type ScaleInternal = uPlot.Scale & { _min?: number | null; _max?: number | null };
+
 function ensureScalesResolved(): void {
   if (!chart) return;
   let mutated = false;
+  const xScale = chart.scales.x as ScaleInternal | undefined;
+  const yScale = chart.scales.y as ScaleInternal | undefined;
+  if (!xScale || !yScale) return;
 
-  // X scale: compute min/max from data column 0 (timestamps in seconds).
-  if (chart.scales.x.min == null || chart.scales.x.max == null) {
-    const ts = props.data[0];
-    if (ts && ts.length > 0) {
-      let lo = Infinity;
-      let hi = -Infinity;
-      for (let i = 0; i < ts.length; i++) {
-        const v = ts[i]!;
-        if (!Number.isNaN(v)) {
-          if (v < lo) lo = v;
-          if (v > hi) hi = v;
-        }
-      }
-      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
-        chart.scales.x.min = lo;
-        chart.scales.x.max = hi;
-        chart.scales.x._min = lo;
-        chart.scales.x._max = hi;
+  // X scale: prefer windowSec (live mode) then compute from data column 0.
+  if (xScale.min == null || xScale.max == null) {
+    if (props.windowSec) {
+      const [lo, hi] = props.windowSec;
+      if (hi > lo) {
+        xScale.min = lo;
+        xScale.max = hi;
+        xScale._min = lo;
+        xScale._max = hi;
         mutated = true;
+      }
+    } else {
+      const ts = props.data[0];
+      if (ts && ts.length > 0) {
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (let i = 0; i < ts.length; i++) {
+          const v = ts[i]!;
+          if (!Number.isNaN(v)) {
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
+        }
+        if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
+          xScale.min = lo;
+          xScale.max = hi;
+          xScale._min = lo;
+          xScale._max = hi;
+          mutated = true;
+        }
       }
     }
   }
 
   // Y scale: compute min/max from the latency series only (column 1).
-  // The packet-loss column (if present) lives on the y2 scale (0-100%) and
-  // must NOT influence the latency auto-scale.
-  if (chart.scales.y.min == null || chart.scales.y.max == null) {
+  if (yScale.min == null || yScale.max == null) {
     let yMin = Infinity;
     let yMax = -Infinity;
     const latencyCol = props.data[1];
@@ -473,23 +513,18 @@ function ensureScalesResolved(): void {
     }
     if (yMax > 0) {
       const min = yMin === Infinity ? 0 : Math.min(0, yMin);
-      const max = Math.ceil((yMax * 1.1) / 10) * 10;
-      chart.scales.y.min = min;
-      chart.scales.y.max = max;
-      chart.scales.y._min = min;
-      chart.scales.y._max = max;
+      const max =
+        props.mode === "bars"
+          ? Math.ceil(Math.max(50, yMax * 2) / 10) * 10
+          : Math.ceil((yMax * 1.1) / 10) * 10;
+      yScale.min = min;
+      yScale.max = max;
+      yScale._min = min;
+      yScale._max = max;
       mutated = true;
     }
   }
 
-  // Y2 scale (packet loss %): fixed 0-100 range.
-  if (chart.scales.y2 && (chart.scales.y2.min == null || chart.scales.y2.max == null)) {
-    chart.scales.y2.min = 0;
-    chart.scales.y2.max = 100;
-    chart.scales.y2._min = 0;
-    chart.scales.y2._max = 100;
-    mutated = true;
-  }
 
   if (mutated) {
     chart.redraw(true);
@@ -511,10 +546,29 @@ function updateChart(): void {
   // Push the new data in. The reset flag forces uPlot's auto-resolver to
   // re-run — without it, uPlot may keep stale null..null scales.
   chart.setData(props.data, true);
+  // Live mode: the trailing window advances with every sample, but uPlot's
+  // x-scale was locked to the bounds baked in at (re)build time — setData()
+  // never moves an explicitly-set scale. Re-apply the current windowSec
+  // bounds (same 0.5% padding as computeXScale) so the window tracks the
+  // data instead of freezing while newer bars flow off the right edge.
+  if (props.windowSec) {
+    const [lo, hi] = props.windowSec;
+    const span = Math.max(1, hi - lo);
+    const min = lo - span * 0.005;
+    const max = hi + span * 0.005;
+    const xScale = chart.scales.x as ScaleInternal | undefined;
+    if (xScale && (xScale.min !== min || xScale.max !== max)) {
+      xScale.min = min;
+      xScale._min = min;
+      xScale.max = max;
+      xScale._max = max;
+      chart.redraw(true);
+    }
+  }
   // Safety net: if uPlot's auto-resolver didn't fire, force the scales to a
   // valid range via direct mutation. This is the only reliable way to recover
   // a chart whose x/y scales are stuck at null..null.
-  if (chart.scales.x.min == null || chart.scales.y.max == null) {
+  if (chart.scales.x?.min == null || chart.scales.y?.max == null) {
     ensureScalesResolved();
   }
 }
@@ -551,5 +605,7 @@ onBeforeUnmount(() => {
   chart = null;
 });
 
-defineExpose({ chart, updateChart });
+// NOTE: `chart` is a mutable `let`, so the exposed property must be a getter —
+// a plain `{ chart }` captures its value (null) at defineExpose() time.
+defineExpose({ get chart() { return chart; }, updateChart });
 </script>

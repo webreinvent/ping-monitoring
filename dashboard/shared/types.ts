@@ -194,6 +194,9 @@ export interface MonitorListItem {
   /** Client human-readable name */
   clientName: string;
 
+  /** Client-reported LAN IP, or null when never reported */
+  clientIp: string | null;
+
   /** Target hostname or IP being monitored */
   targetHost: string;
 
