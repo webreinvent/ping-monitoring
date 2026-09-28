@@ -25,17 +25,27 @@ describe("timestampMs boundaries", () => {
   });
 
   it("rejects timestamp 1ms beyond the future window", () => {
-    const beyond = Date.now() + 300_001; // 1ms past 5-minute window
-    const result = validateSample({
-      targetHost: "8.8.8.8",
-      timestampMs: beyond,
-      latencyMs: 42,
-      status: "success",
-      resolvedAddress: "8.8.8.8",
-    });
-    expect(result.valid).toBe(false);
-    const rejection = result.rejections.find(r => r.code === "FUTURE_TIMESTAMP");
-    expect(rejection).toBeDefined();
+    // Pin the clock so this test's boundary and validateSample's internal
+    // Date.now() read the same instant. With only a 1ms margin, a real
+    // 1ms drift between the two Date.now() calls would make this flaky.
+    const now = 1_700_000_000_000;
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      const beyond = now + 300_001; // 1ms past 5-minute window
+      const result = validateSample({
+        targetHost: "8.8.8.8",
+        timestampMs: beyond,
+        latencyMs: 42,
+        status: "success",
+        resolvedAddress: "8.8.8.8",
+      });
+      expect(result.valid).toBe(false);
+      const rejection = result.rejections.find(r => r.code === "FUTURE_TIMESTAMP");
+      expect(rejection).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects timestampMs = 0", () => {
@@ -284,24 +294,31 @@ describe("INGEST_FUTURE_WINDOW_MS env override", () => {
   it("rejects any future timestamp when window is 0", () => {
     vi.stubEnv("INGEST_FUTURE_WINDOW_MS", "0");
 
-    // Module needs to be re-evaluated to pick up the new env var.
-    // Since we can't easily re-import, we test with a past timestamp
-    // which should pass regardless, and a far future which should fail.
-    // With window = 0, any timestamp > Date.now() should fail.
-    const future = Date.now() + 1;
-    const result = validateSample({
-      targetHost: "8.8.8.8",
-      timestampMs: future,
-      latencyMs: 42,
-      status: "success",
-      resolvedAddress: "8.8.8.8",
-    });
+    // Pin the clock so this test's "future" timestamp and validateSample's
+    // internal Date.now() read the same instant. With window = 0, any
+    // timestamp strictly greater than now is rejected; a real 1ms drift
+    // between the two Date.now() calls would otherwise make this flaky.
+    const now = 1_700_000_000_000;
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      const future = now + 1;
+      const result = validateSample({
+        targetHost: "8.8.8.8",
+        timestampMs: future,
+        latencyMs: 42,
+        status: "success",
+        resolvedAddress: "8.8.8.8",
+      });
 
-    // The validateSample function calls getFutureWindowMs() which reads
-    // env each time, so this should use 0
-    expect(result.valid).toBe(false);
-    const rejection = result.rejections.find(r => r.code === "FUTURE_TIMESTAMP");
-    expect(rejection).toBeDefined();
+      // The validateSample function calls getFutureWindowMs() which reads
+      // env each time, so this should use 0
+      expect(result.valid).toBe(false);
+      const rejection = result.rejections.find(r => r.code === "FUTURE_TIMESTAMP");
+      expect(rejection).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
