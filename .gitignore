@@ -26,3 +26,9 @@ dist-ssr
 .superpowers/
 docs/superpowers/
 src-tauri/tauri-signing.key
+
+# Agent pipeline temporary output
+.vaahagents/
+
+
+.claude/

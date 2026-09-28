@@ -1,0 +1,22 @@
+# .llmkb/config.yml — plugin behavior settings
+# Managed by `llmkb init`. Uncomment fields to override defaults.
+
+# llmkb_base_url: https://api.llmkb.ai
+#
+# watch:
+#   enabled: true
+#   debounce_ms: 300
+#   gitignore: true
+#   llmkbignore: true
+#   default_verbosity: silent
+#
+# sync:
+#   concurrency: 5
+#   retry_attempts: 3
+#   retry_delay_ms: 1000
+#
+# hook:
+#   timeout_ms: 5000
+#   skip: false
+#
+# debug: false

@@ -1,0 +1,595 @@
+# LNPM Cloud Dashboard — Patterns Established
+
+> Saved: 2026-08-06
+> Tasks: M1-T4 (health check), M1-T5 (client identity), M1-T7 (monitors list API), M1-T8 (monitor history API), M1-T9 (WebSocket live broadcast), M1-T12 (rate limiting), M2-T2 (sidebar), M2-T3 (all-monitors chart), M2-T4 (monitor detail view), M2-T5 (WebSocket live chart updates), M2-T6 (client settings page), M2-T7 (inline client name edit with WS broadcast)
+
+## Nuxt 4 + Nitro Route Handler Pattern
+
+**Pattern:** `server/api/*.get.ts` files using `defineEventHandler()` for API routes.
+
+- File naming convention: `{route}.get.ts` (method-based routing)
+- Uses Nitro's `defineEventHandler()` as the entry point
+- Returns objects directly (automatically serialized to JSON)
+- No explicit `send()` or `res.end()` needed
+- Located under `dashboard/server/api/`
+
+**Example:**
+```typescript
+export default defineEventHandler(async () => {
+  return { status: "ok", timestamp: new Date().toISOString() };
+});
+```
+
+## Database Plugin Pattern (better-sqlite3 + Nuxt)
+
+**Pattern:** Global database singleton via `globalThis.__db` with lazy initialization in a Nitro plugin.
+
+- Database connection is created once in `server/plugins/database.ts` (Nuxt plugin)
+- Uses `better-sqlite3` with WAL mode for concurrent reads
+- Singleton stored on `globalThis.__db` for test isolation (can be cleared per-test)
+- `getDb()` helper in `server/utils/db.ts` returns the singleton or creates it
+- Plugin runs on server init, migrations execute automatically
+
+**Key insight:** The `globalThis.__db` pattern enables test isolation — tests can `delete globalThis.__db` in `beforeEach` to get a fresh connection.
+
+## Version Caching Pattern (IIFE at module level)
+
+**Pattern:** Cache runtime-expensive reads (like package.json version) using a module-level IIFE.
+
+```typescript
+const pkgVersion = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
+```
+
+- Runs once at module load time
+- Safely handles missing/corrupt files with fallback defaults
+- No need for `setTimeout` or lazy caching — module loads once per process
+
+## Health Check Extended Metrics Pattern (F14)
+
+**Pattern:** Separate `getExtendedMetrics()` function for database+filesystem queries, wrapped in try-catch at the handler level.
+
+- Basic health (status probe) is lightweight: `SELECT 1` to verify DB connectivity
+- Extended metrics (F14) are gathered in a separate function: file size via `statSync`, COUNT queries, MAX timestamp
+- Error boundary: outer try-catch returns structured `{ status: "error", message }` on any failure
+- All queries are simple aggregates (COUNT, MAX) — negligible cost even on large tables
+
+## Structured Logging Pattern
+
+**Pattern:** Custom logger with leveled functions (`debug`, `info`, `warn`, `error`) writing structured JSON to stderr.
+
+- Uses `console.error` internally (correct for server-side logging — stderr is the standard log stream)
+- Each log entry is a JSON object with timestamp, level, message, and optional context
+- Supports 4 levels: debug, info, warn, error
+- Context objects are merged into the JSON payload
+
+## Test Isolation Pattern (Vitest + globalThis DB)
+
+**Pattern:** Clear `globalThis.__db` in `beforeEach` and `vi.restoreAllMocks()` in `afterEach`.
+
+```typescript
+beforeEach(() => {
+  delete globalThis.__db; // Clear DB singleton for test isolation
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  setEnv("DATABASE_PATH", undefined);
+});
+```
+
+- Ensures each test gets a fresh database state
+- Mock databases can be injected via `globalThis.__db = mockDb`
+- Environment variables are reset after each test
+
+## Unit Test Structure Pattern
+
+**Pattern:** Comprehensive test suites organized by concern with descriptive `describe` blocks.
+
+- Response shape tests (success and error variants)
+- Database connectivity tests
+- Error handler edge cases (Error, string, null, number, boolean thrown values)
+- Version parsing tests (fallback, caching, actual file read)
+- Uptime rounding tests
+- Timestamp format tests
+- F14 metric type tests
+- COUNT query simulation tests
+- Path resolution tests (DATABASE_PATH env var)
+- Full endpoint integration tests (mock DB + handler flow)
+
+## Client Identity Pattern (M1-T5 / F2)
+
+**Pattern:** Slug generation as a pure function with deterministic, URL-safe output; client upsert via `INSERT ... ON CONFLICT`; separation of `ClientRow` (DB shape) from `ClientResponse` (API shape).
+
+### Slug Generation
+- Pure function `generateSlug(username, hostname, macAddress)` with no external dependencies
+- Format: `<username>-<hostname>-<truncated-mac>` (last 10 hex chars of MAC)
+- Steps: strip non-hex from MAC → build raw string → replace non-alphanumeric with hyphens → collapse consecutive hyphens → trim leading/trailing hyphens
+- Throws on empty inputs (fail-fast validation)
+
+### ClientRow vs ClientResponse Type Separation
+- `ClientRow` — raw database row shape (snake_case, epoch-ms timestamps, internal fields)
+- `ClientResponse` — API response shape (snake_case keys matching API contract, ISO 8601 string timestamps, excludes internal fields like `sync_enabled`, `sync_interval_min`, `backend_url`, `last_synced_at_ms`)
+- `toClientResponse(row: ClientRow): ClientResponse` is the sole serialization function — prevents leaking DB internals
+
+### Upsert Pattern
+- Uses `INSERT ... ON CONFLICT(slug) DO UPDATE SET` — single SQL statement, no application-level existence checks
+- Default name is `username@hostname` (auto-generated)
+- Returns the upserted row via `getClientBySlug()` after insert
+
+### API Endpoint Pattern (Parameterized Routes)
+- `GET /api/clients/[slug].get.ts` — uses Nitro's file-based routing with dynamic `[slug]` parameter
+- `PUT /api/clients/[slug].name.put.ts` — nested route with method-specific handler
+- Both follow: parse params → validate → call utility → return response or throw error
+- 400 for validation errors, 404 for missing resources
+
+## CTE + ROW_NUMBER Pattern for Latest-State Queries (M1-T7 / F5)
+
+**Pattern:** Use a CTE with `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ... DESC)` to efficiently fetch the latest row per entity, then LEFT JOIN to the main table.
+
+```sql
+WITH latest_samples AS (
+  SELECT monitor_id, status, latency_ms, timestamp_ms,
+    ROW_NUMBER() OVER (PARTITION BY monitor_id ORDER BY timestamp_ms DESC) AS rn
+  FROM ping_samples
+)
+SELECT m.id, c.slug AS client_slug, c.name AS client_name,
+  m.target_host, m.target_name,
+  ls.status AS last_status, ls.latency_ms AS last_latency_ms, ls.timestamp_ms AS last_seen_ms,
+  m.quality_state, m.created_at
+FROM monitors m
+INNER JOIN clients c ON m.client_id = c.id
+LEFT JOIN latest_samples ls ON m.id = ls.monitor_id AND ls.rn = 1
+ORDER BY COALESCE(ls.timestamp_ms, 0) DESC, m.id ASC
+```
+
+- **Single query, no N+1** — all data fetched in one SQL call
+- **LEFT JOIN** ensures monitors with no samples still appear (with null state fields)
+- **COALESCE(null_timestamp, 0) DESC** pushes monitors with no samples to the end of results
+- **Stable tiebreaker**: `m.id ASC` ensures deterministic order when timestamps match
+
+## Monitors List Utility Pattern (M1-T7)
+
+**Pattern:** Separate `utils/monitors.ts` utility with `getAllMonitorsWithLatestState()` returning `MonitorListItem[]`, followed by field mapping.
+
+- Pure utility function with no HTTP context — testable in isolation
+- SQL query returns snake_case DB fields; `.map()` transforms to camelCase API fields
+- Mapping functions (`mapSampleStatus`, `mapQualityState`) are private helpers within the module
+- Null-safe: `target_name ?? target_host` for fallback, `null` for missing sample fields
+- `created_at` (epoch ms in DB) → `new Date(row.created_at).toISOString()` for API
+
+## Mock DB Pattern for Integration Tests (M1-T7)
+
+**Pattern:** Mock `getDb()` with `vi.mock()` and construct a minimal `Database` stub returning pre-configured rows.
+
+```typescript
+vi.mock("../utils/db", () => ({ getDb: vi.fn() }));
+
+function createMockDb(rows: Array<{ ... }>): Database {
+  return {
+    prepare: vi.fn().mockReturnValue({
+      all: vi.fn().mockReturnValue(rows),
+    }),
+  } as unknown as Database;
+}
+```
+
+- Avoids better-sqlite3 segfault on Node 20 by never importing the real DB
+- Tests the full query + mapping pipeline without a real database
+- Follows the same pattern established by `ping-ingest.integration.test.ts`
+
+## History Aggregation Pattern (M1-T8 / F6)
+
+**Pattern:** SQL `GROUP BY` on timestamp-truncated buckets for time-series aggregation, with application-side quality classification and down-sampling.
+
+### SQL Bucket Aggregation
+```sql
+SELECT
+  strftime('%s', datetime(timestamp_ms / 1000, 'unixepoch', 'unixepoch', '+' || :bucketMs || ' milliseconds') * 1000 AS bucket_ms,
+  COUNT(*) AS sample_count,
+  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
+  AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END) AS avg_latency_ms
+FROM ping_samples
+WHERE monitor_id = ? AND timestamp_ms > ? AND timestamp_ms <= ?
+GROUP BY bucket_ms
+ORDER BY bucket_ms ASC
+```
+
+- **Single query, single pass** — no subqueries or window functions needed for aggregation
+- **Bucket alignment:** Uses `strftime` with offset to align buckets to clean boundaries
+- **Composite index** (`idx_ping_monitor_time`) makes the WHERE + GROUP BY efficient
+- **Null-safe aggregation:** `AVG(CASE WHEN status = 'success' THEN latency_ms ELSE NULL END)` excludes failures from latency stats
+
+### Quality Interval Computation
+- Linear scan over aggregated points, classifying each bucket as: `warmingUp`, `low`, `medium`, `high`, `veryHigh`, `unstable`, `disconnected`
+- Consecutive same-state buckets are merged into intervals (startMs, endMs, state, reasons)
+- Reasons array is a defensive copy — mutation of returned array doesn't affect internals
+- Thresholds from F6 spec: packet loss %, latency p50/p95, jitter, consecutive failures
+
+### Down-sampling via Bucket Size Adjustment
+- `calculateBucketSize(fromMs, toMs, maxPoints)` computes optimal bucket size
+- Starts at 1-minute buckets; increases through clean sizes (1m, 5m, 15m, 30m, 1h) until point count ≤ maxPoints
+- Clean bucket sizes align with frontend chart rendering (no fractional buckets)
+
+### Range Summary Computation
+- Aggregate statistics over all points: packetLossPercent, p50Latency, p95Latency, avgLatency, minLatency, maxLatency, stablePercent, unstablePercent
+- p95 uses per-bucket averages as proxy (acceptable approximation for MVP; documented)
+- Stable/unstable computed from quality state distribution
+
+### HistoryResponse Shape
+- `HistoryResponse = { target, series, points, intervals, summary }` — complete response for uPlot chart
+- `series` array: `[{ label: "latency", unit: "ms" }]` — uPlot column descriptors
+- `points` = `HistoryPoint[]` (bucket_ms, latencyMs, packetLoss, sampleCount, status, qualityState)
+- `intervals` = `QualityIntervalRecord[]` (merged quality state intervals)
+- `summary` = `RangeSummary` (aggregate statistics for the time range)
+
+## WebSocket Live Broadcast Pattern (M1-T9 / F7)
+
+**Pattern:** Nitro WebSocket handler with subscription map, snapshot delivery, and live sample broadcast.
+
+### WebSocket Handler Structure
+- Uses `defineWebSocketHandler()` with `open`, `message`, `close` lifecycle methods
+- Located at `server/ws/ping.ts` — auto-mapped to `/ws/ping` endpoint
+- JSON message protocol with `type` discriminator field
+- No authentication at WebSocket level (relies on HTTP-level auth via Nuxt proxy)
+
+### Subscription Map
+- `Map<number, Set<WebSocketType>>` — key is monitor_id, values are raw WebSocket objects
+- Raw WebSocket (`(peer as any).ws`) stored for external broadcast capability (from ingest endpoint)
+- `getSubscribers(monitorId)` — get or create subscriber set
+- `cleanupEmptyMonitor(monitorId)` — remove empty sets to prevent memory leaks
+
+### Message Protocol (F7 spec)
+- **Client → Server:** `subscribe` (monitorId), `unsubscribe` (monitorId)
+- **Server → Client:** `subscribed` (ack), `unsubscribed` (ack), `snapshot` (monitor + last 100 samples), `sample` (single new sample), `error` (error message)
+
+### Snapshot on Subscribe
+- Queries last 100 samples via `getSnapshotSamples()` (ORDER BY timestamp_ms DESC LIMIT 100)
+- Reverses to oldest-first order for chart consumption
+- Includes monitor state (targetHost, targetName, status, qualityState, lastSeenMs)
+- Map functions (`mapMonitorStatus`, `mapQualityState`) translate DB values to API contract
+
+### Broadcast from Ingest
+- `broadcastSample(monitorId, sample)` exported from `server/ws/ping.ts`
+- Called from `server/api/ping/ingest.post.ts` after successful DB insert
+- Iterates over `[...subSet]` (copy) to avoid iteration issues if set changes during broadcast
+- Checks `ws.readyState === 1` (OPEN) before sending; catches send errors
+
+### Cleanup on Disconnect
+- `close` handler iterates all monitor subscription sets removing the disconnected WebSocket
+- `error` events are handled by the same cleanup path (Nitro emits close on error)
+- Prevents memory leaks from stale connections
+
+## Quality Classifier Patterns (M1-T10)
+
+### Quality State Constants Module
+- **File**: `server/utils/quality-states.ts`
+- **Pattern**: Dedicated constants module with all classification thresholds as named exports (`QUALITY_WINDOW_MS`, `QUALITY_MIN_SAMPLES`, etc.)
+- **mapQualityState()**: Safe string-to-typed converter with legacy fallback (`good`→`veryHigh`, `degraded`→`medium`, `poor`→`low`, unknown→`warmingUp`)
+- **QUALITY_COLORS**: Record mapping each QualityState to a Tailwind-compatible hex color
+
+### Classification Engine (First-Match-Wins)
+- **File**: `server/utils/quality-classifier.ts`
+- **Pattern**: Two-query approach: (1) aggregate window stats + current quality_state in one query, (2) last sample time for disconnected detection
+- **Metrics**: packet_loss, avg_latency, CV (coefficient of variation) computed inline using `variance = E[X²] - E[X]²`
+- **Decision chain**: disconnected → warmingUp → unstable → veryHigh → high → medium → low (ordered, first match wins)
+- **Persist**: Single UPDATE sets `quality_state`, `quality_state_updated_at`, `updated_at`
+
+### Batch Classification with Change Detection
+- **Pattern**: `ClassifyResultWithDiff` extends `ClassifyResult` with `previousState` and `stateChanged` boolean
+- Per-monitor try/catch in batch — one failure doesn't stop the batch
+- Returns `Map<monitorId, QualityState>` of only changed monitors
+- `info()` log for changes, `debug()` for unchanged
+
+### Background Sweep Plugin
+- **File**: `server/plugins/quality-sweep.ts`
+- **Pattern**: `defineNitroPlugin` with `setInterval` (default 60s), graceful shutdown via cleanup function
+- Queries for monitors with samples in last 10 min only (avoids classifying dead monitors)
+- Env var validation: `Number.isFinite()` + `> 0` guard on interval
+
+### Post-Ingest Classification
+- Runs AFTER transaction commits (outside `db.transaction()`) so classifier sees new data
+- Best-effort: classification failure is logged but never causes ingest to fail
+
+## Nitro Middleware Pattern (M1-T12 / F13)
+
+**Pattern:** Server-side middleware in `server/middleware/` using `defineEventHandler()` for cross-cutting concerns (rate limiting, auth, CORS).
+
+- Files in `server/middleware/` automatically run before every server route handler
+- Uses `h3` utilities: `getRequestIP()`, `setHeader()`, `setResponseStatus()`
+- Returns early (no return value) to let request continue; returns a value to short-circuit with a response
+- Only applies to `/api/` paths — skips static assets, WebSocket, etc.
+
+**Example (rate limiting):**
+```typescript
+import { defineEventHandler, getRequestIP, setHeader, setResponseStatus } from "h3";
+
+export default defineEventHandler((event) => {
+  const url = event.path;
+  if (!url.startsWith("/api/")) return; // Skip non-API
+
+  const ip = getRequestIP(event, { xForwardedFor: true });
+  if (!ip) return; // Allow through if no IP
+
+  const config = getRateLimitConfig(isIngest);
+  const result = checkRateLimit(ip, config);
+
+  if (!result.allowed) {
+    setResponseStatus(event, 429);
+    setHeader(event, "Retry-After", String(result.retryAfter));
+    return { error: "rate_limit_exceeded", retryAfter: result.retryAfter };
+  }
+});
+```
+
+## Sliding Window Rate Limiter Pattern (M1-T12 / F13)
+
+**Pattern:** In-memory sliding window rate limiter using timestamp arrays per IP with LRU eviction.
+
+- `Map<string, RateLimitEntry>` keyed by IP address
+- Each entry holds `timestamps: number[]` (request times within window) and `lastAccess: number` (LRU)
+- Sliding window: filters out timestamps outside `now - windowMs` on each check
+- LRU eviction: when map exceeds MAX_ENTRIES (10,000), evicts entries older than 2× window
+- Env var configurable: `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS`
+- `getRateLimitConfig(isIngest)` returns different limits: 100 req/min for ingest, 60 for others
+- `resetRateLimitState()` for test isolation
+
+**Key design choices:**
+- No external dependencies (no Redis) — in-memory only
+- `getRequestIP(event, { xForwardedFor: true })` for proper IP resolution behind proxies
+- `warn()` log on rate limit exceeded (structured JSON with IP, path, retryAfter, limit)
+- 429 response shape: `{ error: "rate_limit_exceeded", retryAfter: N }` with `Retry-After` header
+
+## Frontend Component Patterns (M2-T2 / M2-T3 / M2-T4)
+
+### uPlot Chart Pattern (M2-T3)
+- **File**: `app/components/charts/LatencyChart.vue`
+- **Pattern**: uPlot chart wrapped in Vue component with reactive props. `onMounted` creates chart, `onUnmounted` destroys it. `watch` on data props triggers `uPlot.setData()`.
+- **Quality bands**: Rendered via uPlot's `Qual` plugin — background bands colored by quality state. Path data generated by `app/utils/quality-bands.ts` utility.
+- **Threshold line**: Rendered via `Point` plugin (horizontal line at configured threshold value).
+- **Key**: Chart lifecycle MUST use `onMounted` (not `onBeforeMount`) — DOM element is not available before mount.
+
+### Composable-Driven Chart Architecture (M2-T3)
+- **`useTimeWindow()`** — Manages time range selection (fromMs, toMs). Provides preset ranges (1h, 6h, 24h, 7d) and reactive `fromMs`/`toMs` values.
+- **`useMonitorHistory()`** — Fetches `HistoryResponse` from `GET /api/monitors/:id`. Handles time window params and `maxPoints` down-sampling.
+- **`useChartSeries()`** — Pure function composable. Transforms `HistoryPoint[]` into uPlot-compatible `[[timestamps], [values], ...]` arrays. No DOM, no effects — testable as pure functions.
+- **`useDashboardPalette()`** — Generates 12-color palette for multi-monitor charts. Deterministic: same monitor index always maps to same color.
+
+### Quality Bands Utility (M2-T3)
+- **File**: `app/utils/quality-bands.ts`
+- **Pattern**: Pure function that converts `QualityIntervalRecord[]` into uPlot `Qual` plugin path data. Maps `qualityState` → color via `QUALITY_BAND_COLORS` constants.
+- **No Vue dependencies** — can be imported by both components and tests.
+
+### Detail View Pattern — useAsyncData with Reactive Key (M2-T4)
+- **File**: `app/pages/monitors/[id].vue`
+- **Pattern**: Use `useAsyncData()` with a dynamic key that includes both the monitor ID and the current time window preset. This makes the data fetch reactive to time range changes without re-creating the key from `Date.now()` values.
+- **Key pattern**: `` `monitor-detail-${monitorId.value}-${timeWindow.value}` `` — when `timeWindow` changes, the key changes, triggering a new fetch.
+- **Computed extraction**: All data fields (targetName, targetHost, qualityState, summary, etc.) are extracted via computed properties from the `HistoryResponse.series[0]` structure.
+- **Default values**: `defaultSummary` object provides fallback values when no data exists — prevents null errors in child components.
+- **404 redirect**: `if (monitorId.value <= 0) { navigateTo("/") }` — guards against invalid monitor IDs at the script setup level.
+
+### Monitor Detail View Components (M2-T4)
+- **`MonitorHeader.vue`** — Monitor title bar with status dot, latest latency, last seen time
+  - Props: `targetName`, `targetHost`, `qualityState`, `latestLatency`, `lastSeenMs`
+  - Computed: `qualityStateLabel` (human-readable), `latencyColor` (accent/warning/danger), `lastSeenRelative` (relative time string)
+  - No events/slots — pure presentational component
+- **`MonitorSummary.vue`** — RangeSummary metrics grid (9 stat cards)
+  - Props: `summary: RangeSummary`
+  - Computed: `packetLossColor` (accent/warning/danger), `p95Color` (accent/warning/danger)
+  - Null-safe display: Shows `—` for null values
+- **`QualityIntervals.vue`** — Quality state timeline (visual representation of quality intervals)
+- **`ChartThreshold.vue`** — Configurable threshold line on charts
+
+### Time Range Selector (M2-T3)
+- **File**: `app/components/shared/TimeRangeSelector.vue`
+- **Pattern**: Button-group component with preset time ranges. Emits `select` event with `{ fromMs, toMs }` payload. Uses `useTimeWindow()` composable for computation.
+
+### NavigationBreadcrumb Component (M2-T4)
+- **File**: `app/components/shared/NavigationBreadcrumb.vue`
+- **Pattern**: Simple presentational breadcrumb with `<NuxtLink>` navigation. Props: `label`, `to`. Renders "← {label}" link with CSS-styled back arrow.
+
+### EmptyState Component (M2-T2)
+- **File**: `app/components/shared/EmptyState.vue`
+- **Pattern**: Presentational-only component — no script setup, no interactivity. Shows radar animation + "No data" message.
+
+## Frontend Testing Patterns (M2)
+
+- **Composable tests**: Test composables with pure function assertions (no DOM). `useChartSeries`, `useDashboardPalette`, `useTimeWindow` are all testable as pure transforms.
+- **Utility tests**: `quality-bands.test.ts` verifies path generation for uPlot Qual plugin.
+- **Contract tests**: uPlot components require canvas DOM — test the logic contracts (threshold resolution, color mapping, visibility filtering) as pure function tests.
+- **Test fixtures**: Use `test/fixtures.ts` factory functions for consistent test data across frontend and backend tests.
+
+## Live Chart Bridge Pattern — useLiveChart (M2-T5)
+
+**Pattern:** Centralized composable that bridges WebSocket samples into reactive chart data — separating WebSocket data flow from chart rendering.
+
+### Architecture
+
+- **`useLiveChart()`**: New composable in `app/composables/useLiveChart.ts` — the single bridge between `useWebSocket()` and chart components
+- **Consumes `useWebSocket()` internally** — calls `onSample()` and `onSnapshot()` to register handlers
+- **Maintains `Map<monitorId, { timestamps: Float64Array; values: Float64Array }>`** — per-monitor live data store
+- **Bounded data**: Caps at `MAX_POINTS_PER_MONITOR` (2000) — drops oldest points when exceeded, preventing memory leak
+- **rAF-debounced updates**: Uses `requestAnimationFrame` to batch chart updates — only one rAF call per frame, regardless of sample frequency
+- **Callback registration**: `onUpdate(callback)` / `offUpdate(callback)` — parent components register `updateChart()` callbacks to push data to uPlot
+
+### Key Methods
+
+- `subscribe(monitorId)` — Subscribe to a monitor's live feed (delegates to `useWebSocket().subscribe()`)
+- `unsubscribe(monitorId)` — Unsubscribe (delegates to `useWebSocket().unsubscribe()`)
+- `isSubscribed(monitorId)` — Check subscription status
+- `onUpdate(callback)` — Register rAF callback for chart updates
+- `offUpdate(callback)` — Remove registered callback
+
+### Integration Pattern
+
+**AllMonitorsChart.vue** (multi-monitor):
+```ts
+const { subscribe, liveData, onUpdate } = useLiveChart();
+
+// Auto-subscribe to visible monitors
+watch(() => props.monitors, (m) => {
+  for (const id of m.map(m => m.id)) {
+    if (isVisible(id) && !isSubscribed(id)) subscribe(id);
+  }
+}, { immediate: true });
+
+// Merge live + HTTP data in computed
+const chartData = computed(() => {
+  const liveEntry = liveData.value.get(m.id);
+  const httpEntry = monitorData.value.get(m.id);
+  // Prefer live, fall back to HTTP
+});
+
+// Register chart update callback
+onUpdate(() => chartRef.value.updateChart());
+```
+
+**Single monitor page** (`monitors/[id].vue`):
+```ts
+const { subscribe, liveData } = useLiveChart();
+
+watch(monitorId, (id) => { if (id > 0) subscribe(id); }, { immediate: true });
+
+const chartData = computed(() => {
+  const live = liveData.value.get(monitorId.value);
+  if (live) return [live.timestamps, live.values];
+  return transformToUPlotData(historyData.value);
+});
+```
+
+### Design Decisions
+
+- **Centralized (not per-component)**: Single `useLiveChart` instance avoids duplicate WebSocket connections and subscription management
+- **Callback-based updates** (not reactive watch): `onUpdate/offUpdate` with rAF is more efficient than watching `liveData` with `deep: true` — prevents reactive system overhead
+- **Float64Array for chart data**: Uses `Float64Array` (not plain arrays) — matches uPlot's expected format, zero-copy on `setData()`
+- **Timestamps in seconds**: Converts `timestampMs / 1000` for uPlot — consistent with history API's time format
+
+### Test Pattern (M2-T5)
+
+- **Pure function tests**: Test the core data transformation logic (snapshot, append, cap) without mocking Vue composables
+- **Simulated data map**: Tests use a plain `Map<number, { timestamps, values }>` to mirror internal state
+- **No DOM dependency**: Tests verify array lengths, values, and ordering — not rendering
+
+## Sidebar WebSocket Integration (M2-T5)
+
+**Pattern:** `SidebarContent` listens for `client_name_updated` messages via `useWebSocket().onClientNameUpdated()` to update sidebar client names in real time.
+
+```ts
+const { onClientNameUpdated } = useWebSocket();
+onClientNameUpdated((clientSlug, newName) => {
+  const group = groupedByClient.value.find(g => g.clientSlug === clientSlug);
+  if (group) group.clientName = newName;
+});
+```
+
+- **Optimistic + reactive**: Directly mutates the `groupedByClient` array — Vue's reactivity propagates the change
+- **No API call needed**: The WebSocket message is the source of truth; no round-trip to the API
+
+## Client Settings Page Patterns (M2-T6 / F9)
+
+### GET Settings Endpoint Pattern
+- **File**: `server/api/clients/[slug].settings.get.ts`
+- **Pattern**: Derives `sync_status` from `last_synced_at_ms` and `sync_interval_min` using a threshold computation
+- **Status computation**: `computeSyncStatus(syncEnabled, lastSyncedAtMs, syncIntervalMin)` — pure function returning one of: `connected`, `disconnected`, `syncing`, `disabled`, `not_configured`
+- **Threshold**: `2 * sync_interval_min * 60000` ms — if `now - lastSyncedAtMs > threshold`, client is `disconnected`
+- **Returns**: Full `ClientSettings` interface with identity fields, sync config, computed status, and ISO 8601 timestamps
+- **404 handling**: Returns 404 if client not found (same as `GET /api/clients/:slug`)
+
+### ClientSettings Composable Pattern (useClientSettings)
+- **File**: `app/composables/useClientSettings.ts`
+- **Pattern**: Centralized composable for settings fetch/update with optimistic UI and rollback
+- **`fetchSettings(slug)`**: GET endpoint call with `loading`/`error` state management
+- **`updateSettings(slug, data)`**: PUT with optimistic update → server response merge → rollback on error
+- **Optimistic update**: Sets `sync_status` to `"syncing"` immediately, then resets to `"connected"`/`"disabled"` after 2s delay
+- **Reactive state**: `settings` (ref), `loading` (ref), `error` (ref) — parent components bind directly
+- **Returns**: `{ settings, loading, error, fetchSettings, updateSettings }` — standard composable API
+
+### ClientIdentity Component Pattern
+- **File**: `app/components/clients/ClientIdentity.vue`
+- **Pattern**: Read-only display component for client identity fields
+- **Props**: `client: { slug, name, username, hostname, mac_address }`
+- **Uses existing CSS**: `.client-info-card` and `.client-info-field` classes (reuses existing styling)
+- **No events/slots**: Pure presentational component — no interactivity
+- **data-testid**: `data-testid="client-identity"` for E2E testing
+
+### SyncStatusIndicator — 5-State Pattern
+- **File**: `app/components/clients/SyncStatusIndicator.vue`
+- **Pattern**: Color-coded status indicator with 5 states matching F9 spec
+- **States**: `connected` (green), `disconnected` (red), `syncing` (yellow, pulsing), `disabled` (gray), `not_configured` (gray)
+- **Props**: `status: SyncStatus` — uses shared `SyncStatus` type from `shared/types.ts`
+- **Computed**: `statusText` (human-readable label), `statusClass` (CSS class)
+- **Pulsing animation**: `.pulsing` class on dot for `syncing` state
+
+### WebSocket Settings Broadcast Pattern
+- **File**: `server/ws/ping.ts` → `broadcastSettingsUpdate(slug, settings)`
+- **Pattern**: Exported function broadcasts `client_settings_updated` message to ALL connected WebSocket peers
+- **Message shape**: `{ type: "client_settings_updated", slug, sync_enabled, sync_interval_min, backend_url }`
+- **Broadcast scope**: Iterates over all monitor subscription sets (not just one monitor) — settings update is global
+- **Safe iteration**: Iterates `[...subscriptions.keys()]` (copy) and `[...subSet]` (copy) to avoid concurrent modification issues
+- **Called from**: `PUT /api/clients/[slug]/settings` endpoint after successful DB update
+- **Non-blocking**: Broadcast doesn't affect PUT response time
+
+### SyncSettingsForm — Localhost HTTP Exception
+- **File**: `app/components/clients/SyncSettingsForm.vue`
+- **Pattern**: URL validation allowing HTTP for localhost URLs (dev convenience)
+- **Validation**: `new URL(url)` parse → check `protocol !== "https:"` → exception for `localhost`, `127.0.0.1`, `::1`, `[::1]`
+- **Same validation on backend**: `server/api/clients/[slug].settings.put.ts` uses identical logic
+- **Allowed intervals**: `[1, 5, 10, 15, 30, 60]` — per F9 spec (no `2` minute option)
+- **Emit pattern**: Emits `saved` event on successful form submission for parent to refresh data
+
+## Global Peer Set Pattern — allPeers (M2-T7 / F11)
+
+**Pattern:** A `Set<WebSocketType>` tracking ALL connected WebSocket peers, independent of monitor subscriptions. Used for global broadcasts (messages not scoped to a specific monitor).
+
+### Architecture
+
+- **`allPeers`**: `Set<WebSocketType>` — raw WebSocket objects from every connected peer
+- **Population**: `open()` handler calls `allPeers.add(ws)` — same extraction as monitor subscription
+- **Cleanup**: `close()` handler calls `allPeers.delete(ws)` — same cleanup path as monitor subscriptions
+- **Broadcast**: `broadcastClientNameUpdated(clientSlug, newName)` iterates `[...allPeers]` (copy) sending to every connected peer
+- **Safe iteration**: Spread copy (`[...allPeers]`) avoids concurrent modification if a peer disconnects mid-broadcast
+
+### Why Global vs. Per-Monitor
+
+- **Per-monitor broadcast** (`broadcastSample`): Targeted to subscribers of a specific monitor — uses `Map<monitorId, Set<ws>>`
+- **Global broadcast** (`broadcastClientNameUpdated`, `broadcastSettingsUpdate`): Reaches ALL connected peers regardless of monitor subscriptions — uses `allPeers` Set
+- **Rationale**: Client name changes and settings changes are globally relevant — every connected dashboard tab should reflect the change, not just tabs viewing specific monitors
+
+### Message Shape
+
+```typescript
+interface ClientNameUpdatedMessage {
+  type: "client_name_updated";
+  clientSlug: string;
+  newName: string;
+}
+```
+
+- Added to `WsOutboundType` union in `shared/types.ts`
+- Local type defined in `server/ws/ping.ts` as `ClientNameUpdatedMessage`
+
+### Endpoint Integration
+
+- **`PUT /api/clients/:slug/name`** imports `broadcastClientNameUpdated` from `server/ws/ping`
+- Called AFTER `updateClientName()` succeeds (row returned from DB)
+- Passes `row.slug` and `row.name` (the updated values)
+- Non-blocking: broadcast failure doesn't affect API response
+
+### Frontend Consumption
+
+- **`useWebSocket()`** exposes `onClientNameUpdated(callback)` — registers handler for `client_name_updated` messages
+- **`SidebarContent.vue`** calls `onClientNameUpdated((clientSlug, newName) => { ... })` in `onMounted`
+- Directly mutates `groupedByClient` array — Vue reactivity propagates the change to `ClientGroup` headers
+- No API re-fetch needed — WebSocket message IS the source of truth
+
+### Test Pattern
+
+- **Unit tests** (`ping.test.ts`): Verify `broadcastClientNameUpdated` is exported, sends correct message shape, iterates all peers, skips closed peers (readyState !== 1), handles send errors gracefully
+- **Integration tests** (`[slug].name.put.integration.test.ts`): Mock `broadcastClientNameUpdated` via `vi.mock("../../ws/ping")`, verify it's called with correct args after successful update
+- **Peer simulation**: Create mock peers with `handler.open(mockPeer)` to populate `allPeers`, then verify broadcast reaches all of them

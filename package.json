@@ -1,7 +1,7 @@
 {
   "name": "lnpm",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2-wri.1",
   "packageManager": "pnpm@11.9.0",
   "description": "Cross-platform live ICMP latency and network stability monitor",
   "author": "xxsLuna",
@@ -15,6 +15,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@llmkb/claude-code": "^0.2.6",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "uplot": "^1.6.32"
@@ -24,5 +25,10 @@
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
     "vitest": "^4.1.10"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

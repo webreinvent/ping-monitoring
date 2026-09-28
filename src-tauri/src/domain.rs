@@ -370,6 +370,16 @@ pub struct AppSettings {
     pub update_deferred_until_ms: Option<i64>,
     #[serde(default)]
     pub skipped_update_version: Option<String>,
+    #[serde(default)]
+    pub dashboard_ingest_url: Option<String>,
+    #[serde(default)]
+    pub cloud_sync_paused: bool,
+    #[serde(default = "default_sync_interval_min")]
+    pub sync_interval_min: u32,
+}
+
+fn default_sync_interval_min() -> u32 {
+    5
 }
 
 impl Default for AppSettings {
@@ -383,6 +393,56 @@ impl Default for AppSettings {
             update_deferred_version: None,
             update_deferred_until_ms: None,
             skipped_update_version: None,
+            dashboard_ingest_url: None,
+            cloud_sync_paused: false,
+            sync_interval_min: 5,
+        }
+    }
+}
+
+impl AppSettings {
+    /// Validates the dashboard ingest URL (if set). Returns Ok if URL is valid or empty.
+    pub fn validate_ingest_url(&self) -> Result<(), SettingsValidationError> {
+        if let Some(ref url) = self.dashboard_ingest_url {
+            let trimmed = url.trim();
+            if trimmed.is_empty() {
+                return Ok(());
+            }
+            if trimmed.len() > 2048 {
+                return Err(SettingsValidationError::UrlTooLong);
+            }
+            // Check that it starts with http:// or https://
+            if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+                return Err(SettingsValidationError::InvalidScheme);
+            }
+            // Basic URL validation - must have a host after ://
+            let after_scheme = trimmed.strip_prefix("http://")
+                .or_else(|| trimmed.strip_prefix("https://"))
+                .unwrap();
+            if after_scheme.is_empty() || !after_scheme.contains('.') && !after_scheme.contains(':') {
+                return Err(SettingsValidationError::InvalidUrl);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+pub enum SettingsValidationError {
+    #[error("URL must be http:// or https:// and at most 2048 characters")]
+    InvalidScheme,
+    #[error("URL is invalid or malformed")]
+    InvalidUrl,
+    #[error("URL is too long (max 2048 characters)")]
+    UrlTooLong,
+}
+
+impl SettingsValidationError {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::InvalidScheme => "invalidScheme",
+            Self::InvalidUrl => "invalidUrl",
+            Self::UrlTooLong => "urlTooLong",
         }
     }
 }
@@ -449,5 +509,27 @@ mod tests {
         assert_eq!(settings.update_deferred_version, None);
         assert_eq!(settings.update_deferred_until_ms, None);
         assert_eq!(settings.skipped_update_version, None);
+    }
+
+    #[test]
+    fn deserializes_settings_saved_before_cloud_sync() {
+        // Existing settings without cloud sync fields should load with defaults
+        let settings: AppSettings = serde_json::from_str(
+            r#"{
+                "retentionDays": 30,
+                "notificationsEnabled": true,
+                "startAtLogin": false,
+                "language": "en",
+                "firstRun": false,
+                "updateDeferredVersion": null,
+                "updateDeferredUntilMs": null,
+                "skippedUpdateVersion": null
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(settings.dashboard_ingest_url, None);
+        assert!(!settings.cloud_sync_paused);
+        assert_eq!(settings.sync_interval_min, 5);
     }
 }

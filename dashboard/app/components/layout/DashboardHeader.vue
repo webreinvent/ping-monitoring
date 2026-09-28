@@ -1,0 +1,119 @@
+<template>
+  <header class="dashboard-header" data-testid="dashboard-header">
+    <div class="brand-block">
+      <button class="hamburger-btn" @click="toggle" aria-label="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h18" />
+          <path d="M3 6h18" />
+          <path d="M3 18h18" />
+        </svg>
+      </button>
+      <div class="brand-mark">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+          <path d="M12 6v6l4 2" />
+        </svg>
+      </div>
+      <div>
+        <h1>LNPM</h1>
+        <p>Cloud Dashboard</p>
+      </div>
+    </div>
+    <ClientOnly>
+      <div class="api-endpoint">
+        <span class="api-endpoint-label">API endpoint</span>
+        <code class="api-endpoint-url" :title="ingestUrl">{{ ingestUrl }}</code>
+        <button class="copy-btn" @click="copyIngestUrl" :aria-label="copied ? 'Copied' : 'Copy API endpoint URL'" :aria-pressed="copied">
+          <span class="copy-btn-icon" v-if="!copied">📋</span>
+          <span class="copy-btn-icon" v-else>✓</span>
+        </button>
+        <span class="sr-only" aria-live="polite">{{ copyStatusText }}</span>
+      </div>
+      <template #fallback>
+        <div class="api-endpoint">
+          <span class="api-endpoint-label">API endpoint</span>
+        </div>
+      </template>
+    </ClientOnly>
+    <ClientOnly>
+      <div class="connection-status" :class="wsStateClass">
+        <span class="connection-dot" :class="wsDotClass" />
+        <span>{{ wsStateText }}</span>
+      </div>
+      <template #fallback>
+        <div class="connection-status ws-disconnected">
+          <span class="connection-dot ws-dot disconnected" />
+          <span>Disconnected</span>
+        </div>
+      </template>
+    </ClientOnly>
+  </header>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from "vue";
+
+const { toggle } = useResponsiveSidebar();
+const { connectionState } = useWebSocket();
+
+// API endpoint display
+const ingestUrl = computed(() => {
+	const u = useRequestURL();
+	return `${u.protocol}//${u.host}/api/ping/ingest`;
+});
+
+const copied = ref(false);
+const copyStatusText = ref("");
+
+async function copyIngestUrl() {
+	try {
+		await navigator.clipboard.writeText(ingestUrl.value);
+	} catch {
+		// Fallback for non-secure contexts
+		try {
+			const textarea = document.createElement("textarea");
+			textarea.value = ingestUrl.value;
+			textarea.style.position = "fixed";
+			textarea.style.opacity = "0";
+			document.body.appendChild(textarea);
+			textarea.select();
+			document.execCommand("copy");
+			document.body.removeChild(textarea);
+		} catch (err) {
+			console.warn("[DashboardHeader] Could not copy to clipboard", err);
+			return;
+		}
+	}
+	copied.value = true;
+	copyStatusText.value = "Copied!";
+	setTimeout(() => {
+		copied.value = false;
+		copyStatusText.value = "";
+	}, 1500);
+}
+
+const wsStateClass = computed(() => {
+  switch (connectionState.value) {
+    case "connected": return "ws-connected";
+    case "reconnecting": return "ws-reconnecting";
+    default: return "ws-disconnected";
+  }
+});
+
+const wsDotClass = computed(() => {
+  switch (connectionState.value) {
+    case "connected": return "ws-dot connected";
+    case "reconnecting": return "ws-dot reconnecting";
+    default: return "ws-dot disconnected";
+  }
+});
+
+const wsStateText = computed(() => {
+  switch (connectionState.value) {
+    case "connected": return "Live";
+    case "reconnecting": return "Reconnecting...";
+    case "connecting": return "Connecting...";
+    default: return "Disconnected";
+  }
+});
+</script>

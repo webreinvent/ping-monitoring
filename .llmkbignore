@@ -1,0 +1,47 @@
+# .llmkbignore — patterns that `llmkb sync` skips (gitignore syntax).
+# Managed by `llmkb init`. Edit to add or remove patterns.
+#
+# This file is read IN ADDITION to .gitignore. The patterns use the
+# same syntax as .gitignore (one pattern per line, `#` for comments).
+#
+# To disable .llmkbignore filtering entirely, set `watch.llmkbignore: false`
+# in .llmkb/config.yml.
+
+# Build artefacts
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Dependency / lock directories
+node_modules/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets — never sync credentials to a knowledge base
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# IDE / editor state
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Coverage / test output
+coverage/
+htmlcov/
+.nyc_output/
+
+# Logs and temp files
+*.log
+tmp/
+temp/

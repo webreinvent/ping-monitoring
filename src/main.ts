@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { openPath } from "@tauri-apps/plugin-opener";
 
 import { api } from "./api";
-import { LatencyChart } from "./chart";
+import { LatencyChart, palette } from "./chart";
 import { aggregateRangeSummary } from "./dashboard-selection";
 import {
   formatBytes,
@@ -19,6 +19,7 @@ import {
   stateLabel,
   t,
   type Language,
+  type MessageKey,
 } from "./i18n";
 import type {
   AppSettings,
@@ -28,6 +29,7 @@ import type {
   QualityState,
   QualityThresholds,
   QualityTransitionEvent,
+  SyncEvent,
   Target,
   UserErrorPayload,
   UpdateErrorEvent,
@@ -56,6 +58,9 @@ let settings: AppSettings = {
   updateDeferredVersion: null,
   updateDeferredUntilMs: null,
   skippedUpdateVersion: null,
+  dashboardIngestUrl: null,
+  cloudSyncPaused: false,
+  syncIntervalMin: 5,
 };
 let language: Language = resolveLanguage(settings.language);
 let dashboard: DashboardSnapshot = { nowMs: Date.now(), paused: false, targets: [] };
@@ -67,6 +72,7 @@ let currentRange = { fromMs: Date.now() - 60_000, toMs: Date.now() };
 let followLive = true;
 let updateUiState: UpdateUiState = initialUpdateUiState;
 let currentAppVersion: string | null = null;
+let syncStatus: SyncEvent = { status: "off", message: null, lastSyncedAtMs: null, pendingCount: 0 };
 
 void bootstrap();
 
@@ -123,20 +129,43 @@ async function bootstrap(): Promise<void> {
   if (!isPopup) {
     const pendingUpdate = await api.pendingUpdate().catch(() => null);
     if (pendingUpdate) await showAvailableUpdate(pendingUpdate);
+
+    // Seed initial sync status
+    await api.getSyncStatus().then((status) => {
+      syncStatus = status;
+      updateSyncIcon(status.status, status.message ?? null);
+    }).catch(() => {});
+
+    // Listen for sync status changes
+    await listen<SyncEvent>("sync-status-changed", (event) => {
+      syncStatus = event.payload;
+      updateSyncIcon(event.payload.status, event.payload.message ?? null);
+    });
   }
 }
 
 async function initMain(): Promise<void> {
   root.className = "app-shell";
+  const appVersion = await getVersion();
   root.innerHTML = `
     <header class="app-header">
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true"><img src="${logoUrl}" alt="" /></div>
-        <div><h1>${t("app.title")}</h1><p>${t("app.subtitle")}</p></div>
+        <div>
+          <h1>${t("app.title")}</h1>
+          <p>${t("app.subtitle")}</p>
+          <span class="version-badge" title="LNPM version">v${escapeHtml(appVersion)}</span>
+        </div>
       </div>
       <div class="header-actions">
+        <span class="host-badge" id="host-identity" hidden title="${t("section.hostIdentity")}">
+          <strong id="host-name">—</strong>
+          <span class="host-sep" id="host-sep" hidden>|</span>
+          <code id="host-ip"></code>
+        </span>
         <button id="follow-live" class="button ghost active">● ${t("action.live")}</button>
         <button id="pause-monitoring" class="button ghost"></button>
+        <button id="sync-status-icon" class="button icon-button sync-status-icon" data-sync-state="off" aria-label="${t("action.syncStatus")}">⊘</button>
         <button id="open-settings" class="button icon-button" aria-label="${t("action.settings")}">⚙</button>
       </div>
     </header>
@@ -153,6 +182,7 @@ async function initMain(): Promise<void> {
           <p>${t("empty.targetsDescription")}</p>
           <button class="button primary" data-action="add-target">${t("action.addTarget")}</button>
         </div>
+        <button id="delete-all" class="button ghost danger-text delete-all" type="button">${iconSvg("trash")}<span>${t("action.deleteAllMonitors")}</span></button>
       </aside>
       <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar">
         <span class="sidebar-resizer-handle"></span>
@@ -195,6 +225,7 @@ async function initMain(): Promise<void> {
     <dialog id="target-dialog" class="modal"></dialog>
     <dialog id="settings-dialog" class="modal settings-modal"></dialog>
     <dialog id="update-dialog" class="modal update-modal"></dialog>
+    <dialog id="confirm-dialog" class="modal compact-modal"></dialog>
     <dialog id="range-dialog" class="modal compact-modal">
       <form id="range-form">
         <header><h3>${t("dashboard.customRange")}</h3><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
@@ -205,6 +236,27 @@ async function initMain(): Promise<void> {
     </dialog>
     <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   `;
+
+  // Identify this host (best effort — silent on failure)
+  void api
+    .hostIdentity()
+    .then((identity) => {
+      const host = byId("host-identity");
+      const name = byId("host-name");
+      const ip = byId("host-ip");
+      const sep = byId("host-sep");
+      if (!host || !name || !ip || !sep) return;
+      // Identity display pattern: `<username>@<hostname> | <IP>`
+      name.textContent = identity.username
+        ? `${identity.username}@${identity.hostname}`
+        : identity.hostname;
+      ip.textContent = identity.ipAddress ?? "";
+      const hasIp = Boolean(identity.ipAddress);
+      ip.hidden = !hasIp;
+      sep.hidden = !hasIp;
+      host.hidden = false;
+    })
+    .catch(() => {});
 
   bindMainEvents();
   restoreViewState();
@@ -280,8 +332,12 @@ function bindMainEvents(): void {
   initSidebarResizer();
   byId("add-target").addEventListener("click", () => openTargetDialog());
   root.querySelector('[data-action="add-target"]')?.addEventListener("click", () => openTargetDialog());
+  byId("delete-all").addEventListener("click", () => void removeAllTargets());
   byId("open-settings").addEventListener("click", () => {
     void openSettingsDialog().catch((error) => showToast(formatError(error), "error"));
+  });
+  byId("sync-status-icon").addEventListener("click", () => {
+    void openSettingsDialog("cloudSync").catch((error) => showToast(formatError(error), "error"));
   });
   byId("pause-monitoring").addEventListener("click", () => void api.pause(!dashboard.paused));
   byId("follow-live").addEventListener("click", () => {
@@ -350,6 +406,7 @@ function renderDashboard(): void {
   byId("target-count").textContent = String(dashboard.targets.length);
   byId("empty-targets").classList.toggle("hidden", dashboard.targets.length > 0);
   byId("target-list").classList.toggle("hidden", dashboard.targets.length === 0);
+  byId("delete-all").classList.toggle("hidden", dashboard.targets.length === 0);
   const pauseButton = byId<HTMLButtonElement>("pause-monitoring");
   const pauseLabel = dashboard.paused ? t("action.resume") : t("action.pause");
   pauseButton.innerHTML = buttonLabel(dashboard.paused ? "play" : "pause", pauseLabel);
@@ -384,6 +441,7 @@ function renderDashboard(): void {
               <span class="toggle-track ${enabled ? "on" : "off"}"><span class="toggle-thumb"></span></span>
             </button>
             <button type="button" class="target-menu" data-edit-target="${item.target.id}" title="${escapeHtml(t("action.manageTarget"))}" aria-label="${escapeHtml(t("action.manageTarget"))}">${iconSvg("edit")}</button>
+            <button type="button" class="target-menu" data-delete-target="${item.target.id}" title="${escapeHtml(t("action.removeMonitor"))}" aria-label="${escapeHtml(t("action.removeMonitor"))}">${iconSvg("trash")}</button>
           </span>
         </div>`;
       })
@@ -416,6 +474,16 @@ function renderDashboard(): void {
       });
     });
 
+    // Handle delete buttons directly
+    row.querySelectorAll("[data-delete-target]").forEach((btn) => {
+      (btn as HTMLElement).addEventListener("click", (event) => {
+        event.stopPropagation();
+        const targetId = row.dataset.targetId ?? null;
+        const status = targetId ? dashboard.targets.find((item) => item.target.id === targetId) : null;
+        if (status) void removeTarget(status.target, null);
+      });
+    });
+
     row.addEventListener("click", () => {
       const targetId = row.dataset.targetId ?? null;
       if (!targetId) {
@@ -430,7 +498,7 @@ function renderDashboard(): void {
     });
     row.addEventListener("keydown", (event) => {
       if (row instanceof HTMLButtonElement) return;
-      if ((event.target as HTMLElement).closest("[data-edit-target]") || (event.target as HTMLElement).closest("[data-toggle-target]") || (event.target as HTMLElement).closest("[data-toggle-all]")) return;
+      if ((event.target as HTMLElement).closest("[data-edit-target]") || (event.target as HTMLElement).closest("[data-toggle-target]") || (event.target as HTMLElement).closest("[data-toggle-all]") || (event.target as HTMLElement).closest("[data-delete-target]")) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       row.click();
@@ -533,7 +601,7 @@ function renderLegend(): void {
     history.series
       .map(
         (series, index) =>
-          `<button data-legend-id="${series.target.id}" class="legend-item ${series.target.id === selectedTargetId ? "selected" : ""}"><span style="--series-color:${["#5eead4", "#60a5fa", "#c084fc", "#f472b6", "#facc15"][index % 5]}"></span>${escapeHtml(series.target.name)}</button>`,
+          `<button data-legend-id="${series.target.id}" class="legend-item ${series.target.id === selectedTargetId ? "selected" : ""}"><span style="--series-color:${palette[index % palette.length]}"></span>${escapeHtml(series.target.name)}</button>`,
       )
       .join("");
   byId("chart-legend")
@@ -674,12 +742,49 @@ async function saveTargetForm(base: Target, dialog: HTMLDialogElement): Promise<
   }
 }
 
-async function removeTarget(target: Target, dialog: HTMLDialogElement): Promise<void> {
-  const accepted = confirm(t("toast.removeConfirm", { name: target.name }));
+/** In-app confirmation modal — portable across WebView runtimes (native confirm() is unreliable in WKWebView). */
+function askConfirm(message: string): Promise<boolean> {
+  const dialog = byId<HTMLDialogElement>("confirm-dialog");
+  let resolve: (accepted: boolean) => void = () => {};
+  const result = new Promise<boolean>((r) => {
+    resolve = r;
+  });
+  const finish = (accepted: boolean): void => {
+    dialog.close();
+    resolve(accepted);
+  };
+  const onCancel = (event: Event): void => {
+    event.preventDefault();
+    finish(false);
+  };
+  dialog.innerHTML = `
+    <header><div><span class="eyebrow">LNPM</span><h3>${t("confirm.title")}</h3></div><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
+    <div class="modal-content confirm-body"><p id="confirm-message">${escapeHtml(message)}</p></div>
+    <footer><div></div><div><button id="confirm-cancel" type="button" class="button ghost">${t("action.cancel")}</button><button id="confirm-ok" type="button" class="button danger">${t("action.confirm")}</button></div></footer>`;
+  dialog.querySelectorAll(".modal-close").forEach((button) =>
+    button.addEventListener("click", () => finish(false)),
+  );
+  byId("confirm-cancel").addEventListener("click", () => finish(false));
+  const okButton = byId<HTMLButtonElement>("confirm-ok");
+  okButton.addEventListener("click", () => finish(true));
+  okButton.addEventListener("click", () => {
+    okButton.disabled = true;
+    const cancelButton = byId<HTMLButtonElement>("confirm-cancel");
+    cancelButton.disabled = true;
+  }, { once: true });
+  dialog.addEventListener("cancel", onCancel);
+  dialog.addEventListener("close", () => dialog.removeEventListener("cancel", onCancel), { once: true });
+  dialog.showModal();
+  byId("confirm-cancel").focus();
+  return result;
+}
+
+async function removeTarget(target: Target, dialog: HTMLDialogElement | null): Promise<void> {
+  const accepted = await askConfirm(t("toast.removeConfirm", { name: target.name }));
   if (!accepted) return;
   try {
     await api.archiveTarget(target.id);
-    dialog.close();
+    dialog?.close();
     dashboard = await api.dashboard();
     selectedTargetId = null;
     renderDashboard();
@@ -694,7 +799,35 @@ async function removeTarget(target: Target, dialog: HTMLDialogElement): Promise<
   }
 }
 
-async function openSettingsDialog(): Promise<void> {
+/** Delete all monitors (soft-archive each; historical data is retained). */
+async function removeAllTargets(): Promise<void> {
+  const targets = [...dashboard.targets];
+  if (targets.length === 0) return;
+  const accepted = await askConfirm(t("toast.deleteAllConfirm", { count: targets.length }));
+  if (!accepted) return;
+  let removed = 0;
+  for (const item of targets) {
+    try {
+      await api.archiveTarget(item.target.id);
+      removed += 1;
+    } catch (error) {
+      showToast(formatError(error), "error");
+      break;
+    }
+  }
+  dashboard = await api.dashboard();
+  selectedTargetId = null;
+  renderDashboard();
+  if (selectedTargetId) await loadHistory(currentRange.fromMs, currentRange.toMs);
+  else {
+    chart?.destroy();
+    chart = null;
+    history = null;
+  }
+  if (removed > 0) showToast(t("toast.allMonitorsRemoved", { count: removed }), "success");
+}
+
+async function openSettingsDialog(focusSection?: string): Promise<void> {
   const dialog = byId<HTMLDialogElement>("settings-dialog");
   const storage = await api.storageInfo();
   const retentionOptions = [7, 30, 90, 180, 365]
@@ -703,7 +836,7 @@ async function openSettingsDialog(): Promise<void> {
   dialog.innerHTML = `
     <form id="settings-form" class="settings-form">
       <header><div><span class="eyebrow">LNPM</span><h3>${t("action.settings")}</h3></div><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
-      <div class="settings-scroll-area">
+      <div class="settings-scroll-area" id="settings-scroll-area">
         <section class="settings-section"><h4>${t("section.monitoring")}</h4>
           <label>${t("settings.rawRetention")}<select id="retention-days">${retentionOptions}<option value="unlimited">${t("settings.unlimited")}</option></select></label>
           <label class="toggle-row"><input id="notifications-enabled" type="checkbox" ${settings.notificationsEnabled ? "checked" : ""}/><span><strong>${t("settings.notifications")}</strong><small>${t("settings.notificationsDescription")}</small></span></label>
@@ -711,6 +844,11 @@ async function openSettingsDialog(): Promise<void> {
         </section>
         <section class="settings-section"><h4>${t("section.appearance")}</h4><label>${t("settings.language")}<select id="language"><option value="auto">${t("settings.systemDefault")}</option><option value="en">English</option><option value="ko">한국어</option><option value="ja">日本語</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option></select></label></section>
         <section class="settings-section data-section"><h4>${t("section.data")}</h4><div><span>${formatBytes(storage.databaseSizeBytes)}</span><small>${escapeHtml(storage.databasePath)}</small></div><div class="inline-actions"><button id="open-data" type="button" class="button ghost">${t("action.openFolder")}</button><button id="backup-data" type="button" class="button ghost">${t("action.createBackup")}</button><button id="cleanup-data" type="button" class="button ghost">${t("action.cleanNow")}</button></div></section>
+        <section class="settings-section cloud-sync-section" id="cloud-sync-section"><h4>${t("section.cloudSync")}</h4>
+          <label>${t("cloudSync.endpoint")}<input id="dashboard-ingest-url" type="url" value="${escapeHtml(settings.dashboardIngestUrl ?? "")}" placeholder="http://localhost:3000/api/ping/ingest" /><small>${t("cloudSync.endpointHint")}</small><div id="ingest-url-error" class="inline-error hidden"></div></label>
+          <label class="toggle-row"><input id="cloud-sync-paused" type="checkbox" ${settings.cloudSyncPaused ? "checked" : ""}/><span><strong>${t("cloudSync.pause")}</strong><small>${t("cloudSync.pauseHint")}</small></span></label>
+          <div class="inline-actions"><button id="sync-now" type="button" class="button ghost" ${!settings.dashboardIngestUrl || settings.cloudSyncPaused ? "disabled" : ""}>${t("cloudSync.syncNow")}</button><span id="sync-status-text" class="sync-status-text" data-sync-state="${syncStatus.status}">${formatSyncStatus(syncStatus.status)}</span></div>
+        </section>
       </div>
       <footer><span>v${await getVersion()}</span><div><button type="button" class="button ghost modal-close">${t("action.cancel")}</button><button class="button primary">${t("action.save")}</button></div></footer>
     </form>`;
@@ -736,9 +874,62 @@ async function openSettingsDialog(): Promise<void> {
       showToast(formatError(error), "error");
     }
   });
+
+  // Cloud sync section handlers
+  const syncNowButton = byId<HTMLButtonElement>("sync-now");
+  const ingestUrlInput = byId<HTMLInputElement>("dashboard-ingest-url");
+  const ingestUrlError = byId<HTMLDivElement>("ingest-url-error");
+  const syncPausedCheckbox = byId<HTMLInputElement>("cloud-sync-paused");
+
+  // Validate URL on input
+  ingestUrlInput.addEventListener("input", () => {
+    const result = validateIngestUrl(ingestUrlInput.value);
+    if (result.ok) {
+      ingestUrlError.classList.add("hidden");
+      ingestUrlError.textContent = "";
+    } else {
+      ingestUrlError.textContent = result.reason;
+      ingestUrlError.classList.remove("hidden");
+    }
+  });
+
+  // Sync now button
+  syncNowButton.addEventListener("click", async () => {
+    syncNowButton.disabled = true;
+    syncNowButton.textContent = t("cloudSync.syncing");
+    try {
+      const result = await api.triggerSyncNow();
+      showToast(
+        t("toast.syncSuccess", {
+          accepted: result.accepted,
+          duplicate: result.duplicate,
+        }),
+        "success",
+      );
+    } catch (error) {
+      showToast(t("toast.syncError", { message: formatError(error) }), "error");
+    } finally {
+      syncNowButton.disabled = false;
+      syncNowButton.textContent = t("cloudSync.syncNow");
+    }
+  });
+
+  // Update sync now button enabled state when pause checkbox changes
+  syncPausedCheckbox.addEventListener("change", () => {
+    const disabled = !settings.dashboardIngestUrl || syncPausedCheckbox.checked;
+    syncNowButton.disabled = disabled;
+  });
   byId<HTMLFormElement>("settings-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
+      // Validate URL before saving
+      const urlResult = validateIngestUrl(ingestUrlInput.value);
+      if (!urlResult.ok) {
+        ingestUrlError.textContent = urlResult.reason;
+        ingestUrlError.classList.remove("hidden");
+        return;
+      }
+
       const retention = byId<HTMLSelectElement>("retention-days").value;
       settings = await api.saveSettings({
         ...settings,
@@ -747,6 +938,8 @@ async function openSettingsDialog(): Promise<void> {
         startAtLogin: byId<HTMLInputElement>("start-at-login").checked,
         language: byId<HTMLSelectElement>("language").value as AppSettings["language"],
         firstRun: false,
+        dashboardIngestUrl: urlResult.ok ? (urlResult.url === "" ? null : urlResult.url) : null,
+        cloudSyncPaused: syncPausedCheckbox.checked,
       });
       dialog.close();
       if (language === resolveLanguage(settings.language)) {
@@ -757,6 +950,14 @@ async function openSettingsDialog(): Promise<void> {
     }
   });
   dialog.showModal();
+
+  // Scroll to section if requested (e.g. clicking sync icon)
+  if (focusSection) {
+    const section = document.getElementById(`${focusSection}-section`);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
 }
 
 async function initPopup(): Promise<void> {
@@ -1046,10 +1247,62 @@ function showToast(message: string, kind: string): void {
   }, 4_500);
 }
 
+const SYNC_STATE_ICONS: Record<string, string> = {
+  off: "⊘",    // ⊘
+  paused: "⏸", // ⏸
+  idle: "☁",   // ☁
+  syncing: "↻", // ↻
+  success: "✓", // ✓
+  error: "✗",   // ✗
+};
+
+let syncRevertTimer: ReturnType<typeof setTimeout> | null = null;
+
+function updateSyncIcon(status: string, message: string | null): void {
+  const icon = document.getElementById("sync-status-icon");
+  if (!icon) return;
+  icon.dataset.syncState = status;
+  icon.textContent = SYNC_STATE_ICONS[status] ?? "⊘";
+  const statusLabel = t(`cloudSync.status.${status}` as MessageKey) ?? status;
+  const tooltip = message ? `${statusLabel}: ${message}` : statusLabel;
+  icon.setAttribute("aria-label", tooltip);
+  icon.title = tooltip;
+
+  // Auto-revert success to idle after 3s
+  if (status === "success") {
+    if (syncRevertTimer) clearTimeout(syncRevertTimer);
+    syncRevertTimer = setTimeout(() => {
+      syncRevertTimer = null;
+      updateSyncIcon("idle", null);
+    }, 3_000);
+  }
+}
+
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) throw new Error(`Missing element #${id}`);
   return element as T;
+}
+
+/** Validates a dashboard ingest URL. Returns { ok: true, url } or { ok: false, reason }. */
+function validateIngestUrl(raw: string): { ok: true; url: string } | { ok: false; reason: string } {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { ok: true, url: "" };
+  if (trimmed.length > 2048) return { ok: false, reason: t("validation.urlTooLong") };
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { ok: false, reason: t("validation.invalidScheme") };
+    }
+    return { ok: true, url: trimmed };
+  } catch {
+    return { ok: false, reason: t("validation.invalidUrl") };
+  }
+}
+
+/** Format sync status for display in settings. */
+function formatSyncStatus(status: string): string {
+  return t(`cloudSync.status.${status}` as MessageKey) ?? status;
 }
 
 function setText(id: string, value: string): void {
@@ -1079,13 +1332,15 @@ function buttonLabel(icon: "pause" | "play", label: string): string {
   return `<span class="button-label">${iconSvg(icon)}<span>${escapeHtml(label)}</span></span>`;
 }
 
-function iconSvg(icon: "pause" | "play" | "edit" | "layers"): string {
+function iconSvg(icon: "pause" | "play" | "edit" | "layers" | "trash"): string {
   const paths = {
     pause: '<path d="M8 6v12M16 6v12" />',
     play: '<path d="m9 6 9 6-9 6Z" />',
     edit: '<path d="M5 19h4l10-10-4-4L5 15v4Z" /><path d="m13.5 6.5 4 4" />',
     layers:
       '<path d="m12 4 8 4-8 4-8-4 8-4Z" /><path d="m4 12 8 4 8-4" /><path d="m4 16 8 4 8-4" />',
+    trash:
+      '<path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="m6 7 1 13h10l1-13" /><path d="M10 11v5" /><path d="M14 11v5" />',
   } as const;
   return `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[icon]}</svg>`;
 }

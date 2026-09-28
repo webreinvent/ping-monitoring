@@ -3,8 +3,11 @@ import type {
   AppSettings,
   DashboardSnapshot,
   HistoryResponse,
+  HostIdentity,
   PingSample,
   StorageInfo,
+  SyncEvent,
+  SyncResult,
   Target,
   UpdateInfo,
 } from "./types";
@@ -34,6 +37,7 @@ export const api = {
   saveSettings: (settings: AppSettings) =>
     invoke<AppSettings>("save_settings", { settings }),
   storageInfo: () => invoke<StorageInfo>("get_storage_info"),
+  hostIdentity: () => invoke<HostIdentity>("get_host_identity"),
   cleanup: () => invoke<number>("run_retention_cleanup"),
   backup: () => invoke<string>("backup_database"),
   showMain: () => invoke<void>("show_main"),
@@ -45,4 +49,6 @@ export const api = {
   skipUpdate: (version: string) =>
     invoke<AppSettings>("skip_update", { version }),
   installUpdate: () => invoke<void>("install_update"),
+  getSyncStatus: () => invoke<SyncEvent>("get_sync_status"),
+  triggerSyncNow: () => invoke<SyncResult>("trigger_sync_now"),
 };

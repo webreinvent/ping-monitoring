@@ -1,0 +1,39 @@
+- [No unconfirmed commits](no-unconfirmed-commits.md) — workflow
+- [LNPM Cloud Dashboard](lnpm-cloud-dashboard.md) — project
+- [LNPM Cloud Dashboard Requirements](lnpm-cloud-dashboard-requirements.md) — requirements manifest
+- [AI Agents Node.js Environment Setup](ai-agents/node-env-setup.md) — NVM vs Homebrew conflict, Node 22.19.0+ requirement, native module rebuild
+- [LNPM Milestones & Tasks Planner](lnpm-milestones-tasks-planner.md) — planner prompt generated
+- [LNPM Milestones Plan](lnpm-milestones-plan.md) — 2 milestones, 19 tasks, 14 features
+- [Agent Prompts Generated](agent-prompts-generated.md) — superseded by agent-pipeline-reduced
+- [Agent Pipeline Reduced](agent-pipeline-reduced.md) — 16 agents merged to 6, agent-05 commits all + merges to develop + never pushes
+- [UI/UX Design Decisions](ui-ux-design-decisions.md) — dashboard styling, state management, chart approach, i18n strategy
+- [Agent 05 Implementation Plan](agent-05-implementation-plan.md) — updated plan: M1-T1 complete, 73 files to create, 8 to modify, 10 phases
+- [Implementation Plan (original)](implementation-plan.md) — 9 phases, 78 files (superseded by agent-05)
+- [Agent 06 Audit Results](agent-06-audit-results.md) — principles audit, progress report, risk findings
+- [Agent 07 M1-T1 Implementation](agent-07-m1-t1.md) — Nuxt 4 + Nitro project setup complete
+- [Agent 08 Code Review](agent-08-code-review.md) — 8 issues found and fixed, all gates passed
+- [Agent 09 UAT Results](agent-09-uat-results.md) — 38/38 criteria passed, zero bugs, M1-T1 complete
+- [Agent 10 Test Results](agent-10-test-results.md) — 115 tests, 8 files, zero failures, M1-T1 tests complete
+- [Session Context M1-T1](session-context-m1-t1.md) — M1-T1 already complete by agents 07-10
+- [Agent 03 Code Analysis](agent-03-code-analysis.md) — code analysis results: patterns, reusable code, conventions
+- [Agent 04 UI/UX Plan](agent-04-ui-ux-plan.md) — UI/UX design plan: design system, components, state management, accessibility
+- [Patterns Established](lnpm-patterns-established.md) — M1+M2 patterns: DB plugin, migrations, logger, WebSocket, uPlot charts, Vue composables, rate limiting, quality classifier
+- [Decisions Made](lnpm-decisions-made.md) — M1+M2 decisions: Nuxt 4, node-server, better-sqlite3, uPlot, globalThis DB, chart composables, sidebar layout
+- [Lessons Learned](lnpm-lessons-learned.md) — M1+M2 errors and fixes: WebSocket types, lifecycle hooks, deep watch on typed arrays, mock DB UPDATE binding, better-sqlite3 segfaults
+- [Task Complete M1-T1](lnpm-task-complete-m1-t1.md) — M1-T1 summary: agents 07-10, 115 tests, 38/38 UAT
+- [Task Complete M2 Full](lnpm-task-complete-m2-full.md) — M2 full summary: agents 00-10, 826 tests, all 7 M2 tasks complete (shell, charts, detail, WebSocket, client pages, settings)
+- [Task Complete M2-T4](lnpm-task-complete-m2-t4.md) — M2-T4 specific: detail view with chart, quality bands, metrics, 4 ADRs
+- [M1-T3 Session Context](M1-T3-session-context.md) — M1-T3 scope: 5 migration files exist (from M1-T2), F9 sync columns gap identified
+- [M1-T3 Code Analysis](M1-T3-code-analysis.md) — Code analysis: 5 existing migrations, F9 sync column gap, patterns to follow
+- [M1-T3 Implementation Plan](M1-T3-implementation-plan.md) — Implementation plan: verification sequence, file inventory, all schema verified
+- [M1-T2 Session Context](M1-T2-session-context.md) — SQLite database plugin task context
+- [M1-T2 Scope Summary](M1-T2-scope-summary.md) — Task scope analysis: objective, acceptance criteria, affected files
+- [M1-T2 Code Analysis](M1-T2-code-analysis.md) — Code analysis: existing patterns, gaps, reusable code, migration files needed
+- [UI/UX Plan](ui-ux-plan.md) — Complete UI/UX design plan: color palette, component hierarchy, composables, styling, chart, accessibility, responsive, i18n
+- [Implementation Plan](implementation-plan.md) — M1-T2 implementation sequence: 5 migrations, database plugin enhancement, typed exports, tests
+- [Audit Results](audit-results.md) — Principles audit: all passed, no violations, 5 create + 4 modify + 1 delete
+- [Code Review Results](code-review-results.md) — Code review M1-T3: all checks passed, 0 issues found, 133 tests pass
+- [Patterns Established](patterns-established.md) — 5 patterns: Nitro plugin lifecycle, SQLite singleton, migration runner, structured logging, WAL pragmas
+- [Decisions Made](decisions-made.md) — 6 decisions: enhance vs rewrite, all migrations at once, Nitro cleanup, globalThis access, placeholder deletion, assembled reference
+- [Lessons Learned](lessons-learned.md) — 3 lessons: better-sqlite3 crashes Vitest workers, unused imports, globals: true
+- [Task Complete M1-T2](task-complete.md) — M1-T2 summary: all criteria met, 118 tests pass, 6 created + 5 modified + 1 deleted

@@ -1,0 +1,14 @@
+{
+  "name": "llmkb",
+  "description": "LLM-powered knowledge base with wiki generation, semantic search, and knowledge graphs. Sync codebases, query spaces, and explore architecture from Claude.",
+  "version": "0.3.0",
+  "author": {
+    "name": "llmkb"
+  },
+  "homepage": "https://llmkb.ai",
+  "keywords": [
+    "knowledge-base",
+    "wiki",
+    "mcp"
+  ]
+}

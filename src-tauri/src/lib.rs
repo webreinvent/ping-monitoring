@@ -1,10 +1,12 @@
 pub mod commands;
 pub mod domain;
 pub mod i18n;
+pub mod identity;
 pub mod monitor;
 pub mod probe;
 pub mod quality;
 pub mod storage;
+pub mod sync;
 pub mod tray;
 pub mod updater;
 
@@ -13,8 +15,9 @@ use std::{io, sync::Arc, time::Duration};
 use commands::AppState;
 use directories::ProjectDirs;
 use monitor::MonitorService;
-use probe::SurgePingProbe;
+use probe::SystemPingProbe;
 use storage::Database;
+use sync::SyncService;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tray::{TauriEventSink, build_tray, handle_menu_event, handle_tray_event, handle_window_event};
@@ -41,18 +44,46 @@ pub fn run() {
                 })?;
             let database = Database::new(data_directory)?;
             let settings = database.load_settings()?;
-            let probe =
-                tauri::async_runtime::block_on(SurgePingProbe::new()).map_err(io::Error::other)?;
+            let probe = SystemPingProbe::new();
             let event_sink = TauriEventSink::new(app.handle().clone(), database.clone());
             let monitor = MonitorService::new(database.clone(), probe, event_sink);
             monitor.start_all()?;
+
+            // Build the sync service BEFORE registering AppState so it can be
+            // stored in the state object (commands like `get_sync_status`
+            // need to read it from `State<'_, AppState>`).
+            let sync_service = Arc::new(SyncService::new(database.clone(), app.handle().clone()));
+
             app.manage(AppState {
                 monitor: Arc::clone(&monitor),
                 database: database.clone(),
+                sync_service: sync_service.clone(),
             });
             let update_manager = UpdateManager::new(app.handle().clone(), database.clone());
             app.manage(update_manager.clone());
             update_manager.start();
+
+            // Re-register the sync service so other code paths can still
+            // grab it directly via `app.state::<Arc<SyncService>>` if they
+            // need to. (Already in AppState above, but kept here for any
+            // caller that depends on the standalone registration.)
+            app.manage(sync_service.clone());
+
+            // Start sync if configured
+            if settings.dashboard_ingest_url.is_some() && !settings.cloud_sync_paused {
+                let sync_service_clone = Arc::clone(&sync_service);
+                let ingest_url = settings.dashboard_ingest_url.clone().unwrap();
+                let sync_interval_min = settings.sync_interval_min;
+                tauri::async_runtime::spawn(async move {
+                    let config = sync::SyncConfig {
+                        endpoint: ingest_url,
+                        periodic_interval_min: sync_interval_min,
+                        ..Default::default()
+                    };
+                    sync_service_clone.start(config).await;
+                });
+            }
+
             build_tray(app, &settings)?;
 
             tray::show_main_window(app.handle());
@@ -86,11 +117,14 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::get_storage_info,
+            commands::get_host_identity,
             commands::run_retention_cleanup,
             commands::backup_database,
             commands::show_main,
             commands::hide_popup,
             commands::quit_app,
+            commands::get_sync_status,
+            commands::trigger_sync_now,
             updater::get_pending_update,
             updater::defer_update,
             updater::skip_update,
@@ -107,6 +141,7 @@ pub fn run() {
             && let Some(state) = app.try_state::<AppState>()
         {
             state.monitor.shutdown();
+            // Shutdown is synchronous — the sync task handle will be dropped
         }
     });
 }
