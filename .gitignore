@@ -30,4 +30,5 @@ src-tauri/tauri-signing.key
 # Agent pipeline temporary output
 .vaahagents/
 
-.claude/settings.json
+
+.claude/

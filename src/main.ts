@@ -160,6 +160,7 @@ async function initMain(): Promise<void> {
       <div class="header-actions">
         <span class="host-badge" id="host-identity" hidden title="${t("section.hostIdentity")}">
           <strong id="host-name">—</strong>
+          <span class="host-sep" id="host-sep" hidden>|</span>
           <code id="host-ip"></code>
         </span>
         <button id="follow-live" class="button ghost active">● ${t("action.live")}</button>
@@ -243,10 +244,16 @@ async function initMain(): Promise<void> {
       const host = byId("host-identity");
       const name = byId("host-name");
       const ip = byId("host-ip");
-      if (!host || !name || !ip) return;
-      name.textContent = identity.hostname;
+      const sep = byId("host-sep");
+      if (!host || !name || !ip || !sep) return;
+      // Identity display pattern: `<username>@<hostname> | <IP>`
+      name.textContent = identity.username
+        ? `${identity.username}@${identity.hostname}`
+        : identity.hostname;
       ip.textContent = identity.ipAddress ?? "";
-      ip.hidden = !identity.ipAddress;
+      const hasIp = Boolean(identity.ipAddress);
+      ip.hidden = !hasIp;
+      sep.hidden = !hasIp;
       host.hidden = false;
     })
     .catch(() => {});
@@ -751,14 +758,20 @@ function askConfirm(message: string): Promise<boolean> {
     finish(false);
   };
   dialog.innerHTML = `
-    <header><div><h3>${escapeHtml(message)}</h3></div><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
-    <footer>
-      <div></div>
-      <div><button id="confirm-cancel" type="button" class="button ghost">${t("action.cancel")}</button><button id="confirm-ok" type="button" class="button danger">${t("action.confirm")}</button></div>
-    </footer>`;
-  dialog.querySelector(".modal-close")?.addEventListener("click", () => finish(false));
+    <header><div><span class="eyebrow">LNPM</span><h3>${t("confirm.title")}</h3></div><button type="button" class="modal-close" aria-label="${t("action.close")}">×</button></header>
+    <div class="modal-content confirm-body"><p id="confirm-message">${escapeHtml(message)}</p></div>
+    <footer><div></div><div><button id="confirm-cancel" type="button" class="button ghost">${t("action.cancel")}</button><button id="confirm-ok" type="button" class="button danger">${t("action.confirm")}</button></div></footer>`;
+  dialog.querySelectorAll(".modal-close").forEach((button) =>
+    button.addEventListener("click", () => finish(false)),
+  );
   byId("confirm-cancel").addEventListener("click", () => finish(false));
-  byId("confirm-ok").addEventListener("click", () => finish(true));
+  const okButton = byId<HTMLButtonElement>("confirm-ok");
+  okButton.addEventListener("click", () => finish(true));
+  okButton.addEventListener("click", () => {
+    okButton.disabled = true;
+    const cancelButton = byId<HTMLButtonElement>("confirm-cancel");
+    cancelButton.disabled = true;
+  }, { once: true });
   dialog.addEventListener("cancel", onCancel);
   dialog.addEventListener("close", () => dialog.removeEventListener("cancel", onCancel), { once: true });
   dialog.showModal();

@@ -10,6 +10,7 @@ vi.mock("./db", () => ({
 vi.mock("./client", () => ({
   getClientBySlug: vi.fn(),
   upsertClient: vi.fn(),
+  updateClientIpAddress: vi.fn(),
 }));
 
 // Mock the logger
@@ -132,7 +133,7 @@ describe("ingestPingBatch — client lookup", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(mockUpsertClient).toHaveBeenCalledWith("alice", "desktop", "aa:00:bb:11:cc:22");
+    expect(mockUpsertClient).toHaveBeenCalledWith("alice", "desktop", "aa:00:bb:11:cc:22", undefined);
   });
 
   it("does NOT auto-register when identity is incomplete", () => {

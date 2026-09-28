@@ -19,6 +19,7 @@ vi.mock("./db", () => ({ getDb: vi.fn() }));
 vi.mock("./client", () => ({
   getClientBySlug: vi.fn(),
   upsertClient: vi.fn(),
+  updateClientIpAddress: vi.fn(),
 }));
 vi.mock("./logger", () => ({
   info: vi.fn(),
@@ -357,7 +358,7 @@ describe("ingestPingBatch — client auto-registration", () => {
 
     expect(result).not.toBeNull();
     expect(result!.accepted).toBe(1);
-    expect(mockUpsertClient).toHaveBeenCalledWith("alice", "desktop", "aa:00:bb:11:cc:22");
+    expect(mockUpsertClient).toHaveBeenCalledWith("alice", "desktop", "aa:00:bb:11:cc:22", undefined);
   });
 });
 

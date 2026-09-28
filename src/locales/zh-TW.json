@@ -76,6 +76,7 @@
   "settings.startAtLoginDescription": "登入後在系統匣中啟動 LNPM",
   "settings.language": "語言",
   "settings.systemDefault": "系統預設",
+  "confirm.title": "確認操作",
   "toast.endAfterStart": "結束時間必須晚於開始時間",
   "toast.targetSaved": "目標已儲存",
   "toast.removeConfirm": "要刪除 {name} 嗎？歷史資料將會保留。",

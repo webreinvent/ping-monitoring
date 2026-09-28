@@ -76,6 +76,7 @@
   "settings.startAtLoginDescription": "LNPM をトレイで自動起動します",
   "settings.language": "言語",
   "settings.systemDefault": "システムの既定値",
+  "confirm.title": "操作の確認",
   "toast.endAfterStart": "終了日時は開始日時より後にしてください",
   "toast.targetSaved": "対象を保存しました",
   "toast.removeConfirm": "{name} を削除しますか？履歴データは保持されます。",

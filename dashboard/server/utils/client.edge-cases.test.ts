@@ -225,7 +225,7 @@ describe("toClientResponse — edge cases", () => {
     expect(response.updated_at).toMatch(/Z$/);
   });
 
-  it("response has exactly 8 fields", () => {
+  it("response has exactly 9 fields", () => {
     const row = {
       id: 1,
       slug: "test",
@@ -243,10 +243,10 @@ describe("toClientResponse — edge cases", () => {
 
     const response = toClientResponse(row);
     const keys = Object.keys(response);
-    expect(keys).toHaveLength(8);
+    expect(keys).toHaveLength(9);
     expect(keys).toEqual([
       "id", "slug", "name", "username", "hostname",
-      "mac_address", "created_at", "updated_at",
+      "mac_address", "ip_address", "created_at", "updated_at",
     ]);
   });
 

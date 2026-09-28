@@ -76,6 +76,7 @@
   "settings.startAtLoginDescription": "LNPM을 트레이에서 자동 실행합니다",
   "settings.language": "언어",
   "settings.systemDefault": "시스템 기본값",
+  "confirm.title": "작업 확인",
   "toast.endAfterStart": "종료 시각은 시작 시각보다 뒤여야 합니다.",
   "toast.targetSaved": "대상을 저장했습니다",
   "toast.removeConfirm": "{name} 대상을 삭제할까요? 과거 기록은 유지됩니다.",

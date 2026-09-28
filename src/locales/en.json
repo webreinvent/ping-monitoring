@@ -76,6 +76,7 @@
   "settings.startAtLoginDescription": "Start LNPM in the tray",
   "settings.language": "Language",
   "settings.systemDefault": "System default",
+  "confirm.title": "Confirm action",
   "toast.endAfterStart": "End must be after start",
   "toast.targetSaved": "Target saved",
   "toast.removeConfirm": "Remove {name}? Historical data will be kept.",

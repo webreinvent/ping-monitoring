@@ -59,6 +59,7 @@ export interface PingSample {
 }
 
 export interface HostIdentity {
+  username: string;
   hostname: string;
   ipAddress: string | null;
 }

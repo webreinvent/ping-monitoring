@@ -64,6 +64,9 @@ export interface IngestPayload {
   /** MAC address — required on first ingest */
   mac_address?: string;
 
+  /** Client-reported LAN IP (Tauri's probed address); refreshes on every ingest */
+  ipAddress?: string;
+
   /** Array of ping samples (1–1000 items) */
   samples: PingSampleIngest[];
 }

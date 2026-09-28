@@ -43,6 +43,7 @@
       v-for="group in groupedByClient"
       :key="group.clientSlug"
       :client-name="group.clientName"
+      :client-ip="group.clientIp"
       :client-slug="group.clientSlug"
       :monitors="group.monitors"
       :is-visible="isVisible"
@@ -79,8 +80,16 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { MonitorListItem } from "#shared/types";
+import { showToast, formatFetchError } from "~/composables/useToast";
 
-const { monitors, groupedByClient, isVisible, toggleMonitor } = useMonitors();
+const {
+  monitors,
+  groupedByClient,
+  isVisible,
+  toggleMonitor,
+  removeMonitorsLocally,
+  restoreRemovedMonitors,
+} = useMonitors();
 
 // Listen for client name updates via WebSocket
 const { onClientNameUpdated } = useWebSocket();
@@ -173,16 +182,9 @@ function openDeleteAll(): void {
  *      restore accurate state.
  */
 async function confirmDelete(monitor: MonitorListItem): Promise<void> {
-  // 1. Optimistic local removal — drop the monitor from its client group.
-  const groups = groupedByClient.value;
-  const group = groups.find((g) => g.clientSlug === monitor.clientSlug);
-  if (group) {
-    group.monitors = group.monitors.filter((m) => m.id !== monitor.id);
-    // Drop empty groups so the sidebar stays clean.
-    if (group.monitors.length === 0) {
-      groupedByClient.value = groups.filter((g) => g.clientSlug !== monitor.clientSlug);
-    }
-  }
+  // 1. Optimistic local removal — hide the monitor (its client group drops
+  // off automatically once no visible monitors remain).
+  removeMonitorsLocally([monitor.id]);
 
   // 2. Close the modal immediately so the UI feels snappy.
   pendingDelete.value = null;
@@ -198,7 +200,10 @@ async function confirmDelete(monitor: MonitorListItem): Promise<void> {
   // state we just set.
   try {
     await $fetch(`/api/monitors/${monitor.id}`, { method: "DELETE" });
-  } catch {
+    showToast(`Deleted ${monitor.targetHost}`, "success");
+  } catch (err) {
+    showToast(`Failed to delete monitor: ${formatFetchError(err)}`, "error");
+    restoreRemovedMonitors();
     await refreshNuxtData("monitors-list");
   }
 }
@@ -212,16 +217,14 @@ async function confirmDelete(monitor: MonitorListItem): Promise<void> {
  *   5. Send the DELETE; on failure, re-fetch the canonical list.
  */
 async function confirmDeleteClient(slug: string): Promise<void> {
-  const groups = groupedByClient.value;
-  const group = groups.find((g) => g.clientSlug === slug);
-
-  // Capture the deleted monitor IDs so we can check the active route below.
+  // Capture the client's monitor IDs so we can hide them and check the
+  // active route below.
+  const group = groupedByClient.value.find((g) => g.clientSlug === slug);
   const deletedIds = new Set<number>(group?.monitors.map((m) => m.id) ?? []);
 
-  // 1+2. Optimistic local removal — drop the entire client group.
-  if (group) {
-    groupedByClient.value = groups.filter((g) => g.clientSlug !== slug);
-  }
+  // 1+2. Optimistic local removal — hide every monitor of this client,
+  // which drops the whole group from the sidebar.
+  removeMonitorsLocally([...deletedIds]);
 
   // 3. Close the modal immediately so the UI feels snappy.
   pendingDeleteClient.value = null;
@@ -237,8 +240,10 @@ async function confirmDeleteClient(slug: string): Promise<void> {
   // state we just set.
   try {
     await $fetch(`/api/clients/${slug}`, { method: "DELETE" });
+    showToast(`Deleted client ${slug}`, "success");
   } catch (err) {
-    console.error("Failed to delete client:", err);
+    showToast(`Failed to delete client: ${formatFetchError(err)}`, "error");
+    restoreRemovedMonitors();
     await refreshNuxtData("monitors-list");
   }
 }
@@ -259,8 +264,8 @@ async function confirmDeleteAll(): Promise<void> {
     }
   }
 
-  // 1. Optimistic local removal — clear every group.
-  groupedByClient.value = [];
+  // 1. Optimistic local removal — hide every monitor.
+  removeMonitorsLocally([...deletedIds]);
 
   // 2. Close the modal immediately.
   pendingDeleteAll.value = false;
@@ -273,7 +278,10 @@ async function confirmDeleteAll(): Promise<void> {
   // 4. Fire the DELETE.
   try {
     await $fetch(`/api/monitors`, { method: "DELETE" });
-  } catch {
+    showToast("Deleted all monitors", "success");
+  } catch (err) {
+    showToast(`Failed to delete all monitors: ${formatFetchError(err)}`, "error");
+    restoreRemovedMonitors();
     await refreshNuxtData("monitors-list");
   }
 }

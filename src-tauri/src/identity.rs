@@ -11,13 +11,15 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostIdentity {
+    pub username: String,
     pub hostname: String,
     pub ip_address: Option<String>,
 }
 
-/// Discover this machine's identity (hostname + best-effort LAN address).
+/// Discover this machine's identity (username + hostname + best-effort LAN address).
 pub fn discover() -> HostIdentity {
     HostIdentity {
+        username: whoami::username(),
         hostname: whoami::fallible::hostname().unwrap_or_else(|_| String::from("unknown")),
         ip_address: probe_lan_address().map(|address| address.to_string()),
     }
@@ -27,7 +29,7 @@ pub fn discover() -> HostIdentity {
 ///
 /// `UdpSocket::connect` sends no packets — it only selects the local
 /// interface, so no traffic reaches the public endpoints used below.
-fn probe_lan_address() -> Option<IpAddr> {
+pub(crate) fn probe_lan_address() -> Option<IpAddr> {
     let mut candidates: Vec<IpAddr> = Vec::new();
 
     // IPv4 candidate: toward a public IPv4 endpoint.

@@ -82,6 +82,7 @@ export default defineEventHandler(async (event) => {
       username: body.username,
       hostname: body.hostname,
       mac_address: body.mac_address,
+      ipAddress: body.ipAddress,
       samples: samples as PingSampleIngest[],
     };
 
@@ -93,6 +94,7 @@ export default defineEventHandler(async (event) => {
         username: payload.username,
         hostname: payload.hostname,
         mac_address: payload.mac_address,
+        ipAddress: payload.ipAddress,
       },
     );
 

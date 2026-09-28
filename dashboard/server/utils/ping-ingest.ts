@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { getClientBySlug, upsertClient } from "./client";
+import { getClientBySlug, updateClientIpAddress, upsertClient } from "./client";
 import { info, error as logError } from "./logger";
 import { classifyMonitorsBatch } from "./quality-classifier";
 import type { Database } from "better-sqlite3";
@@ -194,6 +194,7 @@ export function ingestPingBatch(
     username?: string;
     hostname?: string;
     mac_address?: string;
+    ipAddress?: string;
   },
 ): IngestResponse | null {
   const maxSamples = getMaxSamples();
@@ -216,7 +217,16 @@ export function ingestPingBatch(
       clientIdentity.username,
       clientIdentity.hostname,
       clientIdentity.mac_address,
+      clientIdentity.ipAddress,
     );
+  }
+
+  // Refresh the client-reported LAN IP when an existing client's address
+  // changed (DHCP reassignment) — keeps the `<name> | <IP>` display current.
+  const reportedIp = clientIdentity?.ipAddress?.trim();
+  if (client && reportedIp && reportedIp !== client.ip_address) {
+    updateClientIpAddress(client.id, reportedIp);
+    client.ip_address = reportedIp;
   }
 
   if (!client) {

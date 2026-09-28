@@ -73,3 +73,13 @@ CREATE INDEX IF NOT EXISTS idx_monitors_client_target ON monitors(client_id, tar
 CREATE INDEX IF NOT EXISTS idx_ping_monitor_time ON ping_samples(monitor_id, timestamp_ms);
 CREATE INDEX IF NOT EXISTS idx_ping_status ON ping_samples(status);
 CREATE INDEX IF NOT EXISTS idx_rollup_monitor_time ON minute_rollups(monitor_id, timestamp_ms);
+
+-- ---------------------------------------------------------------------------
+-- Post-base ALTER migrations (applied after the CREATE statements above)
+-- ---------------------------------------------------------------------------
+
+-- 006: quality classifier (M1-T10)
+-- ALTER TABLE monitors ADD COLUMN quality_state_updated_at INTEGER;
+
+-- 007: client-reported LAN IP for the `<name> | <IP>` identity display
+ALTER TABLE clients ADD COLUMN ip_address TEXT;

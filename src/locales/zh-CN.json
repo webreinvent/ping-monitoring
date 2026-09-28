@@ -76,6 +76,7 @@
   "settings.startAtLoginDescription": "登录后在托盘中启动 LNPM",
   "settings.language": "语言",
   "settings.systemDefault": "系统默认",
+  "confirm.title": "确认操作",
   "toast.endAfterStart": "结束时间必须晚于开始时间",
   "toast.targetSaved": "目标已保存",
   "toast.removeConfirm": "要删除 {name} 吗？历史数据将会保留。",

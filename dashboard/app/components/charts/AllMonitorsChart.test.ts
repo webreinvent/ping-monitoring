@@ -17,6 +17,7 @@ function createMonitor(id: number, targetName: string): MonitorListItem {
     targetName,
     clientSlug: "test-client",
     clientName: "Test Client",
+    clientIp: null,
     status: "up",
     latencyMs: 10,
     qualityState: "veryHigh",
