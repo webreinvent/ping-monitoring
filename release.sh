@@ -146,11 +146,11 @@ update_cargo_lock() {
 # Write a new version into every version file, keeping them in sync.
 update_version_files() {
   local new_version="$1"
-  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'/' src-tauri/tauri.conf.json
-  sed_inplace 's/^version = *"[^"]*"/version = "'"$new_version"'/' src-tauri/Cargo.toml
+  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'"/' src-tauri/tauri.conf.json
+  sed_inplace 's/^version = *"[^"]*"/version = "'"$new_version"'"/' src-tauri/Cargo.toml
   update_cargo_lock "$new_version"
-  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'/' package.json
-  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'/' dashboard/package.json
+  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'"/' package.json
+  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'"/' dashboard/package.json
 }
 
 # Bump (or set) the version across all files and display the change.
