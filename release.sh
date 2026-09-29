@@ -2,16 +2,28 @@
 # ────────────────────────────────────────────────────────────────────
 # release.sh — Build release installers (native + cross-platform)
 #
-# Default (no args):  clean ./builds/ + build macOS + Windows
+# Default (no args):  bump patch version + clean ./builds/ + build macOS + Windows
 #
 # Usage:
-#   bash release.sh                → clean + build macOS + Windows
-#   bash release.sh --all          → clean + build all 4 platforms
-#   bash release.sh --target <n>   → clean + build one target
+#   bash release.sh                → bump patch + clean + build macOS + Windows
+#   bash release.sh --all          → bump patch + clean + build all 4 platforms
+#   bash release.sh --target <n>   → bump patch + clean + build one target
 #   bash release.sh --no-clean     → skip cleanup before building
 #
 #   --target options:
 #     macos-arm   · macos-intel · windows · linux
+#
+# Version options (auto-bumped + displayed before building):
+#   (default)            bump patch   0.3.0 → 0.3.1
+#   --major              bump major   0.3.0 → 1.0.0
+#   --minor              bump minor   0.3.0 → 0.4.0
+#   --patch              bump patch   0.3.0 → 0.3.1
+#   --version X.Y.Z      set an exact version instead of bumping
+#   --no-bump            skip the bump (build with the current version)
+#
+#   Version files kept in sync:
+#     src-tauri/tauri.conf.json · src-tauri/Cargo.toml · src-tauri/Cargo.lock
+#     package.json · dashboard/package.json
 #
 # Output:  ./builds/<platform>/
 #   e.g. ./builds/macos-arm/LNPM.dmg
@@ -86,6 +98,85 @@ check_prerequisites() {
   info "Rust    $(rustc --version | awk '{print $2}')"
   info "Node    $(node --version)"
   info "pnpm    $(pnpm --version)"
+}
+
+# ── Version management ─────────────────────────────────────────────
+# Read the current app version from the bundler source of truth.
+get_current_version() {
+  node -p "require('${ROOT_DIR}/src-tauri/tauri.conf.json').version"
+}
+
+# Portable in-place sed (works on both macOS and GNU sed).
+sed_inplace() {
+  local expr="$1" file="$2" tmp
+  tmp="$(mktemp)"
+  sed "$expr" "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+# Compute a new version from a current one + bump type (major|minor|patch).
+compute_bumped() {
+  local current="$1" type="$2" major minor patch
+  if [[ "$current" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    major="${BASH_REMATCH[1]}"; minor="${BASH_REMATCH[2]}"; patch="${BASH_REMATCH[3]}"
+  else
+    err "Cannot parse version '$current' (expected X.Y.Z)"
+    exit 1
+  fi
+  case "$type" in
+    major) major=$((major + 1)); minor=0; patch=0 ;;
+    minor) minor=$((minor + 1)); patch=0 ;;
+    patch) patch=$((patch + 1)) ;;
+    *) err "Invalid bump type: $type"; exit 1 ;;
+  esac
+  echo "${major}.${minor}.${patch}"
+}
+
+# Rewrite the lnpm package entry in Cargo.lock to a new version.
+update_cargo_lock() {
+  local new_version="$1" lock="src-tauri/Cargo.lock" tmp
+  tmp="$(mktemp)"
+  awk -v newv="$new_version" '
+    /^\[\[package\]\]/    { in_lnpm = 0 }
+    /^name = "lnpm"/      { in_lnpm = 1 }
+    in_lnpm && /^version/ { printf "version = \"%s\"\n", newv; in_lnpm = 0; next }
+    { print }
+  ' "$lock" > "$tmp" && mv "$tmp" "$lock"
+}
+
+# Write a new version into every version file, keeping them in sync.
+update_version_files() {
+  local new_version="$1"
+  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'/' src-tauri/tauri.conf.json
+  sed_inplace 's/^version = *"[^"]*"/version = "'"$new_version"'/' src-tauri/Cargo.toml
+  update_cargo_lock "$new_version"
+  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'/' package.json
+  sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'/' dashboard/package.json
+}
+
+# Bump (or set) the version across all files and display the change.
+bump_version() {
+  local current new_version
+  current="$(get_current_version)"
+
+  if [ "$DO_BUMP" = "0" ]; then
+    info "Version: ${current} (unchanged — --no-bump)"
+    return 0
+  fi
+
+  if [ -n "$EXACT_VERSION" ]; then
+    new_version="$EXACT_VERSION"
+  else
+    new_version="$(compute_bumped "$current" "$BUMP_TYPE")"
+  fi
+
+  if [ "$new_version" = "$current" ]; then
+    warn "Version already at ${current} — nothing to bump."
+    return 0
+  fi
+
+  info "Bumping version: ${current} → ${new_version} (${BUMP_TYPE})"
+  update_version_files "$new_version"
+  ok "Version updated: ${current} → ${new_version}"
 }
 
 # ── Resolve targets ────────────────────────────────────────────────
@@ -278,6 +369,9 @@ main() {
   BUILD_ALL=0
   SINGLE_TARGET=""
   DO_CLEAN=1
+  BUMP_TYPE="patch"
+  EXACT_VERSION=""
+  DO_BUMP=1
 
   for arg; do
     # Handle both "--target name" and "--target=name" forms
@@ -290,6 +384,37 @@ main() {
         ;;
       --no-clean)
         DO_CLEAN=0
+        ;;
+      --major)
+        BUMP_TYPE="major"
+        ;;
+      --minor)
+        BUMP_TYPE="minor"
+        ;;
+      --patch)
+        BUMP_TYPE="patch"
+        ;;
+      --no-bump)
+        DO_BUMP=0
+        ;;
+      --version)
+        shift
+        EXACT_VERSION="${1:-}"
+        if [ -z "$EXACT_VERSION" ]; then
+          err "--version requires a value (X.Y.Z)"
+          exit 1
+        fi
+        if ! [[ "$EXACT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          err "Invalid version '$EXACT_VERSION' (expected X.Y.Z)"
+          exit 1
+        fi
+        ;;
+      --version=*)
+        EXACT_VERSION="${arg#--version=}"
+        if ! [[ "$EXACT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          err "Invalid version '$EXACT_VERSION' (expected X.Y.Z)"
+          exit 1
+        fi
         ;;
       --target=*)
         SINGLE_TARGET="${arg#--target=}"
@@ -306,14 +431,22 @@ main() {
       *)
         err "Unknown option: $arg"
         echo ""
-        echo "Usage: bash release.sh [--all|--target <name>|--target=<name> [--no-clean]]"
+        echo "Usage: bash release.sh [--all|--target <name>] [--no-clean]"
+        echo "                       [--major|--minor|--patch|--version X.Y.Z|--no-bump]"
         echo ""
-        echo "  (default)            clean + build all buildable targets"
+        echo "  (default)            bump patch version + clean + build all buildable targets"
         echo "                       (macOS: arm + intel, Linux: deb, Windows: exe)"
-        echo "  --all                clean + build all 4 platforms"
-        echo "  --target <name>      clean + build one target:"
+        echo "  --all                bump patch + clean + build all 4 platforms"
+        echo "  --target <name>      bump patch + clean + build one target:"
         echo "                       macos-arm, macos-intel, windows, linux"
         echo "  --no-clean           skip cleaning ./builds/ first"
+        echo ""
+        echo "  Version options:"
+        echo "  --major              bump major (0.3.0 → 1.0.0)"
+        echo "  --minor              bump minor (0.3.0 → 0.4.0)"
+        echo "  --patch              bump patch (0.3.0 → 0.3.1) [default]"
+        echo "  --version X.Y.Z      set an exact version instead of bumping"
+        echo "  --no-bump            skip the version bump"
         exit 1
         ;;
     esac
@@ -347,6 +480,8 @@ main() {
   fi
 
   info "Buildable targets: ${BUILDABLE[*]}"
+
+  bump_version
 
   if [ "$DO_CLEAN" = "1" ]; then
     info "Removing previous ./builds/ …"
