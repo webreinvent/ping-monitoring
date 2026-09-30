@@ -264,6 +264,21 @@ can_build() {
   return 1
 }
 
+# ── Rust formatting (matches CI's `cargo fmt --check`) ─────────────
+# Run before building so a formatting drift can't reach CI and fail the
+# pipeline. If the code is already clean this is a no-op; otherwise it
+# reformats src-tauri in place and tells you to commit the result.
+check_rust_fmt() {
+  info "Checking Rust formatting (cargo fmt) …"
+  if cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check; then
+    ok "Rust formatting clean"
+    return 0
+  fi
+  warn "Rust code is not formatted — running cargo fmt to fix it."
+  cargo fmt --manifest-path src-tauri/Cargo.toml --all
+  warn "Reformatted src-tauri. Remember to commit the changed files."
+}
+
 # ── Build frontend (once, shared across all targets) ───────────────
 build_frontend() {
   info "Building frontend …"
@@ -494,6 +509,8 @@ main() {
   fi
 
   info "Buildable targets: ${BUILDABLE[*]}"
+
+  check_rust_fmt
 
   bump_version
 
