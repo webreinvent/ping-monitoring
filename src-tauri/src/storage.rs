@@ -415,6 +415,12 @@ impl Database {
         Ok(deleted as u64)
     }
 
+    /// The directory the database file lives in. Also where app log files
+    /// (e.g. the sync log) are written, so they sit next to `lnpm.sqlite3`.
+    pub fn data_directory(&self) -> &std::path::Path {
+        &self.data_directory
+    }
+
     pub fn storage_info(&self) -> StorageResult<StorageInfo> {
         let database_size_bytes = self.database_path.metadata().map(|m| m.len()).unwrap_or(0);
         Ok(StorageInfo {

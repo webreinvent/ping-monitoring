@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -204,6 +204,32 @@ impl ClientIdentity {
     }
 }
 
+/// Append a timestamped line to the sync log file and echo it to stderr.
+///
+/// The app has no console on Windows release builds
+/// (`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`), so
+/// `eprintln!` alone is invisible there. Writing to a file in the data
+/// directory (next to `lnpm.sqlite3`) is the only way the user can actually
+/// read what happened. Used to diagnose the "Sync now stuck on Syncing…" bug.
+fn sync_log(log_path: &std::path::Path, message: &str) {
+    eprintln!("[sync] {message}");
+    use std::io::Write;
+    let line = format!(
+        "{} [sync] {message}\n",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+    {
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
 /// Sync service that batches and POSTs ping samples to a cloud dashboard.
 pub struct SyncService {
     database: Database,
@@ -215,10 +241,13 @@ pub struct SyncService {
     /// Last status message (e.g. the error detail) so `status()` can report
     /// it after app restarts or when the frontend queries the current state.
     last_message: Arc<RwLock<Option<String>>>,
+    /// Where sync debug lines are appended (`<data dir>/lnpm-sync.log`).
+    log_path: PathBuf,
 }
 
 impl SyncService {
     pub fn new(database: Database, app: AppHandle) -> Self {
+        let log_path = database.data_directory().join("lnpm-sync.log");
         Self {
             database,
             app,
@@ -227,7 +256,13 @@ impl SyncService {
             handle: Mutex::new(None),
             status: Arc::new(RwLock::new(SyncStatus::Off)),
             last_message: Arc::new(RwLock::new(None)),
+            log_path,
         }
+    }
+
+    /// Log a sync event to the file log (and stderr).
+    fn log(&self, message: &str) {
+        sync_log(&self.log_path, message);
     }
 
     /// Cached client identity (discovered on first use).
@@ -285,6 +320,7 @@ impl SyncService {
         let app = self.app.clone();
         let sync_status = Arc::clone(&self.status);
         let last_message = Arc::clone(&self.last_message);
+        let log_path = self.log_path.clone();
         let endpoint = config.endpoint.clone();
         let batch_timeout_ms = config.batch_timeout_ms;
         let max_batch_size = config.max_batch_size;
@@ -300,6 +336,10 @@ impl SyncService {
 
             // Discover identity once
             let identity = ClientIdentity::discover();
+            sync_log(
+                &log_path,
+                &format!("background sync started (endpoint={endpoint})"),
+            );
 
             let mut last_flush_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -334,7 +374,10 @@ impl SyncService {
                 let samples = match database.unsynced_samples_with_host(since_ms) {
                     Ok(s) => s,
                     Err(e) => {
-                        eprintln!("sync: failed to query unsynced samples: {e}");
+                        sync_log(
+                            &log_path,
+                            &format!("background sync: failed to query unsynced samples: {e}"),
+                        );
                         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                         continue;
                     }
@@ -348,6 +391,10 @@ impl SyncService {
                     .await;
                     continue;
                 }
+                sync_log(
+                    &log_path,
+                    &format!("background sync: {} sample(s) to send", samples.len()),
+                );
 
                 let batch: Vec<IngestSample> = samples
                     .iter()
@@ -383,11 +430,24 @@ impl SyncService {
                     let body = match serde_json::to_string(&payload) {
                         Ok(b) => b,
                         Err(e) => {
-                            eprintln!("sync: failed to serialize payload: {e}");
+                            sync_log(
+                                &log_path,
+                                &format!("background sync: failed to serialize payload: {e}"),
+                            );
                             continue;
                         }
                     };
 
+                    sync_log(
+                        &log_path,
+                        &format!(
+                            "background sync: POST {endpoint} attempt {}/{} ({} bytes)",
+                            attempt + 1,
+                            retry_attempts,
+                            body.len()
+                        ),
+                    );
+                    let started = std::time::Instant::now();
                     match client
                         .post(&endpoint)
                         .header("Content-Type", "application/json")
@@ -400,9 +460,15 @@ impl SyncService {
                             if status.is_success() {
                                 // Parse response for counts so we surface them in logs
                                 if let Ok(result) = response.json::<SyncResult>().await {
-                                    eprintln!(
-                                        "sync: accepted={} duplicate={} rejected={}",
-                                        result.accepted, result.duplicate, result.rejected
+                                    sync_log(
+                                        &log_path,
+                                        &format!(
+                                            "background sync: OK after {}ms (accepted={} duplicate={} rejected={})",
+                                            started.elapsed().as_millis(),
+                                            result.accepted,
+                                            result.duplicate,
+                                            result.rejected
+                                        ),
                                     );
                                 }
 
@@ -421,7 +487,12 @@ impl SyncService {
                                     to_ms,
                                     synced_at,
                                 ) {
-                                    eprintln!("sync: failed to mark samples synced: {e}");
+                                    sync_log(
+                                        &log_path,
+                                        &format!(
+                                            "background sync: failed to mark samples synced: {e}"
+                                        ),
+                                    );
                                 }
 
                                 // Emit success event
@@ -440,15 +511,40 @@ impl SyncService {
                                 break;
                             } else {
                                 last_error = format!("HTTP {}", status);
+                                sync_log(
+                                    &log_path,
+                                    &format!(
+                                        "background sync: attempt {}/{} failed after {}ms: HTTP {}",
+                                        attempt + 1,
+                                        retry_attempts,
+                                        started.elapsed().as_millis(),
+                                        status
+                                    ),
+                                );
                             }
                         }
                         Err(e) => {
                             last_error = format!("{e}");
+                            sync_log(
+                                &log_path,
+                                &format!(
+                                    "background sync: attempt {}/{} failed after {}ms: {e}",
+                                    attempt + 1,
+                                    retry_attempts,
+                                    started.elapsed().as_millis()
+                                ),
+                            );
                         }
                     }
                 }
 
                 if !success {
+                    sync_log(
+                        &log_path,
+                        &format!(
+                            "background sync: giving up after {retry_attempts} attempt(s): {last_error}"
+                        ),
+                    );
                     // Emit error event
                     let message = if retry_attempts > 1 {
                         format!("Retry exhausted after {retry_attempts} attempts: {last_error}")
@@ -498,22 +594,35 @@ impl SyncService {
 
     /// Trigger an immediate sync (for the "Sync now" button).
     pub async fn trigger_now(&self) -> Result<SyncResult, String> {
-        let config = self.config.read().await;
-        let config = match config.as_ref() {
-            Some(c) => c,
-            None => {
-                return Err(self
-                    .record_failure("Sync is not configured".to_string())
-                    .await);
+        // Clone the config and drop the read guard immediately. Holding the
+        // read lock across the whole (up-to-15s) HTTP call would block
+        // `apply_settings` from taking the write lock while a sync is in
+        // flight; we only need the values, not the lock.
+        let config = {
+            let guard = self.config.read().await;
+            match guard.as_ref() {
+                Some(c) => c.clone(),
+                None => {
+                    return Err(self
+                        .record_failure("Sync is not configured".to_string())
+                        .await);
+                }
             }
         };
+        self.log(&format!(
+            "trigger_now: start (endpoint={})",
+            config.endpoint
+        ));
 
         let client = match Client::builder()
             .timeout(std::time::Duration::from_secs(15))
             .build()
         {
             Ok(c) => c,
-            Err(e) => return Err(self.record_failure(e.to_string()).await),
+            Err(e) => {
+                self.log(&format!("trigger_now: failed to build http client: {e}"));
+                return Err(self.record_failure(e.to_string()).await);
+            }
         };
 
         let identity = self.get_identity().await;
@@ -522,16 +631,26 @@ impl SyncService {
         // human-meaningful `targetHost` instead of the internal UUID).
         let samples = match self.database.unsynced_samples_with_host(0) {
             Ok(s) => s,
-            Err(e) => return Err(self.record_failure(e.to_string()).await),
+            Err(e) => {
+                self.log(&format!(
+                    "trigger_now: failed to query unsynced samples: {e}"
+                ));
+                return Err(self.record_failure(e.to_string()).await);
+            }
         };
 
         if samples.is_empty() {
+            self.log("trigger_now: no unsynced samples — nothing to do");
             return Ok(SyncResult {
                 accepted: 0,
                 duplicate: 0,
                 rejected: 0,
             });
         }
+        self.log(&format!(
+            "trigger_now: {} unsynced sample(s) to send",
+            samples.len()
+        ));
 
         // Emit syncing status
         *self.status.write().await = SyncStatus::Syncing;
@@ -579,8 +698,18 @@ impl SyncService {
 
         let body = match serde_json::to_string(&payload) {
             Ok(b) => b,
-            Err(e) => return Err(self.record_failure(e.to_string()).await),
+            Err(e) => {
+                self.log(&format!("trigger_now: failed to serialize payload: {e}"));
+                return Err(self.record_failure(e.to_string()).await);
+            }
         };
+        self.log(&format!(
+            "trigger_now: POST {} ({} bytes, {} samples) …",
+            config.endpoint,
+            body.len(),
+            batch_len
+        ));
+        let started = std::time::Instant::now();
 
         let response = match client
             .post(&config.endpoint)
@@ -590,10 +719,25 @@ impl SyncService {
             .await
         {
             Ok(r) => r,
-            Err(e) => return Err(self.record_failure(format!("Request failed: {e}")).await),
+            Err(e) => {
+                self.log(&format!(
+                    "trigger_now: request FAILED after {}ms: {e}",
+                    started.elapsed().as_millis()
+                ));
+                return Err(self.record_failure(format!("Request failed: {e}")).await);
+            }
         };
+        self.log(&format!(
+            "trigger_now: response {} after {}ms",
+            response.status(),
+            started.elapsed().as_millis()
+        ));
 
         if !response.status().is_success() {
+            self.log(&format!(
+                "trigger_now: non-success HTTP status {}",
+                response.status()
+            ));
             return Err(self
                 .record_failure(format!("HTTP {}", response.status()))
                 .await);
@@ -607,9 +751,12 @@ impl SyncService {
 
         // Mark samples as synced
         let now_ms = crate::domain::unix_time_ms();
-        let _ = self
+        if let Err(e) = self
             .database
-            .mark_samples_synced(&unique_ids, from_ms, to_ms, now_ms);
+            .mark_samples_synced(&unique_ids, from_ms, to_ms, now_ms)
+        {
+            self.log(&format!("trigger_now: failed to mark samples synced: {e}"));
+        }
 
         // Emit success
         *self.status.write().await = SyncStatus::Success;
@@ -621,6 +768,10 @@ impl SyncService {
             pending_count: 0,
         };
         let _ = self.app.emit("sync-status-changed", &event);
+        self.log(&format!(
+            "trigger_now: success (accepted={} duplicate={} rejected={})",
+            result.accepted, result.duplicate, result.rejected
+        ));
 
         Ok(result)
     }
@@ -642,22 +793,36 @@ impl SyncService {
     pub async fn apply_settings(&self, settings: &crate::domain::AppSettings) {
         match (&settings.dashboard_ingest_url, settings.cloud_sync_paused) {
             (Some(url), false) if !url.is_empty() => {
-                let mut config = self.config.write().await;
-                let config = config.get_or_insert_with(SyncConfig::default);
-                config.endpoint = url.clone();
-                config.periodic_interval_min = settings.sync_interval_min;
+                // Update the config under the write lock, then RELEASE it before
+                // doing anything else. The previous code called
+                // `self.config.read().await` while still holding the write
+                // guard — `tokio::sync::RwLock` is not re-entrant, so that
+                // deadlocked: `save_settings` hung forever and the held write
+                // lock then made every later `trigger_now` block on
+                // `self.config.read().await`, leaving "Sync now" stuck on
+                // "Syncing…". Clone the config inside the guard and drop it.
+                let config = {
+                    let mut guard = self.config.write().await;
+                    let config = guard.get_or_insert_with(SyncConfig::default);
+                    config.endpoint = url.clone();
+                    config.periodic_interval_min = settings.sync_interval_min;
+                    config.clone()
+                };
+                self.log(&format!(
+                    "apply_settings: starting sync -> endpoint={} interval_min={}",
+                    config.endpoint, config.periodic_interval_min
+                ));
                 self.emit_status(SyncStatus::Idle, None).await;
-
-                // Re-read config to start with latest
-                let config = self.config.read().await.clone().unwrap_or_default();
                 self.start(config).await;
             }
             (Some(_), true) => {
+                self.log("apply_settings: cloud sync paused -> stopping task");
                 self.stop().await;
                 self.emit_status(SyncStatus::Paused, None).await;
             }
             _ => {
                 // No URL or empty URL -> stop
+                self.log("apply_settings: no ingest URL -> stopping task");
                 self.stop().await;
                 *self.config.write().await = None;
                 self.emit_status(SyncStatus::Off, None).await;
