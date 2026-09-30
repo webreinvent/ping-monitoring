@@ -224,6 +224,7 @@ async function initMain(): Promise<void> {
         </div>
       </section>
     </main>
+    <div id="settings-backdrop" class="modal-backdrop" hidden></div>
     <dialog id="target-dialog" class="modal"></dialog>
     <dialog id="settings-dialog" class="modal settings-modal"></dialog>
     <dialog id="update-dialog" class="modal update-modal"></dialog>
@@ -395,6 +396,18 @@ function bindMainEvents(): void {
   byId<HTMLDialogElement>("update-dialog").addEventListener("cancel", (event) => {
     event.preventDefault();
     if (!isUpdateBusy()) void deferCurrentUpdate();
+  });
+  // The settings dialog uses .show() (not .showModal()), so it loses the
+  // native modal behaviors. Restore them: dimming via the backdrop element,
+  // and Escape-to-close. Both listeners live on the dialog element itself,
+  // which persists across reopens (only its innerHTML is replaced), so they
+  // are attached once here rather than on every open.
+  const settingsDialog = byId<HTMLDialogElement>("settings-dialog");
+  settingsDialog.addEventListener("close", () => {
+    byId("settings-backdrop").hidden = true;
+  });
+  settingsDialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") settingsDialog.close();
   });
   window.addEventListener("beforeunload", (event) => {
     if (!isUpdateBusy()) return;
@@ -975,7 +988,14 @@ async function openSettingsDialog(focusSection?: string): Promise<void> {
       showToast(formatError(error), "error");
     }
   });
-  dialog.showModal();
+  // Shown with .show() (not .showModal()) so the dialog stays out of the
+  // browser "top layer". A showModal() dialog always renders above every
+  // z-index element, which hid the toast stack (z-index 30) behind it. The
+  // manual backdrop below replicates the modal dimming while keeping toasts
+  // (z-index 30) in front of the dialog (z-index 25).
+  byId("settings-backdrop").hidden = false;
+  dialog.show();
+  byId<HTMLSelectElement>("retention-days").focus();
 
   // Scroll to section if requested (e.g. clicking sync icon)
   if (focusSection) {

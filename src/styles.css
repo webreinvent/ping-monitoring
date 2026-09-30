@@ -1106,6 +1106,30 @@ select:focus-visible {
   backdrop-filter: blur(4px);
 }
 
+/* Manual backdrop for the settings dialog, which is shown with .show()
+   instead of .showModal() so it stays out of the top layer and the toast
+   stack (z-index 30) can render in front of it. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(1, 5, 8, 0.72);
+  backdrop-filter: blur(4px);
+}
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+/* Center the settings dialog in normal flow (showModal() would do this via
+   the top layer; .show() does not). */
+.settings-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+}
+
 .modal > form,
 .modal > .modal-content {
   padding: 22px;

@@ -71,6 +71,7 @@ impl Database {
                 status INTEGER NOT NULL,
                 resolved_address TEXT,
                 error TEXT,
+                cloud_synced_at_ms INTEGER,
                 PRIMARY KEY (target_id, timestamp_ms)
             ) WITHOUT ROWID;
 
@@ -124,19 +125,38 @@ impl Database {
                     "database schema {version} is newer than supported schema {SCHEMA_VERSION}"
                 )));
             }
-            Some(version) if version < 2 => {
-                connection.execute(
-                    "ALTER TABLE ping_samples ADD COLUMN cloud_synced_at_ms INTEGER",
-                    [],
-                )?;
-                connection.execute(
-                    "CREATE INDEX idx_ping_samples_unsynced ON ping_samples(cloud_synced_at_ms, timestamp_ms)",
-                    [],
-                )?;
-                connection.execute("UPDATE schema_info SET version = 2", [])?;
+            Some(version) if version < SCHEMA_VERSION => {
+                connection.execute("UPDATE schema_info SET version = ?1", [SCHEMA_VERSION])?;
             }
             _ => {}
         }
+
+        // Ensure the cloud-sync column exists regardless of the recorded
+        // version. New databases create it in the batch above; databases from
+        // an earlier build — or one that stamped the version without adding
+        // the column — may be missing it. Checking by column (not version)
+        // lets a previously-broken database self-heal on next launch.
+        let column_exists: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('ping_samples')
+                    WHERE name = 'cloud_synced_at_ms'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if column_exists == 0 {
+            connection.execute(
+                "ALTER TABLE ping_samples ADD COLUMN cloud_synced_at_ms INTEGER",
+                [],
+            )?;
+        }
+
+        // Create the unsynced-samples index once, idempotently.
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ping_samples_unsynced
+                ON ping_samples(cloud_synced_at_ms, timestamp_ms)",
+            [],
+        )?;
         Ok(())
     }
 
@@ -916,5 +936,47 @@ mod tests {
             history.series[0].intervals[0].state,
             QualityState::Disconnected
         );
+    }
+
+    #[test]
+    fn fresh_database_has_cloud_sync_column() {
+        let (_directory, database) = database();
+        // A brand-new database must expose the cloud-sync column so the
+        // unsynced-samples query works from first launch (regression test for
+        // the "no such column: cloud_synced_at_ms" error on fresh installs).
+        assert!(database.unsynced_samples_with_host(0).is_ok());
+    }
+
+    #[test]
+    fn self_heals_database_missing_cloud_sync_column() {
+        let directory = tempdir().unwrap();
+        let database_path = directory.path().join("lnpm.sqlite3");
+
+        // Simulate a database created by a build that stamped schema version 2
+        // without adding the cloud_synced_at_ms column — the original bug. The
+        // column is absent here, so a version-gated migration would skip it.
+        {
+            let connection = rusqlite::Connection::open(&database_path).unwrap();
+            connection
+                .execute_batch(
+                    "CREATE TABLE schema_info (version INTEGER NOT NULL);
+                     INSERT INTO schema_info(version) VALUES (2);
+                     CREATE TABLE ping_samples (
+                         target_id TEXT NOT NULL,
+                         timestamp_ms INTEGER NOT NULL,
+                         latency_ms REAL,
+                         status INTEGER NOT NULL,
+                         resolved_address TEXT,
+                         error TEXT,
+                         PRIMARY KEY (target_id, timestamp_ms)
+                     ) WITHOUT ROWID;",
+                )
+                .unwrap();
+        }
+
+        // Re-initializing must detect the missing column by name (not by
+        // version) and add it, so the query works on next launch.
+        let database = Database::new(directory.path().to_path_buf()).unwrap();
+        assert!(database.unsynced_samples_with_host(0).is_ok());
     }
 }

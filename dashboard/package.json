@@ -1,7 +1,7 @@
 {
   "name": "lnpm-dashboard",
   "private": true,
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "LNPM Cloud Dashboard — Nuxt 4 + Nitro backend with SQLite, WebSocket, and live dashboard",
   "type": "module",
   "scripts": {
