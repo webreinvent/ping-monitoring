@@ -18,11 +18,8 @@
 #[cfg(target_os = "windows")]
 mod windows {
     use windows_sys::Win32::{
-        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
-        System::{
-            DataExchange::COPYDATASTRUCT,
-            Threading::CreateMutexW,
-        },
+        Foundation::{ERROR_ALREADY_EXISTS, GetLastError},
+        System::{DataExchange::COPYDATASTRUCT, Threading::CreateMutexW},
         UI::WindowsAndMessaging::{FindWindowW, SendMessageW, WM_COPYDATA},
     };
 
