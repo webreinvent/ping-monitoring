@@ -100,6 +100,17 @@ impl PingProbe for SystemPingProbe {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .kill_on_drop(true);
+            // `ping.exe` is a console application. Without CREATE_NO_WINDOW the
+            // OS allocates a visible console for every spawn, so each ping tick
+            // flashes a black window (and, with many targets, the machine drowns
+            // in them). Suppress the console window entirely.
+            #[cfg(target_os = "windows")]
+            {
+                use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+                // `command` is a `tokio::process::Command`; its Windows-only
+                // `creation_flags` forwards to the underlying std command.
+                command.creation_flags(CREATE_NO_WINDOW);
+            }
             command
         };
 
