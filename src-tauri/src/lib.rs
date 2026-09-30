@@ -5,6 +5,7 @@ pub mod identity;
 pub mod monitor;
 pub mod probe;
 pub mod quality;
+pub mod single_instance;
 pub mod storage;
 pub mod sync;
 pub mod tray;
@@ -25,6 +26,15 @@ use updater::UpdateManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Windows single-instance guard: exit immediately if another instance is
+    // already running, BEFORE the Tauri app (and its ping probes) is built.
+    // This closes the `tauri-plugin-single-instance` fall-through that would
+    // otherwise let a duplicate run the full setup — the root cause of the
+    // "many stacked windows + system hang" on Windows.
+    if !single_instance::ensure_single_instance("io.github.xxsluna.lnpm") {
+        std::process::exit(0);
+    }
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main_window(app);

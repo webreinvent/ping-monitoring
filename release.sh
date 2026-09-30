@@ -131,6 +131,20 @@ compute_bumped() {
   echo "${major}.${minor}.${patch}"
 }
 
+# Rewrite ONLY the [package] version in Cargo.toml.
+# A blanket `s/^version = "..."/.../` would clobber the `version = "..."` line
+# of any multi-line dependency spec (e.g. the windows-sys target dependency),
+# which is what kept breaking the build on every release.
+update_cargo_toml() {
+  local new_version="$1" file="src-tauri/Cargo.toml" tmp
+  tmp="$(mktemp)"
+  awk -v newv="$new_version" '
+    /^\[/ { in_pkg = ($0 == "[package]") }
+    in_pkg && /^version/ { printf "version = \"%s\"\n", newv; next }
+    { print }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
 # Rewrite the lnpm package entry in Cargo.lock to a new version.
 update_cargo_lock() {
   local new_version="$1" lock="src-tauri/Cargo.lock" tmp
@@ -147,7 +161,7 @@ update_cargo_lock() {
 update_version_files() {
   local new_version="$1"
   sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'"/' src-tauri/tauri.conf.json
-  sed_inplace 's/^version = *"[^"]*"/version = "'"$new_version"'"/' src-tauri/Cargo.toml
+  update_cargo_toml "$new_version"
   update_cargo_lock "$new_version"
   sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'"/' package.json
   sed_inplace 's/"version": *"[^"]*"/"version": "'"$new_version"'"/' dashboard/package.json
